@@ -57,19 +57,18 @@ export default function QueryInbox() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            whatsappNumber: selectedQuery.whatsappNumber || '+15553829102',
+            whatsappNumber: selectedQuery.whatsappNumber || '',
             replyText,
             patientName: selectedQuery.patientName,
-            question: selectedQuery.question
+            patientId: selectedQuery.patientId
           })
         });
         const data = await res.json();
-        if (data.directWhatsAppUrl) {
+        if (!data.success && data.directWhatsAppUrl) {
           window.open(data.directWhatsAppUrl, '_blank');
         }
       } catch (err) {
-        const encodedMsg = encodeURIComponent(`Hi ${selectedQuery.patientName}, regarding your question: "${selectedQuery.question}"\n\n${replyText}`);
-        window.open(`https://wa.me/?text=${encodedMsg}`, '_blank');
+        console.error('Failed to dispatch via Meta API:', err);
       }
     }
 
@@ -104,25 +103,13 @@ export default function QueryInbox() {
     setSimulating(false);
   };
 
-  if (loading) return <div className="p-8">Loading WhatsApp & App inbox...</div>;
-
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto h-screen flex flex-col">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
-          <h1 className="text-2xl font-serif font-bold text-stone-900">Query Inbox & WhatsApp Channel</h1>
-          <p className="text-xs text-stone-500">Manage patient questions received via In-App messaging or direct WhatsApp webhooks.</p>
+          <h1 className="text-2xl font-serif font-bold text-stone-900">Patient Queries & Communications</h1>
+          <p className="text-xs text-stone-500">View and respond to clinical questions received via In-App messaging or Meta WhatsApp Cloud API webhooks.</p>
         </div>
-        
-        {/* Simulate WhatsApp Query Button for Live Demo */}
-        <button 
-          onClick={handleSimulateWhatsAppQuery}
-          disabled={simulating}
-          className="px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-xs uppercase font-bold tracking-widest rounded-full transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50"
-        >
-          <Plus className="w-4 h-4" />
-          {simulating ? 'Simulating...' : 'Simulate Incoming WhatsApp Query'}
-        </button>
       </div>
 
       <div className="bg-white rounded-none border border-stone-200 flex-1 overflow-hidden flex flex-col md:flex-row shadow-sm">

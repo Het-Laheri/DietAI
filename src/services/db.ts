@@ -41,6 +41,10 @@ export interface PatientProfile {
   };
   status: 'active' | 'inactive';
   needsAttention: boolean;
+  whatsappNumber?: string;
+  whatsappVerified?: boolean;
+  whatsappOptIn?: boolean;
+  whatsappConnectedAt?: any;
   createdAt?: any;
 }
 
@@ -120,12 +124,45 @@ export interface ProgressRecord {
 
 export interface Notification {
   id?: string;
-  type: 'NEW_PATIENT' | 'PATIENT_LOGIN' | 'SYSTEM';
+  type: 'NEW_PATIENT' | 'PATIENT_LOGIN' | 'SYSTEM' | 'WHATSAPP_MESSAGE';
   patientId?: string;
   patientName?: string;
   message: string;
   read: boolean;
   createdAt?: any;
+}
+
+export interface WhatsAppMessage {
+  id?: string;
+  patientId?: string;
+  conversationId: string;
+  direction: 'INCOMING' | 'OUTGOING';
+  messageType: 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO' | 'DOCUMENT' | 'OTHER';
+  whatsappMessageId: string;
+  fromNumber: string;
+  toNumber: string;
+  body: string;
+  mediaId?: string;
+  mediaUrl?: string;
+  mediaMimeType?: string;
+  timestamp: string;
+  status: 'RECEIVED' | 'PROCESSING' | 'PROCESSED' | 'FAILED' | 'SENT' | 'DELIVERED' | 'READ';
+  aiSuggestedReply?: string;
+  createdAt?: any;
+}
+
+export interface WhatsAppConversation {
+  id?: string;
+  patientId?: string; // empty if unrecognized
+  patientName: string;
+  whatsappNumber: string;
+  channel: 'WHATSAPP' | 'IN_APP';
+  status: 'ACTIVE' | 'CLOSED' | 'UNRECOGNIZED';
+  lastMessageAt: string;
+  lastMessagePreview: string;
+  unreadCount: number;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 // Ensure Dietician Exists
@@ -343,4 +380,106 @@ export async function getNotifications(): Promise<Notification[]> {
 
 export async function markNotificationRead(id: string) {
   await updateDoc(doc(db, 'notifications', id), { read: true });
+}
+
+// ─── WHATSAPP DB FUNCTIONS ───────────────────────────────────────────────────
+
+export async function findPatientByWhatsAppNumber(rawNumber: string): Promise<PatientProfile | null> {
+  const cleanNumber = rawNumber.replace(/[^0-9]/g, '');
+  const patients = await getPatients();
+  
+  // Match by whatsappNumber or mobile
+  const found = patients.find(p => {
+    const pWa = (p.whatsappNumber || '').replace(/[^0-9]/g, '');
+    const pMob = (p.mobile || '').replace(/[^0-9]/g, '');
+    return (pWa && (pWa === cleanNumber || cleanNumber.endsWith(pWa) || pWa.endsWith(cleanNumber))) ||
+           (pMob && (pMob === cleanNumber || cleanNumber.endsWith(pMob) || pMob.endsWith(cleanNumber)));
+  });
+
+  return found || null;
+}
+
+export async function saveWhatsAppMessage(msg: WhatsAppMessage): Promise<string> {
+  // Check for duplicate whatsappMessageId
+  if (msg.whatsappMessageId) {
+    const q = query(collection(db, 'whatsapp_messages'), where('whatsappMessageId', '==', msg.whatsappMessageId));
+    const existing = await getDocs(q);
+    if (!existing.empty) {
+      console.log('Duplicate WhatsApp message skipped:', msg.whatsappMessageId);
+      return existing.docs[0].id;
+    }
+  }
+
+  const docRef = await addDoc(collection(db, 'whatsapp_messages'), {
+    ...msg,
+    createdAt: serverTimestamp()
+  });
+  return docRef.id;
+}
+
+export async function getWhatsAppMessages(conversationId: string): Promise<WhatsAppMessage[]> {
+  const q = query(
+    collection(db, 'whatsapp_messages'),
+    where('conversationId', '==', conversationId),
+    orderBy('createdAt', 'asc')
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ ...d.data(), id: d.id } as WhatsAppMessage));
+}
+
+export async function getWhatsAppConversations(): Promise<WhatsAppConversation[]> {
+  const q = query(collection(db, 'whatsapp_conversations'), orderBy('updatedAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ ...d.data(), id: d.id } as WhatsAppConversation));
+}
+
+export async function getWhatsAppConversation(id: string): Promise<WhatsAppConversation | null> {
+  const snap = await getDoc(doc(db, 'whatsapp_conversations', id));
+  return snap.exists() ? ({ ...snap.data(), id: snap.id } as WhatsAppConversation) : null;
+}
+
+export async function createOrUpdateWhatsAppConversation(
+  whatsappNumber: string,
+  patientName: string,
+  patientId: string | undefined,
+  lastMessagePreview: string,
+  incrementUnread: boolean = false,
+  status: 'ACTIVE' | 'CLOSED' | 'UNRECOGNIZED' = 'ACTIVE'
+): Promise<string> {
+  const cleanNumber = whatsappNumber.replace(/[^0-9]/g, '');
+  const q = query(collection(db, 'whatsapp_conversations'), where('whatsappNumber', '==', cleanNumber));
+  const snap = await getDocs(q);
+
+  if (!snap.empty) {
+    const existingDoc = snap.docs[0];
+    const data = existingDoc.data() as WhatsAppConversation;
+    await updateDoc(doc(db, 'whatsapp_conversations', existingDoc.id), {
+      lastMessagePreview,
+      lastMessageAt: new Date().toISOString(),
+      unreadCount: incrementUnread ? (data.unreadCount || 0) + 1 : data.unreadCount || 0,
+      updatedAt: serverTimestamp(),
+      ...(patientId ? { patientId, patientName } : {}),
+      status: status !== 'UNRECOGNIZED' ? status : data.status
+    });
+    return existingDoc.id;
+  } else {
+    const newConv: WhatsAppConversation = {
+      patientId: patientId || '',
+      patientName: patientName || 'Unknown Patient',
+      whatsappNumber: cleanNumber,
+      channel: 'WHATSAPP',
+      status: patientId ? status : 'UNRECOGNIZED',
+      lastMessageAt: new Date().toISOString(),
+      lastMessagePreview,
+      unreadCount: incrementUnread ? 1 : 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+    const docRef = await addDoc(collection(db, 'whatsapp_conversations'), newConv);
+    return docRef.id;
+  }
+}
+
+export async function markWhatsAppConversationRead(id: string) {
+  await updateDoc(doc(db, 'whatsapp_conversations', id), { unreadCount: 0 });
 }

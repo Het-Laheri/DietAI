@@ -5,6 +5,25 @@ import fs from 'fs';
 import * as XLSX from 'xlsx';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import { 
+  healthCheck, 
+  sendTextMessage, 
+  sendTemplateMessage, 
+  sendImageMessage, 
+  downloadMedia, 
+  normalizeWhatsAppNumber,
+  getWhatsAppConfig
+} from './whatsapp-service';
+import { 
+  findPatientByWhatsAppNumber, 
+  createOrUpdateWhatsAppConversation, 
+  saveWhatsAppMessage, 
+  submitQuery, 
+  createNotification,
+  getPatientProfile,
+  getMealPlans,
+  getAllFoodLogsForPatient
+} from './src/services/db';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const KNOWLEDGE_BASE_PATH = path.join(process.cwd(), 'knowledge_base.json');
@@ -286,90 +305,242 @@ JSON Schema format:
     }
   });
 
-  // WhatsApp Webhook Verification (Meta / Twilio Integration)
+  // ─── META WHATSAPP CLOUD API INTEGRATION ────────────────────────────────────
+
+  // 1. Meta Webhook Verification Handshake
   app.get('/api/whatsapp/webhook', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
-    const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'nutrisnap_whatsapp_token';
+    const config = getWhatsAppConfig();
 
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log('WhatsApp Webhook Verified!');
+    if (mode === 'subscribe' && token === config.verifyToken) {
+      console.log('✅ Meta WhatsApp Webhook Verified Successfully!');
       res.status(200).send(challenge);
     } else {
+      console.warn('⚠️ Webhook verification failed. Token mismatch or missing mode.');
       res.sendStatus(403);
     }
   });
 
-  // WhatsApp Incoming Webhook Route (Meta / Twilio API)
+  // 2. Meta WhatsApp Incoming Webhook Processor
   app.post('/api/whatsapp/webhook', async (req, res) => {
     try {
-      console.log('Received WhatsApp Webhook:', JSON.stringify(req.body));
-      // Supports Meta WhatsApp Business API & Twilio Webhook Formats
-      const body = req.body;
-      let fromNumber = '';
-      let messageText = '';
-      let senderName = 'WhatsApp Patient';
+      // Return 200 immediately to Meta so webhooks are acknowledged
+      res.status(200).json({ status: 'received' });
 
-      if (body.entry && body.entry[0]?.changes[0]?.value?.messages[0]) {
-        const msg = body.entry[0].changes[0].value.messages[0];
-        fromNumber = msg.from;
-        messageText = msg.text?.body || 'Sent an image or attachment';
-        senderName = body.entry[0].changes[0].value.contacts[0]?.profile?.name || 'WhatsApp Patient';
-      } else if (body.From && body.Body) {
-        fromNumber = body.From;
-        messageText = body.Body;
-        senderName = body.ProfileName || 'WhatsApp Patient';
+      const body = req.body;
+      if (!body.entry || !body.entry[0]?.changes[0]?.value?.messages) {
+        return; // Ignore status notifications (delivered/read) or empty events
       }
 
-      res.status(200).json({ 
-        status: 'received',
-        source: 'whatsapp',
-        senderName,
+      const value = body.entry[0].changes[0].value;
+      const msg = value.messages[0];
+      const contact = value.contacts?.[0];
+      
+      const whatsappMessageId = msg.id;
+      const rawFrom = msg.from;
+      const fromNumber = normalizeWhatsAppNumber(rawFrom);
+      const senderName = contact?.profile?.name || 'WhatsApp Patient';
+      const msgType = (msg.type || 'text').toUpperCase() as any;
+
+      let messageText = '';
+      let mediaId: string | undefined;
+      let mediaMimeType: string | undefined;
+      let mediaUrl: string | undefined;
+
+      if (msg.type === 'text') {
+        messageText = msg.text?.body || '';
+      } else if (msg.type === 'image') {
+        messageText = msg.image?.caption || '📸 Food/Photo Received';
+        mediaId = msg.image?.id;
+        mediaMimeType = msg.image?.mime_type;
+
+        // Download photo securely from Meta
+        if (mediaId) {
+          const downloaded = await downloadMedia(mediaId);
+          if (downloaded.localPath) {
+            mediaUrl = downloaded.localPath;
+          }
+        }
+      } else if (msg.type === 'audio' || msg.type === 'voice') {
+        messageText = '🎙️ Voice Message Received';
+        mediaId = msg.audio?.id || msg.voice?.id;
+      } else if (msg.type === 'document') {
+        messageText = `📄 Document Received: ${msg.document?.filename || ''}`;
+        mediaId = msg.document?.id;
+      } else {
+        messageText = `Received ${msg.type} attachment`;
+      }
+
+      console.log(`📩 Inbound WhatsApp from ${senderName} (${fromNumber}): "${messageText}"`);
+
+      // Match patient in Firestore
+      const patient = await findPatientByWhatsAppNumber(fromNumber);
+      const patientId = patient?.id;
+      const patientName = patient?.name || senderName;
+
+      // Create or update conversation thread
+      const conversationId = await createOrUpdateWhatsAppConversation(
         fromNumber,
-        messageText
+        patientName,
+        patientId,
+        messageText,
+        true, // increment unread
+        patientId ? 'ACTIVE' : 'UNRECOGNIZED'
+      );
+
+      // AI Suggested Reply Builder (if patient matched)
+      let aiSuggestedReply = '';
+      if (patientId && messageText) {
+        try {
+          const profile = await getPatientProfile(patientId);
+          const mealPlans = await getMealPlans(patientId);
+          const activePlan = mealPlans[0];
+
+          const contextPrompt = `You are NutriSnap AI clinical assistant. 
+Patient: ${patientName}
+Goals: ${profile?.goals?.join(', ') || 'General Wellness'}
+Diet Type: ${profile?.dietaryType || 'Standard'}
+Active Meal Plan Targets: ${activePlan ? JSON.stringify(activePlan.targets) : 'None'}
+
+Patient WhatsApp Question: "${messageText}"
+
+Draft a clinical, empathetic 2-sentence response for the dietician to review and approve.`;
+
+          aiSuggestedReply = await generateAIResponse({
+            systemInstruction: 'You are a clinical dietician assistant. Provide short, exact 2-sentence draft replies.',
+            userPrompt: contextPrompt
+          });
+        } catch (aiErr) {
+          console.error('Failed to generate AI suggestion for WhatsApp:', aiErr);
+        }
+      }
+
+      // Save WhatsApp message to Firestore
+      await saveWhatsAppMessage({
+        patientId,
+        conversationId,
+        direction: 'INCOMING',
+        messageType: msgType,
+        whatsappMessageId,
+        fromNumber,
+        toNumber: value.metadata?.display_phone_number || '',
+        body: messageText,
+        mediaId,
+        mediaUrl,
+        mediaMimeType,
+        timestamp: msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : new Date().toISOString(),
+        status: 'RECEIVED',
+        aiSuggestedReply
       });
+
+      // Submit to Query Inbox for Dietician
+      await submitQuery({
+        patientId: patientId || `unrecognized_${fromNumber}`,
+        patientName: patientId ? patientName : `Unrecognized (+${fromNumber})`,
+        whatsappNumber: fromNumber,
+        question: messageText,
+        source: 'whatsapp',
+        status: 'pending',
+        date: new Date().toISOString().split('T')[0]
+      });
+
+      // Notify Dietician Dashboard
+      await createNotification({
+        type: 'WHATSAPP_MESSAGE',
+        patientId,
+        patientName,
+        message: `New WhatsApp message from ${patientName}: "${messageText.slice(0, 50)}..."`,
+        read: false
+      });
+
+      // Send automated receipt acknowledgment (Non-medical operational confirmation)
+      await sendTextMessage(
+        fromNumber,
+        `Hello ${patientName}! Your message has been received by NutriSnap. Your dietician will review and reply shortly.`
+      ).catch(e => console.error('Auto-ack send error:', e));
+
     } catch (error) {
-      console.error('WhatsApp Webhook Error:', error);
-      res.status(500).json({ error: 'Failed to process WhatsApp webhook' });
+      console.error('WhatsApp Inbound Webhook Error:', error);
     }
   });
+
+  // 3. Outgoing Message Endpoint (Dietician Response Dispatcher)
   app.post('/api/whatsapp/send-reply', async (req, res) => {
     try {
-      const { whatsappNumber, replyText, patientName, question } = req.body;
-      console.log(`Sending WhatsApp reply to ${whatsappNumber} (${patientName}): ${replyText}`);
+      const { whatsappNumber, replyText, patientName, conversationId, patientId } = req.body;
+      if (!whatsappNumber || !replyText) {
+        return res.status(400).json({ error: 'Missing whatsappNumber or replyText' });
+      }
 
-      const cleanPhone = (whatsappNumber || '').replace(/[^0-9]/g, '');
-      const encodedMsg = encodeURIComponent(`Hi ${patientName || 'Patient'},\n\nRegarding your query: "${question || ''}"\n\n${replyText}`);
-      const directWhatsAppUrl = cleanPhone 
-        ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMsg}`
-        : `https://api.whatsapp.com/send?text=${encodedMsg}`;
+      const cleanPhone = normalizeWhatsAppNumber(whatsappNumber);
+      console.log(`📤 Sending WhatsApp reply to ${patientName || cleanPhone} (${cleanPhone}): ${replyText}`);
 
-      // If Meta WhatsApp Business API Token exists:
-      if (process.env.META_WHATSAPP_TOKEN && process.env.META_WHATSAPP_PHONE_ID && cleanPhone) {
-        await fetch(`https://graph.facebook.com/v18.0/${process.env.META_WHATSAPP_PHONE_ID}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.META_WHATSAPP_TOKEN}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: cleanPhone,
-            type: 'text',
-            text: { body: replyText }
-          })
+      // Call Meta WhatsApp Cloud API
+      const result = await sendTextMessage(cleanPhone, replyText);
+
+      // Create conversation if not provided
+      const convId = conversationId || await createOrUpdateWhatsAppConversation(
+        cleanPhone,
+        patientName || 'Patient',
+        patientId,
+        replyText,
+        false
+      );
+
+      // Save outgoing message to Firestore
+      if (result.success && result.messageId) {
+        await saveWhatsAppMessage({
+          patientId,
+          conversationId: convId,
+          direction: 'OUTGOING',
+          messageType: 'TEXT',
+          whatsappMessageId: result.messageId,
+          fromNumber: 'SYSTEM_BUSINESS',
+          toNumber: cleanPhone,
+          body: replyText,
+          timestamp: new Date().toISOString(),
+          status: 'SENT'
         });
       }
 
       res.json({
-        success: true,
-        method: process.env.META_WHATSAPP_TOKEN ? 'api_direct' : 'web_link',
-        directWhatsAppUrl
+        success: result.success,
+        messageId: result.messageId,
+        error: result.error,
+        method: result.success ? 'meta_cloud_api' : 'failed'
       });
-    } catch (error) {
-      console.error('Error sending WhatsApp reply:', error);
-      res.status(500).json({ error: 'Failed to send WhatsApp reply' });
+    } catch (error: any) {
+      console.error('Error in /api/whatsapp/send-reply:', error);
+      res.status(500).json({ error: 'Failed to send WhatsApp message', details: error.message });
+    }
+  });
+
+  // 4. Send Meta Approved Template Message
+  app.post('/api/whatsapp/send-template', async (req, res) => {
+    try {
+      const { whatsappNumber, templateName, languageCode, components } = req.body;
+      if (!whatsappNumber || !templateName) {
+        return res.status(400).json({ error: 'Missing whatsappNumber or templateName' });
+      }
+
+      const cleanPhone = normalizeWhatsAppNumber(whatsappNumber);
+      const result = await sendTemplateMessage(cleanPhone, templateName, languageCode || 'en_US', components || []);
+
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to send template message', details: error.message });
+    }
+  });
+
+  // 5. Meta WhatsApp Connection Health Check Endpoint
+  app.get('/api/whatsapp/health', async (req, res) => {
+    try {
+      const status = await healthCheck();
+      res.json(status);
+    } catch (error: any) {
+      res.status(500).json({ connected: false, configured: false, error: error.message });
     }
   });
 

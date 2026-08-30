@@ -59,6 +59,14 @@ service cloud.firestore {
       allow read, write: if isDietician();
     }
 
+    match /whatsapp_messages/{msgId} {
+      allow read, write: if isDietician() || isOwner(resource.data.patientId);
+    }
+
+    match /whatsapp_conversations/{convId} {
+      allow read, write: if isDietician() || isOwner(resource.data.patientId);
+    }
+
     // Default deny for everything else
     match /{document=**} {
       allow read, write: if false;

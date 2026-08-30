@@ -121,8 +121,9 @@ export default function Login() {
       setLoading(true);
       setError('');
       
-      const SPECIAL_ID = (import.meta.env.VITE_DIETICIAN_EMAIL || 'admin@aidiet.com').toLowerCase();
-      const SPECIAL_PASS = import.meta.env.VITE_DIETICIAN_PASSWORD || 'Admin123!';
+      const metaEnv = (import.meta as any).env || {};
+      const SPECIAL_ID = (metaEnv.VITE_DIETICIAN_EMAIL || 'admin@aidiet.com').toLowerCase();
+      const SPECIAL_PASS = metaEnv.VITE_DIETICIAN_PASSWORD || 'Admin123!';
 
       if (email.toLowerCase() === SPECIAL_ID && password === SPECIAL_PASS) {
         try {
@@ -151,7 +152,8 @@ export default function Login() {
       console.error('Sign in error:', e);
       if (e.code === 'auth/invalid-credential' || e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
         // If they were trying to log in as admin, let them know if they got the password wrong
-        const SPECIAL_ID = (import.meta.env.VITE_DIETICIAN_EMAIL || 'admin@aidiet.com').toLowerCase();
+        const metaEnv = (import.meta as any).env || {};
+        const SPECIAL_ID = (metaEnv.VITE_DIETICIAN_EMAIL || 'admin@aidiet.com').toLowerCase();
         if (email.toLowerCase() === SPECIAL_ID) {
           setError('Invalid dietician credentials. Check password.');
         } else {

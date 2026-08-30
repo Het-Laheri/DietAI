@@ -255,7 +255,7 @@ JSON Schema format:
     return null;
   }
 
-  // Detector and Parser for ICMR/IFCT Clinical Nutritional Analysis Spreadsheets
+  // Detector and Parser for ICMR/IFCT Clinical Nutritional Analysis Spreadsheets (Excel 97-2003 & XLSX)
   function parseClinicalNutritionSheetFromMatrix(rawMatrix: any[][], sheetName: string, fileName: string): any {
     const cleanFileName = fileName
       ? fileName.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').trim()
@@ -265,7 +265,7 @@ JSON Schema format:
     let topTitle = '';
     for (let i = 0; i < Math.min(5, rawMatrix.length); i++) {
       const rowStr = (rawMatrix[i] || []).map(v => String(v).trim()).filter(Boolean).join(' ');
-      if (rowStr && !rowStr.toLowerCase().includes('food details') && !rowStr.toLowerCase().includes('s.no') && !rowStr.toLowerCase().includes('nutritive value')) {
+      if (rowStr && !rowStr.toLowerCase().includes('food details') && !rowStr.toLowerCase().includes('s.no') && !rowStr.toLowerCase().includes('nutritive')) {
         topTitle = rowStr;
         break;
       }
@@ -273,47 +273,60 @@ JSON Schema format:
 
     const dishName = topTitle || (sheetName && !sheetName.toLowerCase().startsWith('sheet') ? sheetName : cleanFileName || 'Clinical Recipe Dish');
 
-    const ingredients: string[] = [];
+    const ingredientsSet = new Set<string>();
     let calories = 0;
     let carbs = 0;
     let protein = 0;
     let fat = 0;
 
-    // 2. Iterate matrix rows
+    let inNutritiveSection = false;
+
+    // 2. Iterate matrix rows with section tracking
     rawMatrix.forEach(rowArr => {
       if (!rowArr || rowArr.length === 0) return;
       const rowStr = rowArr.map(v => String(v).trim()).join(' ').toLowerCase();
 
-      // Check for ingredient item row (e.g. S.No 1, 2, 3...)
-      const firstCell = String(rowArr[0] || '').trim();
-      const secondCell = String(rowArr[1] || '').trim();
-      const firstNum = parseInt(firstCell);
-
-      if ((!isNaN(firstNum) && firstNum > 0) || (firstCell && secondCell && !firstCell.toLowerCase().includes('s.no') && !firstCell.toLowerCase().includes('food details'))) {
-        const itemName = secondCell || firstCell;
-        // Measure detail usually in col 5 or 6 or 4
-        const measure = String(rowArr[5] || rowArr[6] || rowArr[4] || rowArr[3] || '').replace(/Weight of Edible Portion = /gi, '').trim();
-        if (itemName && !itemName.toLowerCase().includes('food item') && !itemName.toLowerCase().includes('food details') && !itemName.toLowerCase().includes('nutritive')) {
-          ingredients.push(measure ? `${itemName} (${measure})` : itemName);
-        }
+      if (rowStr.includes('nutritive value')) {
+        inNutritiveSection = true;
       }
 
-      // Check for summary "Total:" row in Nutritive Value Details
+      // If in Nutritive section and row starts with Total
       if (rowStr.startsWith('total') || rowStr.includes('total:')) {
         const numbers = rowArr
-          .map(v => parseFloat(String(v).replace(/[^0-9.]/g, '')))
+          .map(v => String(v).replace(/[^0-9.]/g, '').trim())
+          .filter(Boolean)
+          .map(v => parseFloat(v))
           .filter(n => !isNaN(n) && n > 0);
-        
+
         if (numbers.length >= 4) {
           calories = numbers[0];
           carbs = numbers[1];
           protein = numbers[2];
           fat = numbers[3];
-        } else if (numbers.length >= 1) {
+        } else if (numbers.length >= 1 && calories === 0) {
           calories = numbers[0];
         }
       }
+
+      // If NOT in nutritive section yet, collect ingredients from Food Details table
+      if (!inNutritiveSection) {
+        const firstCell = String(rowArr[0] || '').trim();
+        const secondCell = String(rowArr[1] || '').trim();
+        const firstNum = parseInt(firstCell);
+
+        if ((!isNaN(firstNum) && firstNum > 0) || (firstCell && secondCell && !firstCell.toLowerCase().includes('s.no') && !firstCell.toLowerCase().includes('food details'))) {
+          const itemName = secondCell && isNaN(parseInt(secondCell)) ? secondCell : firstCell;
+          const measure = String(rowArr[6] || rowArr[5] || rowArr[4] || rowArr[3] || '').replace(/Weight of Edible Portion = /gi, '').trim();
+          
+          if (itemName && !itemName.toLowerCase().includes('food item') && !itemName.toLowerCase().includes('food details') && !itemName.toLowerCase().includes('s.no')) {
+            const ingText = measure ? `${itemName} (${measure})` : itemName;
+            ingredientsSet.add(ingText);
+          }
+        }
+      }
     });
+
+    const ingredients = Array.from(ingredientsSet);
 
     let dietaryType = 'Vegetarian';
     const allIngStr = ingredients.join(' ').toLowerCase();
@@ -332,14 +345,14 @@ JSON Schema format:
       fat: Math.round(fat * 100) / 100 || 5,
       ingredients: ingredients.length > 0 ? ingredients : [`Fresh ingredients for ${dishName}`],
       recipe: [
-        `Prepare all measured edible portions (${ingredients.slice(0, 3).join(', ')}...).`,
-        `Heat cooking oil and sauté aromatics until golden brown.`,
-        `Add remaining ingredients and cook on medium heat until tender.`
+        `Prepare all measured ingredients: ${ingredients.slice(0, 3).join(', ')}...`,
+        `Heat cooking oil and sauté aromatics until fragrant.`,
+        `Add main ingredients and cook on medium heat until tender.`
       ],
       prepTime: '15 mins',
       cookTime: '20 mins',
       clinicalFocus: 'IFCT Clinical Analysis',
-      sourceFileName: fileName || 'Clinical_Analysis.xlsx',
+      sourceFileName: fileName || 'Clinical_Analysis.xls',
       sheetName: sheetName || 'Sheet1'
     };
   }
@@ -420,8 +433,18 @@ JSON Schema format:
       let workbook: XLSX.WorkBook;
 
       if (base64File) {
-        const buffer = Buffer.from(base64File.replace(/^data:.*;base64,/, ''), 'base64');
-        workbook = XLSX.read(buffer, { type: 'buffer' });
+        const base64Clean = base64File.replace(/^data:.*;base64,/, '');
+        const buffer = Buffer.from(base64Clean, 'base64');
+        try {
+          // Supports .xlsx, .xlsm, .csv, .xls (Excel 97-2003)
+          workbook = XLSX.read(buffer, { type: 'buffer', raw: true });
+        } catch (e1) {
+          try {
+            workbook = XLSX.read(base64Clean, { type: 'base64', raw: true });
+          } catch (e2) {
+            workbook = XLSX.read(buffer.toString('binary'), { type: 'binary' });
+          }
+        }
       } else if (fileData) {
         workbook = XLSX.read(fileData, { type: 'string' });
       } else {

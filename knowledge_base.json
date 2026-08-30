@@ -63,57 +63,5 @@
     "prepTime": "10 mins",
     "cookTime": "15 mins",
     "clinicalFocus": "General Wellness"
-  },
-  {
-    "name": "Custom Meal",
-    "dietaryType": "Vegetarian",
-    "calories": 300,
-    "protein": 15,
-    "carbs": 40,
-    "fat": 10,
-    "ingredients": [],
-    "recipe": [],
-    "prepTime": "10 mins",
-    "cookTime": "15 mins",
-    "clinicalFocus": "General Wellness"
-  },
-  {
-    "name": "Custom Meal",
-    "dietaryType": "Vegetarian",
-    "calories": 300,
-    "protein": 15,
-    "carbs": 40,
-    "fat": 10,
-    "ingredients": [],
-    "recipe": [],
-    "prepTime": "10 mins",
-    "cookTime": "15 mins",
-    "clinicalFocus": "General Wellness"
-  },
-  {
-    "name": "Custom Meal",
-    "dietaryType": "Vegetarian",
-    "calories": 300,
-    "protein": 15,
-    "carbs": 40,
-    "fat": 10,
-    "ingredients": [],
-    "recipe": [],
-    "prepTime": "10 mins",
-    "cookTime": "15 mins",
-    "clinicalFocus": "General Wellness"
-  },
-  {
-    "name": "Custom Meal",
-    "dietaryType": "Vegetarian",
-    "calories": 300,
-    "protein": 15,
-    "carbs": 40,
-    "fat": 10,
-    "ingredients": [],
-    "recipe": [],
-    "prepTime": "10 mins",
-    "cookTime": "15 mins",
-    "clinicalFocus": "General Wellness"
   }
 ]

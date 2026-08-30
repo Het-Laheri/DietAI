@@ -276,6 +276,16 @@ JSON Schema format:
     });
   });
 
+  // Clear Ingested Excel Knowledge Base
+  app.delete('/api/knowledge/clear', (req, res) => {
+    try {
+      saveStoredKnowledge([]);
+      res.json({ success: true, message: 'Knowledge base cleared' });
+    } catch (e: any) {
+      res.status(500).json({ error: 'Failed to clear knowledge base' });
+    }
+  });
+
   // WhatsApp Webhook Verification (Meta / Twilio Integration)
   app.get('/api/whatsapp/webhook', (req, res) => {
     const mode = req.query['hub.mode'];

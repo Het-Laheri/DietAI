@@ -2,7 +2,7 @@ import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { getNotifications, markNotificationRead, Notification } from '../services/db';
-import { LayoutDashboard, Users, MessageSquare, LogOut, Settings, Bell } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, LogOut, Bell, Wand2, BookOpen, Bot } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Overview from './Dietician/Overview';
 import PatientsList from './Dietician/PatientsList';
@@ -10,6 +10,8 @@ import PatientProfileView from './Dietician/PatientProfileView';
 import PatientForm from './Dietician/PatientForm';
 import QueryInbox from './Dietician/QueryInbox';
 import AiAssistant from './Dietician/AiAssistant';
+import KnowledgeBase from './Dietician/KnowledgeBase';
+import MealPlanGenerator from './Dietician/MealPlanGenerator';
 
 export default function DieticianDashboard() {
 
@@ -48,7 +50,9 @@ export default function DieticianDashboard() {
     { name: 'Dashboard', path: '/dietician', icon: LayoutDashboard },
     { name: 'Patients', path: '/dietician/patients', icon: Users },
     { name: 'Inbox', path: '/dietician/inbox', icon: MessageSquare },
-    { name: 'AI Assistant', path: '/dietician/ai', icon: Settings }, // reusing icon
+    { name: 'Plan Generator', path: '/dietician/generator', icon: Wand2 },
+    { name: 'Knowledge Base', path: '/dietician/knowledge', icon: BookOpen },
+    { name: 'AI Assistant', path: '/dietician/ai', icon: Bot },
   ];
 
   return (
@@ -149,6 +153,8 @@ export default function DieticianDashboard() {
             <Route path="/patients/new" element={<PatientForm />} />
             <Route path="/patients/:id/*" element={<PatientProfileView />} />
             <Route path="/inbox" element={<QueryInbox />} />
+            <Route path="/generator" element={<MealPlanGenerator />} />
+            <Route path="/knowledge" element={<KnowledgeBase />} />
             <Route path="/ai" element={<AiAssistant />} />
           </Routes>
         </div>

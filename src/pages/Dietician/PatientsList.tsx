@@ -13,7 +13,7 @@ export default function PatientsList() {
   useEffect(() => {
     async function load() {
       if (profile) {
-        const pts = await getPatients(profile.uid);
+        const pts = await getPatients();
         setPatients(pts);
       }
       setLoading(false);

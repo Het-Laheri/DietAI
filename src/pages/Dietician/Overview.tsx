@@ -14,7 +14,7 @@ export default function Overview() {
     async function load() {
       if (!profile) return;
       
-      const pts = await getPatients(profile.uid);
+      const pts = await getPatients();
       const qs = await getQueries();
       
       setPatients(pts);

@@ -255,26 +255,23 @@ JSON Schema format:
     return null;
   }
 
-  // Detector for IFCT / ICMR Clinical Nutritional Analysis Spreadsheets (Food Details + Nutritive Value Details format)
-  function isClinicalNutritionSheet(rows: any[], sheetName: string): boolean {
-    if (!rows || rows.length === 0) return false;
-    const sampleStr = JSON.stringify(rows.slice(0, 20)).toLowerCase();
-    return (
-      sampleStr.includes('food details') ||
-      sampleStr.includes('nutritive value details') ||
-      sampleStr.includes('edible portion') ||
-      (sampleStr.includes('energy [kcal]') || sampleStr.includes('carbohydrates [gms]'))
-    );
-  }
-
-  // Parser for Single-Dish ICMR/IFCT Clinical Nutritional Analysis Spreadsheets
-  function parseClinicalNutritionSheet(rows: any[], sheetName: string, fileName: string): any {
+  // Detector and Parser for ICMR/IFCT Clinical Nutritional Analysis Spreadsheets
+  function parseClinicalNutritionSheetFromMatrix(rawMatrix: any[][], sheetName: string, fileName: string): any {
     const cleanFileName = fileName
       ? fileName.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').trim()
       : '';
-    const dishName = (cleanFileName && cleanFileName !== 'Uploaded Spreadsheet' && cleanFileName !== 'Uploaded Excel')
-      ? cleanFileName
-      : (sheetName && !sheetName.toLowerCase().includes('sheet') ? sheetName : 'Clinical Recipe Dish');
+
+    // 1. Scan top 5 rows for explicit Dish/Recipe Title
+    let topTitle = '';
+    for (let i = 0; i < Math.min(5, rawMatrix.length); i++) {
+      const rowStr = (rawMatrix[i] || []).map(v => String(v).trim()).filter(Boolean).join(' ');
+      if (rowStr && !rowStr.toLowerCase().includes('food details') && !rowStr.toLowerCase().includes('s.no') && !rowStr.toLowerCase().includes('nutritive value')) {
+        topTitle = rowStr;
+        break;
+      }
+    }
+
+    const dishName = topTitle || (sheetName && !sheetName.toLowerCase().startsWith('sheet') ? sheetName : cleanFileName || 'Clinical Recipe Dish');
 
     const ingredients: string[] = [];
     let calories = 0;
@@ -282,40 +279,41 @@ JSON Schema format:
     let protein = 0;
     let fat = 0;
 
-    rows.forEach(row => {
-      // Extract Ingredient
-      const foodItemName = findRowValue(row, ['food item name', 'food item', 'item name', 'ingredient']);
-      const measureDetail = findRowValue(row, ['net grams', 'measure detail', 'measure', 'portion', 'grams']);
+    // 2. Iterate matrix rows
+    rawMatrix.forEach(rowArr => {
+      if (!rowArr || rowArr.length === 0) return;
+      const rowStr = rowArr.map(v => String(v).trim()).join(' ').toLowerCase();
 
-      if (foodItemName && !String(foodItemName).toLowerCase().includes('food item') && !String(foodItemName).toLowerCase().includes('s.no')) {
-        const itemClean = String(foodItemName).trim();
-        const portionClean = measureDetail ? ` (${String(measureDetail).replace(/Weight of Edible Portion = /g, '').trim()})` : '';
-        ingredients.push(`${itemClean}${portionClean}`);
+      // Check for ingredient item row (e.g. S.No 1, 2, 3...)
+      const firstCell = String(rowArr[0] || '').trim();
+      const secondCell = String(rowArr[1] || '').trim();
+      const firstNum = parseInt(firstCell);
+
+      if ((!isNaN(firstNum) && firstNum > 0) || (firstCell && secondCell && !firstCell.toLowerCase().includes('s.no') && !firstCell.toLowerCase().includes('food details'))) {
+        const itemName = secondCell || firstCell;
+        // Measure detail usually in col 5 or 6 or 4
+        const measure = String(rowArr[5] || rowArr[6] || rowArr[4] || rowArr[3] || '').replace(/Weight of Edible Portion = /gi, '').trim();
+        if (itemName && !itemName.toLowerCase().includes('food item') && !itemName.toLowerCase().includes('food details') && !itemName.toLowerCase().includes('nutritive')) {
+          ingredients.push(measure ? `${itemName} (${measure})` : itemName);
+        }
       }
 
       // Check for summary "Total:" row in Nutritive Value Details
-      const isTotalRow = Object.values(row).some(v => String(v).toLowerCase().trim().startsWith('total'));
-      if (isTotalRow) {
-        calories = Number(findRowValue(row, ['energy', 'kcal', 'calories', 'cal']) || 0);
-        carbs = Number(findRowValue(row, ['carbohydrates', 'carbs', 'cho']) || 0);
-        protein = Number(findRowValue(row, ['protein', 'prot']) || 0);
-        fat = Number(findRowValue(row, ['fat', 'fats']) || 0);
+      if (rowStr.startsWith('total') || rowStr.includes('total:')) {
+        const numbers = rowArr
+          .map(v => parseFloat(String(v).replace(/[^0-9.]/g, '')))
+          .filter(n => !isNaN(n) && n > 0);
+        
+        if (numbers.length >= 4) {
+          calories = numbers[0];
+          carbs = numbers[1];
+          protein = numbers[2];
+          fat = numbers[3];
+        } else if (numbers.length >= 1) {
+          calories = numbers[0];
+        }
       }
     });
-
-    // If total row was not found, sum ingredient nutrition
-    if (calories === 0) {
-      rows.forEach(row => {
-        const c = Number(findRowValue(row, ['energy', 'kcal', 'calories']) || 0);
-        const p = Number(findRowValue(row, ['protein', 'prot']) || 0);
-        const cb = Number(findRowValue(row, ['carbohydrates', 'carbs']) || 0);
-        const f = Number(findRowValue(row, ['fat']) || 0);
-        calories += c;
-        protein += p;
-        carbs += cb;
-        fat += f;
-      });
-    }
 
     let dietaryType = 'Vegetarian';
     const allIngStr = ingredients.join(' ').toLowerCase();
@@ -328,13 +326,13 @@ JSON Schema format:
     return {
       name: dishName,
       dietaryType,
-      calories: Math.round(calories * 100) / 100 || 150,
-      protein: Math.round(protein * 100) / 100 || 5,
-      carbs: Math.round(carbs * 100) / 100 || 20,
-      fat: Math.round(fat * 100) / 100 || 3,
+      calories: Math.round(calories * 100) / 100 || 180,
+      protein: Math.round(protein * 100) / 100 || 8,
+      carbs: Math.round(carbs * 100) / 100 || 25,
+      fat: Math.round(fat * 100) / 100 || 5,
       ingredients: ingredients.length > 0 ? ingredients : [`Fresh ingredients for ${dishName}`],
       recipe: [
-        `Combine all measured ingredients (${ingredients.slice(0, 3).join(', ')}...).`,
+        `Prepare all measured edible portions (${ingredients.slice(0, 3).join(', ')}...).`,
         `Heat cooking oil and sauté aromatics until golden brown.`,
         `Add remaining ingredients and cook on medium heat until tender.`
       ],
@@ -342,7 +340,7 @@ JSON Schema format:
       cookTime: '20 mins',
       clinicalFocus: 'IFCT Clinical Analysis',
       sourceFileName: fileName || 'Clinical_Analysis.xlsx',
-      sheetName: sheetName || 'Food Details'
+      sheetName: sheetName || 'Sheet1'
     };
   }
 
@@ -435,17 +433,28 @@ JSON Schema format:
 
       for (const sheetName of workbook.SheetNames) {
         const sheet = workbook.Sheets[sheetName];
-        const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+        
+        // 1. Extract 2D matrix to test for ICMR/IFCT Clinical Analysis Format
+        const rawMatrix: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        if (!rawMatrix || rawMatrix.length === 0) continue;
 
-        if (!rows || rows.length === 0) continue;
+        const fullText = rawMatrix.map(r => r.join(' ')).join('\n').toLowerCase();
+        const isClinicalFormat = 
+          fullText.includes('food details') || 
+          fullText.includes('nutritive value') || 
+          fullText.includes('edible portion') || 
+          fullText.includes('food code') ||
+          (fullText.includes('energy [kcal]') || fullText.includes('carbohydrates [gms]'));
 
-        // Check if this sheet is an IFCT / ICMR Single-Dish Clinical Nutritional Analysis format
-        if (isClinicalNutritionSheet(rows, sheetName)) {
-          console.log(`🥗 Detected ICMR/IFCT Clinical Nutrition Analysis Sheet: "${sheetName}" in file "${sourceFileName}"`);
-          const clinicalRecipe = parseClinicalNutritionSheet(rows, sheetName, sourceFileName);
+        if (isClinicalFormat) {
+          console.log(`🥗 Processing ICMR/IFCT Clinical Single-Dish Sheet: "${sheetName}" in file "${sourceFileName}"`);
+          const clinicalRecipe = parseClinicalNutritionSheetFromMatrix(rawMatrix, sheetName, sourceFileName);
           allRecipes.push(clinicalRecipe);
           continue;
         }
+
+        const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+        if (!rows || rows.length === 0) continue;
 
         let sheetRecipes: any[] = [];
         let genericCount = 0;

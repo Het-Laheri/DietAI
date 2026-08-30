@@ -242,10 +242,92 @@ JSON Schema format:
     }
   });
 
+  // Helper to find row values case-insensitively by keyword list
+  function findRowValue(row: any, keywords: string[]): any {
+    if (!row || typeof row !== 'object') return null;
+    const keys = Object.keys(row);
+    for (const kw of keywords) {
+      const matchedKey = keys.find(k => k.toLowerCase().trim().includes(kw.toLowerCase()));
+      if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null && String(row[matchedKey]).trim() !== '') {
+        return row[matchedKey];
+      }
+    }
+    return null;
+  }
+
+  // Smart Row Normalizer for Excel files
+  function normalizeExcelRow(row: any, sheetName: string, fileName: string, rowIndex: number): any {
+    // 1. Extract Name
+    let rawName = findRowValue(row, [
+      'meal name', 'recipe name', 'dish name', 'food item', 'item name', 
+      'dish', 'recipe', 'meal', 'item', 'food', 'name', 'title', 'menu'
+    ]);
+
+    // Fallback if name is missing: pick first non-numeric text column with length > 2
+    if (!rawName) {
+      for (const [key, val] of Object.entries(row)) {
+        if (typeof val === 'string' && val.trim().length > 2 && !['day', 'time', 'type', 'sn'].includes(key.toLowerCase())) {
+          rawName = val.trim();
+          break;
+        }
+      }
+    }
+
+    // Final fallback: combine Sheet Name & Index
+    const name = rawName ? String(rawName).trim() : `${sheetName} Recipe #${rowIndex + 1}`;
+
+    // 2. Extract Dietary Type
+    let dietaryType = findRowValue(row, ['dietary type', 'diet type', 'diet', 'veg/non-veg', 'category', 'type']) || 'Vegetarian';
+    const nameAndIng = (name + ' ' + (row['Ingredients'] || '')).toLowerCase();
+    if (nameAndIng.includes('chicken') || nameAndIng.includes('fish') || nameAndIng.includes('mutton') || nameAndIng.includes('beef') || nameAndIng.includes('pork')) {
+      dietaryType = 'Non-Vegetarian';
+    } else if (nameAndIng.includes('egg')) {
+      dietaryType = 'Eggetarian';
+    }
+
+    // 3. Extract Macros & Calories
+    const calories = Number(findRowValue(row, ['calorie', 'kcal', 'energy', 'cal']) || 300);
+    const protein = Number(findRowValue(row, ['protein', 'prot', 'p(g)']) || 15);
+    const carbs = Number(findRowValue(row, ['carbohydrate', 'carb', 'cho', 'c(g)']) || 40);
+    const fat = Number(findRowValue(row, ['fat', 'f(g)']) || 10);
+
+    // 4. Extract Ingredients
+    const rawIng = findRowValue(row, ['ingredient', 'items needed', 'composition', 'raw ingredients']);
+    const ingredients = rawIng 
+      ? String(rawIng).split(/;|\n|,/).map((i: string) => i.trim()).filter(Boolean)
+      : [`1 portion of ${name}`];
+
+    // 5. Extract Recipe Steps
+    const rawRecipe = findRowValue(row, ['preparation', 'recipe', 'method', 'instruction', 'step', 'how to prepare']);
+    const recipe = rawRecipe
+      ? String(rawRecipe).split(/;|\n|\. /).map((s: string) => s.trim()).filter(Boolean)
+      : [`Prepare ${name} according to standard portion sizes. Serve warm with water.`];
+
+    const prepTime = String(findRowValue(row, ['prep time', 'preptime']) || '10 mins');
+    const cookTime = String(findRowValue(row, ['cook time', 'cooktime']) || '15 mins');
+    const clinicalFocus = String(findRowValue(row, ['clinical focus', 'health goal', 'focus', 'tag']) || 'General Wellness');
+
+    return {
+      name,
+      dietaryType,
+      calories,
+      protein,
+      carbs,
+      fat,
+      ingredients,
+      recipe,
+      prepTime,
+      cookTime,
+      clinicalFocus,
+      sourceFileName: fileName || 'Uploaded_Excel.xlsx',
+      sheetName: sheetName || 'Sheet1'
+    };
+  }
+
   // Excel Knowledge Base Import Route (.xlsx / .csv)
   app.post('/api/knowledge/import-excel', async (req, res) => {
     try {
-      const { base64File, fileData } = req.body;
+      const { base64File, fileData, fileName } = req.body;
       let workbook: XLSX.WorkBook;
 
       if (base64File) {
@@ -258,26 +340,74 @@ JSON Schema format:
       }
 
       const allRecipes: any[] = [];
-      workbook.SheetNames.forEach(sheetName => {
+      const sourceFileName = fileName || 'Uploaded_Spreadsheet.xlsx';
+
+      for (const sheetName of workbook.SheetNames) {
         const sheet = workbook.Sheets[sheetName];
         const rows: any[] = XLSX.utils.sheet_to_json(sheet);
 
-        rows.forEach(row => {
-          allRecipes.push({
-            name: row['Meal Name'] || row['Name'] || row['Title'] || row['Meal'] || 'Custom Meal',
-            dietaryType: row['Dietary Type'] || row['Diet'] || row['Type'] || 'Vegetarian',
-            calories: Number(row['Calories'] || row['Kcal'] || 300),
-            protein: Number(row['Protein'] || row['Protein(g)'] || 15),
-            carbs: Number(row['Carbs'] || row['Carbs(g)'] || 40),
-            fat: Number(row['Fat'] || row['Fat(g)'] || 10),
-            ingredients: (row['Ingredients'] || row['Ingredient List'] || '').toString().split(/;|\n|,/).map((i: string) => i.trim()).filter(Boolean),
-            recipe: (row['Preparation Steps'] || row['Recipe'] || row['Instructions'] || row['Method'] || '').toString().split(/;|\n|\. /).map((s: string) => s.trim()).filter(Boolean),
-            prepTime: row['Prep Time'] || row['PrepTime'] || '10 mins',
-            cookTime: row['Cook Time'] || row['CookTime'] || '15 mins',
-            clinicalFocus: row['Clinical Focus'] || row['Health Goal'] || row['Category'] || 'General Wellness'
-          });
+        if (!rows || rows.length === 0) continue;
+
+        let sheetRecipes: any[] = [];
+        let genericCount = 0;
+
+        // Normalize each row
+        rows.forEach((row, idx) => {
+          const recipe = normalizeExcelRow(row, sheetName, sourceFileName, idx);
+          if (recipe.name.includes('Recipe #') || recipe.name === 'Custom Meal') {
+            genericCount++;
+          }
+          sheetRecipes.push(recipe);
         });
-      });
+
+        // AI Fallback Parser if >40% of rows produced generic names (e.g. matrix/grid layout)
+        if (genericCount / Math.max(rows.length, 1) > 0.4 && rows.length > 0) {
+          try {
+            console.log(`🤖 Using AI Fallback Parser for matrix layout sheet: "${sheetName}"`);
+            const aiPrompt = `You are a clinical Excel spreadsheet parser. Extract all distinct recipes/meals from this raw sheet data:
+Sheet Name: "${sheetName}"
+Raw Data: ${JSON.stringify(rows.slice(0, 40))}
+
+Return ONLY a valid JSON array of objects with schema:
+[
+  {
+    "name": "Distinct Meal/Dish Name",
+    "dietaryType": "Vegetarian",
+    "calories": 350,
+    "protein": 15,
+    "carbs": 40,
+    "fat": 10,
+    "ingredients": ["ingredient 1"],
+    "recipe": ["step 1"],
+    "prepTime": "10 mins",
+    "cookTime": "15 mins",
+    "clinicalFocus": "General Wellness"
+  }
+]`;
+
+            const aiText = await generateAIResponse({
+              systemInstruction: 'Respond with valid JSON array only.',
+              userPrompt: aiPrompt,
+              jsonMode: true
+            });
+
+            const cleanedAI = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+            const parsedAI = JSON.parse(cleanedAI);
+
+            if (Array.isArray(parsedAI) && parsedAI.length > 0) {
+              sheetRecipes = parsedAI.map(r => ({
+                ...r,
+                sourceFileName,
+                sheetName
+              }));
+            }
+          } catch (aiErr) {
+            console.warn('AI Fallback Parser encountered error, retaining normalized rows:', aiErr);
+          }
+        }
+
+        allRecipes.push(...sheetRecipes);
+      }
 
       const existing = getStoredKnowledge();
       const updated = [...existing, ...allRecipes];

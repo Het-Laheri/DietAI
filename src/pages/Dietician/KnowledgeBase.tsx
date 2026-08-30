@@ -41,7 +41,7 @@ export default function KnowledgeBase() {
           const res = await fetch('/api/knowledge/import-excel', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ base64File: base64 })
+            body: JSON.stringify({ base64File: base64, fileName: file.name })
           });
           if (res.ok) {
             alert('Excel recipes uploaded & saved to database successfully!');
@@ -203,6 +203,11 @@ export default function KnowledgeBase() {
                       {r.clinicalFocus && (
                         <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200">
                           {r.clinicalFocus}
+                        </span>
+                      )}
+                      {r.sourceFileName && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded">
+                          📄 {r.sourceFileName} {r.sheetName ? `(${r.sheetName})` : ''}
                         </span>
                       )}
                     </div>

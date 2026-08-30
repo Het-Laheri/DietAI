@@ -179,6 +179,7 @@ export interface RecipeDBItem {
   cookTime?: string;
   clinicalFocus?: string;
   sourceFileName?: string;
+  sheetName?: string;
   createdAt?: any;
 }
 

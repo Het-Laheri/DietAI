@@ -1,0 +1,6 @@
+{
+  "name": "NutriSnap",
+  "description": "A professional clinical nutrition platform for dieticians and patients.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

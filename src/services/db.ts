@@ -1,0 +1,346 @@
+import { collection, doc, getDoc, getDocs, setDoc, addDoc, query, where, updateDoc, orderBy, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { db, auth } from './firebase';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+
+export type Role = 'dietician' | 'patient';
+
+export interface User {
+  uid: string;
+  email: string;
+  role: Role;
+  name: string;
+  createdAt: any;
+}
+
+export interface PatientProfile {
+  id: string; // matches uid
+  dieticianId: string;
+  email: string;
+  name: string;
+  mobile: string;
+  dob: string;
+  gender: string;
+  heightCm: number;
+  currentWeightKg: number;
+  targetWeightKg: number;
+  activityLevel: string;
+  dietaryType: string;
+  goals?: string[];
+  goalDetails?: Record<string, string[]>;
+  preferences: {
+    favorites: string;
+    dislikes: string;
+    cuisine: string;
+    budget: string;
+  };
+  healthInfo: {
+    conditions: string;
+    allergies: string;
+    medications: string;
+    notes: string;
+  };
+  status: 'active' | 'inactive';
+  needsAttention: boolean;
+  createdAt?: any;
+}
+
+export interface MealPlan {
+  id?: string;
+  patientId: string;
+  startDate: string;
+  endDate: string;
+  targets: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  status: 'draft' | 'published';
+  days: MealPlanDay[];
+  createdAt?: any;
+}
+
+export interface MealPlanDay {
+  dayNumber: number;
+  meals: Meal[];
+}
+
+export interface Meal {
+  type: string; // Breakfast, Lunch, etc.
+  name: string;
+  portion: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  ingredients?: string[];
+  recipe?: string[];
+  prepTime?: string;
+  cookTime?: string;
+  notes?: string;
+}
+
+export interface FoodLog {
+  id?: string;
+  patientId: string;
+  date: string; // YYYY-MM-DD
+  mealType: string;
+  description: string;
+  nutrition: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  createdAt?: any;
+}
+
+export interface Query {
+  id?: string;
+  patientId: string;
+  patientName: string;
+  question: string;
+  source: 'app' | 'whatsapp';
+  whatsappNumber?: string;
+  status: 'pending' | 'viewed' | 'answered';
+  date: string;
+  reply?: string;
+  createdAt?: any;
+}
+
+export interface ProgressRecord {
+  id?: string;
+  patientId: string;
+  date: string;
+  weightKg: number;
+  waterLiters: number;
+  adherencePercentage: number;
+  createdAt?: any;
+}
+
+export interface Notification {
+  id?: string;
+  type: 'NEW_PATIENT' | 'PATIENT_LOGIN' | 'SYSTEM';
+  patientId?: string;
+  patientName?: string;
+  message: string;
+  read: boolean;
+  createdAt?: any;
+}
+
+// Ensure Dietician Exists
+export async function ensureDieticianExists() {
+  // We'll check if the dietician user doc exists. If not, we don't create it via auth (as it requires password), 
+  // but we can create the profile doc if they sign up. For this app, let's create a signup function for the dietician.
+}
+
+export async function createDietician(email: string, password: string, name: string) {
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  await updateProfile(userCredential.user, { displayName: name });
+  const userDoc = {
+    uid: userCredential.user.uid,
+    email,
+    role: 'dietician' as Role,
+    name,
+    createdAt: serverTimestamp()
+  };
+  await setDoc(doc(db, 'users', userCredential.user.uid), userDoc);
+  return userCredential.user;
+}
+
+export async function registerPatient(
+  email: string, 
+  password: string, 
+  name: string,
+  surveyData?: {
+    goals?: string[];
+    goalDetails?: Record<string, string[]>;
+    dietaryType?: string;
+    activityLevel?: string;
+    conditions?: string;
+    allergies?: string;
+  }
+) {
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  await updateProfile(userCredential.user, { displayName: name });
+  const uid = userCredential.user.uid;
+
+  const userDoc: User = {
+    uid,
+    email,
+    role: 'patient',
+    name,
+    createdAt: serverTimestamp()
+  };
+  await setDoc(doc(db, 'users', uid), userDoc);
+
+  const profile: PatientProfile = {
+    id: uid,
+    dieticianId: 'default_dietician',
+    email,
+    name,
+    mobile: '',
+    dob: '',
+    gender: '',
+    heightCm: 170,
+    currentWeightKg: 70,
+    targetWeightKg: 70,
+    activityLevel: surveyData?.activityLevel || 'Moderate',
+    dietaryType: surveyData?.dietaryType || 'Vegetarian',
+    goals: surveyData?.goals || [],
+    goalDetails: surveyData?.goalDetails || {},
+    preferences: {
+      favorites: '',
+      dislikes: '',
+      cuisine: '',
+      budget: ''
+    },
+    healthInfo: {
+      conditions: surveyData?.conditions || '',
+      allergies: surveyData?.allergies || '',
+      medications: '',
+      notes: ''
+    },
+    status: 'active',
+    needsAttention: false,
+    createdAt: serverTimestamp()
+  };
+  await setDoc(doc(db, 'patient_profiles', uid), profile);
+
+  return userCredential.user;
+}
+
+export async function getUserProfile(uid: string): Promise<User | null> {
+  const snap = await getDoc(doc(db, 'users', uid));
+  return snap.exists() ? snap.data() as User : null;
+}
+
+export async function getPatientProfile(patientId: string): Promise<PatientProfile | null> {
+  const snap = await getDoc(doc(db, 'patient_profiles', patientId));
+  return snap.exists() ? snap.data() as PatientProfile : null;
+}
+
+export async function getPatients(): Promise<PatientProfile[]> {
+  const q = query(collection(db, 'patient_profiles'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ ...d.data(), id: d.id } as PatientProfile));
+}
+
+// Patient Creation: 
+// The dietician creates a patient. We cannot easily create a new Firebase Auth user while the dietician is logged in
+// without using the Admin SDK or a secondary app instance. 
+// Workaround for MVP: We store the temporary credentials in a 'pending_patients' collection, and when the patient
+// tries to login, if they use the temp credentials, we do a trick or we just use a secondary Firebase App instance.
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth as getAuthSecond } from 'firebase/auth';
+
+const secondaryApp = getApps().find(app => app.name === 'SecondaryApp') || initializeApp(auth.app.options, 'SecondaryApp');
+const secondaryAuth = getAuthSecond(secondaryApp);
+
+export async function createPatientProfile(dieticianId: string, data: Partial<PatientProfile>, password?: string) {
+  const tempPassword = password || Math.random().toString(36).slice(-8);
+  const email = data.email || `patient_${Math.random().toString(36).slice(-6)}@nutrisnap.demo`;
+  
+  // Create auth user using secondary app so dietician doesn't get logged out
+  const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, tempPassword);
+  await secondaryAuth.signOut(); // sign out the secondary instance
+
+  const uid = userCredential.user.uid;
+  
+  const userDoc: User = {
+    uid,
+    email,
+    role: 'patient',
+    name: data.name || 'Patient',
+    createdAt: serverTimestamp()
+  };
+  await setDoc(doc(db, 'users', uid), userDoc);
+
+  const profile: PatientProfile = {
+    ...data,
+    id: uid,
+    dieticianId,
+    email,
+    createdAt: serverTimestamp(),
+    status: 'active',
+    needsAttention: false
+  } as PatientProfile;
+
+  await setDoc(doc(db, 'patient_profiles', uid), profile);
+
+  return { uid, email, tempPassword };
+}
+
+export async function getMealPlans(patientId: string): Promise<MealPlan[]> {
+  const q = query(collection(db, 'meal_plans'), where('patientId', '==', patientId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ ...d.data(), id: d.id } as MealPlan));
+}
+
+export async function saveMealPlan(plan: MealPlan) {
+  if (plan.id) {
+    const ref = doc(db, 'meal_plans', plan.id);
+    await updateDoc(ref, { ...plan });
+    return plan.id;
+  } else {
+    const ref = await addDoc(collection(db, 'meal_plans'), { ...plan, createdAt: serverTimestamp() });
+    return ref.id;
+  }
+}
+
+export async function logMeal(log: FoodLog) {
+  await addDoc(collection(db, 'food_logs'), { ...log, createdAt: serverTimestamp() });
+}
+
+export async function getFoodLogs(patientId: string, date: string): Promise<FoodLog[]> {
+  const q = query(collection(db, 'food_logs'), where('patientId', '==', patientId), where('date', '==', date));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ ...d.data(), id: d.id } as FoodLog));
+}
+
+export async function getAllFoodLogsForPatient(patientId: string): Promise<FoodLog[]> {
+  const q = query(collection(db, 'food_logs'), where('patientId', '==', patientId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ ...d.data(), id: d.id } as FoodLog));
+}
+
+export async function getProgressRecords(patientId: string): Promise<ProgressRecord[]> {
+  const q = query(collection(db, 'progress_records'), where('patientId', '==', patientId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ ...d.data(), id: d.id } as ProgressRecord));
+}
+
+export async function submitQuery(queryData: Query) {
+  await addDoc(collection(db, 'queries'), { ...queryData, createdAt: serverTimestamp() });
+}
+
+export async function getQueries(dieticianId?: string, patientId?: string): Promise<Query[]> {
+  let q;
+  if (patientId) {
+    q = query(collection(db, 'queries'), where('patientId', '==', patientId), orderBy('createdAt', 'desc'));
+  } else {
+    // Dietician sees all queries. Since there's only one dietician, we can just fetch all queries.
+    // In a real app, we'd filter by dieticianId if multiple existed.
+    q = query(collection(db, 'queries'), orderBy('createdAt', 'desc'));
+  }
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ ...(d.data() as any), id: d.id } as Query));
+}
+
+export async function updateQuery(id: string, updates: Partial<Query>) {
+  await updateDoc(doc(db, 'queries', id), updates);
+}
+
+export async function createNotification(data: Notification) {
+  await addDoc(collection(db, 'notifications'), { ...data, createdAt: serverTimestamp() });
+}
+
+export async function getNotifications(): Promise<Notification[]> {
+  const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ ...d.data(), id: d.id } as Notification));
+}
+
+export async function markNotificationRead(id: string) {
+  await updateDoc(doc(db, 'notifications', id), { read: true });
+}

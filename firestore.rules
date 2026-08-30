@@ -67,6 +67,11 @@ service cloud.firestore {
       allow read, write: if isDietician() || isOwner(resource.data.patientId);
     }
 
+    match /recipes_db/{recipeId} {
+      allow read: if isAuthenticated();
+      allow write: if isDietician();
+    }
+
     // Default deny for everything else
     match /{document=**} {
       allow read, write: if false;

@@ -22,7 +22,10 @@ import {
   createNotification,
   getPatientProfile,
   getMealPlans,
-  getAllFoodLogsForPatient
+  getAllFoodLogsForPatient,
+  saveRecipesToDB,
+  getStoredRecipesFromDB,
+  clearRecipeDB
 } from './src/services/db';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -122,9 +125,15 @@ async function startServer() {
   app.post('/api/ai/meal-plan', async (req, res) => {
     try {
       const { patientProfile, instructions, targets } = req.body;
-      const knowledgeBase = getStoredKnowledge();
+      
+      // Fetch knowledge base recipes from Firestore DB matching patient preferences
+      let knowledgeBase = await getStoredRecipesFromDB(patientProfile?.dietaryType);
+      if (knowledgeBase.length === 0) {
+        knowledgeBase = getStoredKnowledge();
+      }
+
       const knowledgeContext = knowledgeBase.length > 0 
-        ? `\n\nIMPORTED EXCEL CLINICAL RECIPE KNOWLEDGE BASE (STRICTLY PREFER & ADAPT THESE EXACT RECIPES AND INGREDIENTS):\n${JSON.stringify(knowledgeBase.slice(0, 30))}`
+        ? `\n\nIMPORTED EXCEL CLINICAL RECIPE KNOWLEDGE BASE DATABASE (STRICTLY PREFER & ADAPT THESE EXACT RECIPES AND INGREDIENTS):\n${JSON.stringify(knowledgeBase.slice(0, 50))}`
         : '';
 
       const prompt = `You are an expert clinical dietician. Generate a 7-day meal plan for a patient with the following profile:
@@ -274,6 +283,9 @@ JSON Schema format:
       const updated = [...existing, ...allRecipes];
       saveStoredKnowledge(updated);
 
+      // Save to Firestore Cloud Database
+      await saveRecipesToDB(allRecipes).catch(e => console.error('Failed to save to Firestore DB:', e));
+
       res.json({
         success: true,
         importedCount: allRecipes.length,
@@ -286,20 +298,30 @@ JSON Schema format:
     }
   });
 
-  // Get Ingested Excel Knowledge Base Stats
-  app.get('/api/knowledge/list', (req, res) => {
-    const knowledge = getStoredKnowledge();
-    res.json({
-      count: knowledge.length,
-      sample: knowledge.slice(0, 10)
-    });
+  // Get Ingested Excel Knowledge Base Stats & Recipe List from Database
+  app.get('/api/knowledge/list', async (req, res) => {
+    try {
+      let recipes = await getStoredRecipesFromDB();
+      if (recipes.length === 0) {
+        recipes = getStoredKnowledge();
+      }
+      res.json({
+        count: recipes.length,
+        recipes: recipes,
+        sample: recipes.slice(0, 10)
+      });
+    } catch (e) {
+      const knowledge = getStoredKnowledge();
+      res.json({ count: knowledge.length, sample: knowledge.slice(0, 10), recipes: knowledge });
+    }
   });
 
   // Clear Ingested Excel Knowledge Base
-  app.delete('/api/knowledge/clear', (req, res) => {
+  app.delete('/api/knowledge/clear', async (req, res) => {
     try {
       saveStoredKnowledge([]);
-      res.json({ success: true, message: 'Knowledge base cleared' });
+      await clearRecipeDB().catch(e => console.error('Error clearing Firestore DB:', e));
+      res.json({ success: true, message: 'Knowledge base database cleared' });
     } catch (e: any) {
       res.status(500).json({ error: 'Failed to clear knowledge base' });
     }

@@ -165,6 +165,23 @@ export interface WhatsAppConversation {
   updatedAt?: any;
 }
 
+export interface RecipeDBItem {
+  id?: string;
+  name: string;
+  dietaryType: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  ingredients: string[];
+  recipe: string[];
+  prepTime?: string;
+  cookTime?: string;
+  clinicalFocus?: string;
+  sourceFileName?: string;
+  createdAt?: any;
+}
+
 // Ensure Dietician Exists
 export async function ensureDieticianExists() {
   // We'll check if the dietician user doc exists. If not, we don't create it via auth (as it requires password), 
@@ -482,4 +499,49 @@ export async function createOrUpdateWhatsAppConversation(
 
 export async function markWhatsAppConversationRead(id: string) {
   await updateDoc(doc(db, 'whatsapp_conversations', id), { unreadCount: 0 });
+}
+
+// ─── RECIPE KNOWLEDGE BASE FIRESTORE DB FUNCTIONS ────────────────────────────
+
+export async function saveRecipesToDB(recipes: RecipeDBItem[]): Promise<number> {
+  let count = 0;
+  for (const recipe of recipes) {
+    await addDoc(collection(db, 'recipes_db'), {
+      ...recipe,
+      createdAt: serverTimestamp()
+    });
+    count++;
+  }
+  return count;
+}
+
+export async function getStoredRecipesFromDB(dietaryType?: string, clinicalFocus?: string): Promise<RecipeDBItem[]> {
+  try {
+    const snap = await getDocs(collection(db, 'recipes_db'));
+    let recipes = snap.docs.map(d => ({ ...d.data(), id: d.id } as RecipeDBItem));
+
+    if (dietaryType && dietaryType !== 'All') {
+      recipes = recipes.filter(r => r.dietaryType.toLowerCase() === dietaryType.toLowerCase());
+    }
+    if (clinicalFocus && clinicalFocus !== 'All') {
+      recipes = recipes.filter(r => (r.clinicalFocus || '').toLowerCase().includes(clinicalFocus.toLowerCase()));
+    }
+    return recipes;
+  } catch (e) {
+    console.error('Error fetching recipes from DB:', e);
+    return [];
+  }
+}
+
+export async function clearRecipeDB(): Promise<boolean> {
+  try {
+    const snap = await getDocs(collection(db, 'recipes_db'));
+    for (const d of snap.docs) {
+      await deleteDoc(doc(db, 'recipes_db', d.id));
+    }
+    return true;
+  } catch (e) {
+    console.error('Error clearing recipe DB:', e);
+    return false;
+  }
 }

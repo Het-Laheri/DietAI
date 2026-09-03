@@ -192,6 +192,44 @@ export default function TodayPlan() {
           );
         })}
 
+        {/* Additional Scanned / Logged Meals Today */}
+        {logs.filter(l => l.source === 'scanner' || !todayDay?.meals.some(m => m.type === l.mealType)).length > 0 && (
+          <div className="mt-8 bg-white border border-stone-200 p-6 shadow-sm">
+            <h3 className="text-sm uppercase tracking-widest font-bold text-stone-700 mb-3 flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-brand-700" />
+              Additional Meals Logged Today
+            </h3>
+            <div className="divide-y divide-stone-100">
+              {logs
+                .filter(l => l.source === 'scanner' || !todayDay?.meals.some(m => m.type === l.mealType))
+                .map(log => (
+                  <div key={log.id} className="py-3 flex justify-between items-center">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-stone-100 px-2 py-0.5 border border-stone-200 text-stone-700">
+                          {log.mealType}
+                        </span>
+                        {log.source === 'scanner' && (
+                          <span className="text-[10px] font-bold uppercase tracking-wider bg-brand-50 text-brand-800 px-2 py-0.5 border border-brand-200">
+                            AI Scanned
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-bold text-stone-900 text-sm mt-1">{log.description}</p>
+                      {log.userNotes && (
+                        <p className="text-xs text-stone-500 italic mt-0.5">Note: "{log.userNotes}"</p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-stone-900 text-sm">{log.nutrition?.calories || 0} kcal</span>
+                      <p className="text-[11px] text-stone-400">P: {log.nutrition?.protein || 0}g • C: {log.nutrition?.carbs || 0}g</p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
         {!plan && (
           <div className="p-8 text-center text-stone-500 bg-white border border-stone-200 text-sm">
             No active meal plan assigned yet. Ask your dietician to generate your custom plan!

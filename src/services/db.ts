@@ -84,18 +84,36 @@ export interface Meal {
   notes?: string;
 }
 
+export interface FoodLogItem {
+  name: string;
+  portion: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+  notes?: string;
+}
+
 export interface FoodLog {
   id?: string;
   patientId: string;
+  patientName?: string;
   date: string; // YYYY-MM-DD
   mealType: string;
   description: string;
+  userNotes?: string;
+  imageUrl?: string;
+  items?: FoodLogItem[];
   nutrition: {
     calories: number;
     protein: number;
     carbs: number;
     fat: number;
+    fiber?: number;
   };
+  insight?: string;
+  source?: 'scanner' | 'quick_log' | 'manual';
   createdAt?: any;
 }
 
@@ -343,8 +361,24 @@ export async function saveMealPlan(plan: MealPlan) {
   }
 }
 
-export async function logMeal(log: FoodLog) {
-  await addDoc(collection(db, 'food_logs'), { ...log, createdAt: serverTimestamp() });
+export function cleanFirestoreData<T extends Record<string, any>>(data: T): Partial<T> {
+  const cleaned: any = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {
+      if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+        cleaned[key] = cleanFirestoreData(value);
+      } else {
+        cleaned[key] = value;
+      }
+    }
+  }
+  return cleaned;
+}
+
+export async function logMeal(log: FoodLog): Promise<string> {
+  const sanitized = cleanFirestoreData(log);
+  const ref = await addDoc(collection(db, 'food_logs'), { ...sanitized, createdAt: serverTimestamp() });
+  return ref.id;
 }
 
 export async function getFoodLogs(patientId: string, date: string): Promise<FoodLog[]> {
@@ -356,7 +390,16 @@ export async function getFoodLogs(patientId: string, date: string): Promise<Food
 export async function getAllFoodLogsForPatient(patientId: string): Promise<FoodLog[]> {
   const q = query(collection(db, 'food_logs'), where('patientId', '==', patientId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ ...d.data(), id: d.id } as FoodLog));
+  const logs = snap.docs.map(d => ({ ...d.data(), id: d.id } as FoodLog));
+  // Sort by date descending
+  return logs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
+export async function getAllFoodLogsAcrossAllPatients(): Promise<FoodLog[]> {
+  const q = query(collection(db, 'food_logs'));
+  const snap = await getDocs(q);
+  const logs = snap.docs.map(d => ({ ...d.data(), id: d.id } as FoodLog));
+  return logs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
 export async function getProgressRecords(patientId: string): Promise<ProgressRecord[]> {

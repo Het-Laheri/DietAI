@@ -98,20 +98,94 @@ async function generateAIResponse(params: {
   }
 
   // 2. Fallback to Gemini API if configured
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-pro',
-      contents: params.userPrompt,
-      config: {
-        systemInstruction: params.systemInstruction,
-        ...(params.jsonMode ? { responseMimeType: 'application/json' } : {})
+  const modelsToTry = [
+    process.env.GEMINI_MODEL,
+    'gemini-2.5-flash',
+    'gemini-1.5-flash',
+    'gemini-2.0-flash',
+    'gemini-2.5-pro'
+  ].filter(Boolean) as string[];
+
+  let lastError: any = null;
+  for (const modelName of modelsToTry) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: params.userPrompt,
+        config: {
+          systemInstruction: params.systemInstruction,
+          ...(params.jsonMode ? { responseMimeType: 'application/json' } : {})
+        }
+      });
+      if (response && response.text) {
+        return response.text;
+      }
+    } catch (error: any) {
+      console.warn(`Gemini text generation with model "${modelName}" failed:`, error.message || error);
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error('All Gemini text models failed to generate response');
+}
+
+// Multimodal Gemini AI Vision Analysis Handler (Image + User Prompt + Context)
+async function generateMultimodalAIResponse(params: {
+  systemInstruction?: string;
+  userPrompt: string;
+  base64Data?: string;
+  mimeType?: string;
+}): Promise<string> {
+  const geminiKey = process.env.GEMINI_API_KEY || '';
+  if (!geminiKey) {
+    throw new Error('GEMINI_API_KEY is not set in your .env file.');
+  }
+
+  const aiClient = new GoogleGenAI({ apiKey: geminiKey });
+  const modelsToTry = [
+    process.env.GEMINI_MODEL,
+    'gemini-2.5-flash',
+    'gemini-1.5-flash',
+    'gemini-2.0-flash',
+    'gemini-2.5-pro'
+  ].filter(Boolean) as string[];
+
+  const contents: any[] = [];
+
+  if (params.base64Data) {
+    // Strip data URL metadata prefix (e.g. data:image/jpeg;base64,)
+    const cleanBase64 = params.base64Data.replace(/^data:[^;]+;base64,/, '');
+    contents.push({
+      inlineData: {
+        mimeType: params.mimeType || 'image/jpeg',
+        data: cleanBase64
       }
     });
-    return response.text || '';
-  } catch (error) {
-    console.error('Gemini API Error:', error);
-    throw error;
   }
+
+  contents.push(params.userPrompt);
+
+  let lastError: any = null;
+  for (const modelName of modelsToTry) {
+    try {
+      const response = await aiClient.models.generateContent({
+        model: modelName,
+        contents,
+        config: {
+          systemInstruction: params.systemInstruction,
+          responseMimeType: 'application/json'
+        }
+      });
+      if (response && response.text) {
+        return response.text;
+      }
+    } catch (err: any) {
+      console.warn(`Gemini multimodal attempt with model "${modelName}" failed:`, err.message || err);
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('All Gemini multimodal models failed to process image');
 }
 
 async function startServer() {
@@ -119,7 +193,8 @@ async function startServer() {
   const server = http.createServer(app);
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // AI Meal Plan Generator
   app.post('/api/ai/meal-plan', async (req, res) => {
@@ -215,30 +290,126 @@ JSON Schema format:
     }
   });
 
-  // Food Scanner Mock/Demo
+  // Gemini Multimodal AI Food Scanner
   app.post('/api/ai/scan-food', async (req, res) => {
     try {
-      // In a real app, we'd send the image to Gemini Vision. 
-      // For MVP, we'll return a simulated response based on the image (which we ignore here).
-      const mockFoods = [
-        { name: '2 Roti + Dal + Sabzi', calories: 450, protein: 15, carbs: 65, fat: 12, fiber: 8, suggestion: 'Good balanced meal.' },
-        { name: 'Paneer Tikka (6 pieces)', calories: 320, protein: 18, carbs: 8, fat: 22, fiber: 2, suggestion: 'High protein, but watch the fat content.' },
-        { name: 'Idli (3) + Sambar', calories: 280, protein: 8, carbs: 55, fat: 4, fiber: 5, suggestion: 'Good carbs, relatively low protein vs. your target.' }
-      ];
-      const result = mockFoods[Math.floor(Math.random() * mockFoods.length)];
-      res.json({ 
-        detectedFoods: [result.name],
-        nutrition: {
-          calories: result.calories,
-          protein: result.protein,
-          carbs: result.carbs,
-          fat: result.fat,
-          fiber: result.fiber
-        },
-        insight: result.suggestion
+      const { image, mimeType, userNotes, patientProfile } = req.body;
+      
+      if (!image) {
+        return res.status(400).json({ error: 'Image data is required' });
+      }
+
+      const patientContext = patientProfile ? `
+Patient Clinical Profile:
+- Name: ${patientProfile.name || 'Patient'}
+- Dietary Type: ${patientProfile.dietaryType || 'Standard'}
+- Health Goals: ${patientProfile.goals?.join(', ') || 'General Health'}
+- Health Conditions: ${patientProfile.healthInfo?.conditions || 'None'}
+- Allergies: ${patientProfile.healthInfo?.allergies || 'None'}
+` : '';
+
+      const userNotesText = userNotes && typeof userNotes === 'string' && userNotes.trim()
+        ? `\nPatient's Extra Preparation Notes & Context:\n"${userNotes.trim()}"\n(CRITICAL REQUIREMENT: Strictly incorporate any cooking oils, butter, extra ingredients, specific quantities, or protein powders described in these notes into your calculation.)`
+        : '';
+
+      const prompt = `You are an expert clinical dietician and precision nutrition analyst.
+Carefully examine the uploaded food image to recognize all food and drink items on the plate.
+${patientContext}${userNotesText}
+
+Requirements:
+1. Identify all distinct food items visible or specified in the notes.
+2. If the user provided additional notes (e.g. "cooked in 1 tbsp olive oil", "2 rotis", "home made dal", "added 1 scoop whey"), calculate portions and macros accordingly.
+3. For EACH detected food item, provide:
+   - name: Clear descriptive item name (e.g. "Whole Wheat Roti", "Yellow Moong Dal", "Paneer Sabzi", "Steamed Basmati Rice")
+   - portion: Estimated portion / quantity with weight or volume (e.g. "2 medium rotis (80g)", "1 medium bowl (180g)", "1 cup (150g)")
+   - calories: Estimated calories in kcal (integer)
+   - protein: Estimated protein in grams (number)
+   - carbs: Estimated carbs in grams (number)
+   - fat: Estimated total fat in grams (number)
+   - fiber: Estimated dietary fiber in grams (number)
+   - notes: Short dietary observation (e.g. "Good source of complex carbs", "Cooked with light oil")
+4. Sum all items accurately for the meal totals:
+   - total calories, total protein, total carbs, total fat, total fiber.
+5. Suggest the meal type: "Breakfast" | "Lunch" | "Dinner" | "Snack" | "Evening Snack".
+6. Provide a concise, clinical, supportive 2-sentence feedback insight on the nutritional quality, balance, and satiety of this meal.
+
+Return ONLY a valid JSON object matching this exact structure:
+{
+  "detectedFoods": ["Roti", "Moong Dal", "Mixed Veg Sabzi"],
+  "items": [
+    {
+      "name": "Whole Wheat Roti",
+      "portion": "2 pieces (80g)",
+      "calories": 160,
+      "protein": 6,
+      "carbs": 32,
+      "fat": 1,
+      "fiber": 4,
+      "notes": "Complex carbohydrate staple"
+    }
+  ],
+  "nutrition": {
+    "calories": 450,
+    "protein": 18,
+    "carbs": 64,
+    "fat": 12,
+    "fiber": 8
+  },
+  "suggestedMealType": "Lunch",
+  "insight": "High fiber and balanced complex carbohydrates supporting steady digestion and sustained energy.",
+  "healthScore": "Balanced"
+}`;
+
+      const systemInstruction = 'You are NutriSnap AI Clinical Nutritionist. Always return strictly valid JSON with exact numerical macro values without markdown code block ticks.';
+
+      const jsonText = await generateMultimodalAIResponse({
+        systemInstruction,
+        userPrompt: prompt,
+        base64Data: image,
+        mimeType: mimeType || 'image/jpeg'
       });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to scan food' });
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(jsonText);
+      } catch (parseErr) {
+        const cleaned = jsonText.replace(/^```(?:json)?\n?/i, '').replace(/```\n?$/i, '').trim();
+        parsed = JSON.parse(cleaned);
+      }
+
+      // Ensure fallback / sanitized data structure
+      if (!parsed.items || !Array.isArray(parsed.items)) {
+        parsed.items = (parsed.detectedFoods || ['Meal Item']).map((foodName: string) => ({
+          name: foodName,
+          portion: '1 serving',
+          calories: parsed.nutrition?.calories || 300,
+          protein: parsed.nutrition?.protein || 10,
+          carbs: parsed.nutrition?.carbs || 40,
+          fat: parsed.nutrition?.fat || 8,
+          fiber: parsed.nutrition?.fiber || 4,
+          notes: 'Detected meal component'
+        }));
+      }
+
+      if (!parsed.detectedFoods) {
+        parsed.detectedFoods = parsed.items.map((i: any) => i.name);
+      }
+
+      if (parsed.nutrition) {
+        parsed.nutrition.calories = Math.round(Number(parsed.nutrition.calories) || 0);
+        parsed.nutrition.protein = Math.round(Number(parsed.nutrition.protein) || 0);
+        parsed.nutrition.carbs = Math.round(Number(parsed.nutrition.carbs) || 0);
+        parsed.nutrition.fat = Math.round(Number(parsed.nutrition.fat) || 0);
+        parsed.nutrition.fiber = Math.round(Number(parsed.nutrition.fiber) || 0);
+      }
+
+      res.json(parsed);
+    } catch (error: any) {
+      console.error('Error in /api/ai/scan-food:', error);
+      res.status(500).json({ 
+        error: 'Failed to analyze food image with Gemini AI',
+        details: error.message || String(error)
+      });
     }
   });
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UploadCloud, FileSpreadsheet, Trash2, Loader2, Info, Search, Utensils, Clock, BookOpen } from 'lucide-react';
 import { RecipeDBItem } from '../../services/db';
 

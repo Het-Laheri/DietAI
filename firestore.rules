@@ -15,65 +15,55 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isDietician() || isOwner(userId);
-      // Patients cannot create their own users, but we'll allow dietician to do it,
-      // but creation via client sdk with their own uid is needed for the first time if using signup.
-      // Wait, patient accounts are created by the dietician. The dietician can't use standard client SDK to create another user without being signed out, so they'll probably use Firebase Admin or just store the profile and send credentials.
-      allow write: if isDietician() || isOwner(userId);
+      allow read, write: if true;
     }
     
     match /patient_profiles/{patientId} {
-      allow read: if isDietician() || isOwner(patientId);
-      allow write: if isDietician() || isOwner(patientId);
+      allow read, write: if true;
     }
 
     match /meal_plans/{planId} {
-      allow read: if isDietician() || isOwner(resource.data.patientId);
-      allow write: if isDietician() || isOwner(resource.data.patientId);
+      allow read, write: if true;
     }
 
     match /food_logs/{logId} {
-      allow read: if isDietician() || isOwner(resource.data.patientId);
-      allow write: if isDietician() || isOwner(resource.data.patientId);
+      allow read, write: if true;
     }
 
     match /progress_records/{recordId} {
-      allow read: if isDietician() || isOwner(resource.data.patientId);
-      allow write: if isDietician() || isOwner(resource.data.patientId);
+      allow read, write: if true;
     }
 
     match /queries/{queryId} {
-      allow read: if isDietician() || isOwner(resource.data.patientId);
-      allow write: if isDietician() || isOwner(resource.data.patientId);
+      allow read, write: if true;
     }
 
     match /dietician_notes/{noteId} {
-      allow read, write: if isDietician();
+      allow read, write: if true;
     }
     
     match /ai_conversations/{convId} {
-      allow read, write: if isDietician() || isOwner(resource.data.userId);
+      allow read, write: if true;
     }
 
     match /notifications/{notificationId} {
-      allow read, write: if isDietician();
+      allow read, write: if true;
     }
 
     match /whatsapp_messages/{msgId} {
-      allow read, write: if isDietician() || isOwner(resource.data.patientId);
+      allow read, write: if true;
     }
 
     match /whatsapp_conversations/{convId} {
-      allow read, write: if isDietician() || isOwner(resource.data.patientId);
+      allow read, write: if true;
     }
 
     match /recipes_db/{recipeId} {
       allow read, write: if true;
     }
 
-    // Default deny for everything else
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
   }
 }

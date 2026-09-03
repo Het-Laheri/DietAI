@@ -1,24 +1,29 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getPatients, getQueries, PatientProfile, Query } from '../../services/db';
-import { Users, Activity, Bell, CheckCircle } from 'lucide-react';
+import { getPatients, getQueries, getAllFoodLogsAcrossAllPatients, PatientProfile, Query, FoodLog } from '../../services/db';
+import { Users, Activity, Bell, CheckCircle, Utensils, Sparkles, Clock, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Overview() {
   const { profile } = useAuth();
   const [patients, setPatients] = useState<PatientProfile[]>([]);
   const [queries, setQueries] = useState<Query[]>([]);
+  const [recentLogs, setRecentLogs] = useState<FoodLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       if (!profile) return;
       
-      const pts = await getPatients();
-      const qs = await getQueries();
+      const [pts, qs, logs] = await Promise.all([
+        getPatients(),
+        getQueries(),
+        getAllFoodLogsAcrossAllPatients()
+      ]);
       
       setPatients(pts);
       setQueries(qs);
+      setRecentLogs(logs);
       setLoading(false);
     }
     load();
@@ -68,15 +73,16 @@ export default function Overview() {
         </div>
         <div className="bg-white p-6 border border-stone-200">
           <div className="flex items-center gap-3 mb-4 text-stone-500">
-            <Activity className="w-5 h-5 text-red-500" />
-            <span className="text-xs uppercase tracking-widest font-bold">Needs Attention</span>
+            <Utensils className="w-5 h-5 text-brand-700" />
+            <span className="text-xs uppercase tracking-widest font-bold">Total Meal Logs</span>
           </div>
-          <div className="text-4xl font-serif text-stone-900">{needsAttention.length}</div>
+          <div className="text-4xl font-serif text-stone-900">{recentLogs.length}</div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-white border border-stone-200">
+        {/* Recent Queries */}
+        <div className="bg-white border border-stone-200 shadow-sm">
           <div className="p-6 border-b border-stone-100 flex justify-between items-center bg-[#FDFCFB]">
             <h2 className="text-xl font-serif font-bold text-stone-900">Recent Queries</h2>
             <Link to="/dietician/inbox" className="text-xs uppercase tracking-widest font-bold text-brand-700 hover:text-brand-900 transition-colors">View All</Link>
@@ -96,6 +102,60 @@ export default function Overview() {
             ))}
             {pendingQueries.length === 0 && (
               <div className="p-10 text-center text-stone-500 font-medium">No pending queries.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Live Patient Meal Logs Stream */}
+        <div className="bg-white border border-stone-200 shadow-sm">
+          <div className="p-6 border-b border-stone-100 flex justify-between items-center bg-[#FDFCFB]">
+            <h2 className="text-xl font-serif font-bold text-stone-900 flex items-center gap-2">
+              <Utensils className="w-5 h-5 text-brand-700" />
+              Recent Patient Meal Logs
+            </h2>
+            <Link to="/dietician/patients" className="text-xs uppercase tracking-widest font-bold text-brand-700 hover:text-brand-900 transition-colors">Patients</Link>
+          </div>
+          <div className="divide-y divide-stone-100">
+            {recentLogs.slice(0,5).map(log => {
+              const patient = patients.find(p => p.id === log.patientId);
+              const pName = log.patientName || patient?.name || 'Patient';
+
+              return (
+                <div key={log.id} className="p-5 hover:bg-stone-50 transition-colors">
+                  <div className="flex justify-between items-start mb-1.5">
+                    <div>
+                      <Link 
+                        to={`/dietician/patients/${log.patientId}`} 
+                        className="font-bold text-stone-900 text-sm hover:text-brand-700 transition-colors flex items-center gap-1.5"
+                      >
+                        {pName}
+                        <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
+                      </Link>
+                      <p className="text-xs text-stone-500 mt-0.5">{log.description}</p>
+                    </div>
+                    <span className="px-2.5 py-1 bg-stone-900 text-white font-mono text-xs font-bold shrink-0">
+                      {log.nutrition?.calories || 0} kcal
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[10px] uppercase tracking-wider font-bold bg-stone-100 px-2 py-0.5 border border-stone-200 text-stone-600">
+                      {log.mealType}
+                    </span>
+                    {log.source === 'scanner' && (
+                      <span className="text-[10px] uppercase tracking-wider font-bold bg-brand-50 text-brand-800 px-2 py-0.5 border border-brand-200 flex items-center gap-0.5">
+                        <Sparkles className="w-2.5 h-2.5" /> AI Scanned
+                      </span>
+                    )}
+                    <span className="text-[11px] text-stone-400 ml-auto flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> {log.date}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+            {recentLogs.length === 0 && (
+              <div className="p-10 text-center text-stone-500 font-medium">No meals logged yet by patients.</div>
             )}
           </div>
         </div>

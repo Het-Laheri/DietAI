@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import http from 'http';
@@ -98,18 +99,25 @@ async function generateAIResponse(params: {
   }
 
   // 2. Fallback to Gemini API if configured
+  const geminiKey = process.env.GEMINI_API_KEY || '';
+  if (!geminiKey) {
+    throw new Error('GEMINI_API_KEY is not set in your .env file.');
+  }
+
+  const aiClient = new GoogleGenAI({ apiKey: geminiKey });
   const modelsToTry = [
     process.env.GEMINI_MODEL,
-    'gemini-2.5-flash',
-    'gemini-1.5-flash',
-    'gemini-2.0-flash',
-    'gemini-2.5-pro'
+    'gemini-3.6-flash',
+    'gemini-3.7-flash',
+    'gemini-flash-latest',
+    'gemini-3.1-pro-preview',
+    'gemini-2.5-flash'
   ].filter(Boolean) as string[];
 
   let lastError: any = null;
   for (const modelName of modelsToTry) {
     try {
-      const response = await ai.models.generateContent({
+      const response = await aiClient.models.generateContent({
         model: modelName,
         contents: params.userPrompt,
         config: {
@@ -144,10 +152,11 @@ async function generateMultimodalAIResponse(params: {
   const aiClient = new GoogleGenAI({ apiKey: geminiKey });
   const modelsToTry = [
     process.env.GEMINI_MODEL,
-    'gemini-2.5-flash',
-    'gemini-1.5-flash',
-    'gemini-2.0-flash',
-    'gemini-2.5-pro'
+    'gemini-3.6-flash',
+    'gemini-3.7-flash',
+    'gemini-flash-latest',
+    'gemini-3.1-pro-preview',
+    'gemini-2.5-flash'
   ].filter(Boolean) as string[];
 
   const contents: any[] = [];
@@ -275,7 +284,13 @@ JSON Schema format:
         : `You are an AI nutrition assistant for a patient. Provide helpful guidance based on their current plan and logs. Do NOT prescribe medical advice or change their plan; direct them to their dietician for major changes. Context: ${JSON.stringify(context)}`;
 
       const userText = Array.isArray(messages) 
-        ? messages.map(m => typeof m === 'string' ? m : (m.content || m.text || JSON.stringify(m))).join('\n')
+        ? messages.map(m => {
+            if (typeof m === 'string') return m;
+            if (m.parts && Array.isArray(m.parts) && m.parts[0]?.text) return `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.parts[0].text}`;
+            if (m.text) return `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`;
+            if (m.content) return `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`;
+            return JSON.stringify(m);
+          }).join('\n')
         : String(messages);
 
       const text = await generateAIResponse({
@@ -284,9 +299,9 @@ JSON Schema format:
       });
 
       res.json({ text });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in AI chat:', error);
-      res.status(500).json({ error: 'Failed to process chat' });
+      res.status(500).json({ error: error.message || 'Failed to process chat' });
     }
   });
 

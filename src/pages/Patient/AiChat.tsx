@@ -31,9 +31,13 @@ export default function AiChat() {
         })
       });
       const data = await res.json();
-      setMessages(prev => [...prev, { role: 'model', text: data.text }]);
-    } catch (e) {
-      alert('Failed to get response');
+      if (res.ok && data.text) {
+        setMessages(prev => [...prev, { role: 'model', text: data.text }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'model', text: data.error || 'Unable to get response from AI. Please try again.' }]);
+      }
+    } catch (e: any) {
+      setMessages(prev => [...prev, { role: 'model', text: 'Error communicating with AI assistant.' }]);
     } finally {
       setLoading(false);
     }

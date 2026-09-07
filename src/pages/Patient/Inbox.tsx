@@ -20,26 +20,19 @@ export default function Inbox() {
     load();
   }, [profile]);
 
-  const handleSubmit = async (e: React.FormEvent, viaWhatsApp: boolean = false) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile || !question.trim()) return;
     setSubmitting(true);
-
-    const sourceChannel = viaWhatsApp ? 'whatsapp' : 'app';
 
     await submitQuery({
       patientId: profile.uid,
       patientName: profile.name,
       question,
-      source: sourceChannel,
+      source: 'app',
       status: 'pending',
       date: new Date().toISOString().split('T')[0]
     });
-
-    if (viaWhatsApp) {
-      const encoded = encodeURIComponent(`Hi Doctor, my name is ${profile.name}.\n\nQuestion: ${question}`);
-      window.open(`https://wa.me/?text=${encoded}`, '_blank');
-    }
 
     setQuestion('');
     setQueries(await getQueries(undefined, profile.uid));
@@ -51,10 +44,10 @@ export default function Inbox() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto flex flex-col h-full md:h-screen">
       <h1 className="text-2xl font-bold text-stone-900 mb-2">Ask Your Dietician</h1>
-      <p className="text-stone-500 text-sm mb-6">Send questions directly to your dietician via In-App message or WhatsApp.</p>
+      <p className="text-stone-500 text-sm mb-6">Send questions directly to your dietician via In-App message.</p>
       
       <div className="bg-white rounded-none border border-stone-200 p-6 mb-8 shadow-sm">
-        <form onSubmit={(e) => handleSubmit(e, false)}>
+        <form onSubmit={handleSubmit}>
           <label className="block text-xs uppercase tracking-widest font-bold text-stone-500 mb-2">
             Have a question about your meal plan or symptoms?
           </label>
@@ -66,15 +59,6 @@ export default function Inbox() {
             placeholder="E.g. Can I swap dal with paneer today, or how should I adjust dinner?"
           />
           <div className="flex flex-wrap gap-3 justify-end">
-            <button 
-              type="button"
-              disabled={submitting || !question.trim()}
-              onClick={(e) => handleSubmit(e as any, true)}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-widest transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              <MessageSquare className="w-4 h-4" />
-              Ask on WhatsApp
-            </button>
             <button 
               type="submit" 
               disabled={submitting || !question.trim()}
@@ -96,9 +80,8 @@ export default function Inbox() {
                 <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded ${q.status === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}>
                   {q.status === 'pending' ? 'Pending Review' : 'Answered'}
                 </span>
-                <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded flex items-center gap-1 ${q.source === 'whatsapp' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-stone-100 text-stone-600'}`}>
-                  {q.source === 'whatsapp' ? <MessageSquare className="w-3 h-3 text-emerald-600" /> : null}
-                  {q.source === 'whatsapp' ? 'WhatsApp' : 'In-App'}
+                <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded flex items-center gap-1 bg-stone-100 text-stone-600`}>
+                  In-App
                 </span>
               </div>
               <span className="text-xs text-stone-500">{q.date}</span>

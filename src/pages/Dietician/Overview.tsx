@@ -96,7 +96,7 @@ export default function Overview() {
                 </div>
                 <p className="text-sm text-stone-600 mb-3">{q.question}</p>
                 <div className="text-[10px] uppercase tracking-widest font-bold px-2 py-1 bg-stone-100 text-stone-600 rounded-sm w-max border border-stone-200">
-                  {q.source === 'whatsapp' ? 'WhatsApp' : 'App'}
+                  App
                 </div>
               </div>
             ))}

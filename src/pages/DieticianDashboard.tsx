@@ -2,7 +2,7 @@ import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { getNotifications, markNotificationRead, Notification } from '../services/db';
-import { LayoutDashboard, Users, MessageSquare, LogOut, Bell, Wand2, BookOpen, Bot, Phone } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, LogOut, Bell, Wand2, BookOpen, Bot, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Overview from './Dietician/Overview';
 import PatientsList from './Dietician/PatientsList';
@@ -12,7 +12,7 @@ import QueryInbox from './Dietician/QueryInbox';
 import AiAssistant from './Dietician/AiAssistant';
 import KnowledgeBase from './Dietician/KnowledgeBase';
 import MealPlanGenerator from './Dietician/MealPlanGenerator';
-import WhatsAppInbox from './Dietician/WhatsAppInbox';
+import AiApprovals from './Dietician/AiApprovals';
 
 export default function DieticianDashboard() {
 
@@ -40,7 +40,7 @@ export default function DieticianDashboard() {
     }
     // Navigate if appropriate based on type
     if (n.type === 'NEW_PATIENT') navigate('/dietician/patients');
-    if (n.type === 'WHATSAPP_MESSAGE') navigate('/dietician/whatsapp');
+    if (n.type === 'AI_COACH_MESSAGE') navigate('/dietician/ai-approvals');
   };
 
   const handleLogout = async () => {
@@ -51,7 +51,7 @@ export default function DieticianDashboard() {
   const navItems = [
     { name: 'Dashboard', path: '/dietician', icon: LayoutDashboard },
     { name: 'Patients', path: '/dietician/patients', icon: Users },
-    { name: 'WhatsApp', path: '/dietician/whatsapp', icon: Phone },
+    { name: 'AI Approvals', path: '/dietician/ai-approvals', icon: ShieldCheck },
     { name: 'Inbox', path: '/dietician/inbox', icon: MessageSquare },
     { name: 'Plan Generator', path: '/dietician/generator', icon: Wand2 },
     { name: 'Knowledge Base', path: '/dietician/knowledge', icon: BookOpen },
@@ -156,7 +156,7 @@ export default function DieticianDashboard() {
             <Route path="/patients/new" element={<PatientForm />} />
             <Route path="/patients/:id/*" element={<PatientProfileView />} />
             <Route path="/inbox" element={<QueryInbox />} />
-            <Route path="/whatsapp" element={<WhatsAppInbox />} />
+            <Route path="/ai-approvals" element={<AiApprovals />} />
             <Route path="/generator" element={<MealPlanGenerator />} />
             <Route path="/knowledge" element={<KnowledgeBase />} />
             <Route path="/ai" element={<AiAssistant />} />

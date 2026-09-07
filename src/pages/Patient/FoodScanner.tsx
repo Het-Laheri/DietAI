@@ -105,9 +105,9 @@ export default function FoodScanner() {
           userNotes,
           patientProfile: profile ? {
             name: profile.name,
-            dietaryType: profile.dietaryType,
-            goals: profile.goals,
-            healthInfo: profile.healthInfo
+            dietaryType: (profile as any).dietaryType,
+            goals: (profile as any).goals,
+            healthInfo: (profile as any).healthInfo
           } : undefined
         })
       });

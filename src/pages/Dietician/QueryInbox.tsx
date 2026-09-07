@@ -8,7 +8,6 @@ export default function QueryInbox() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [aiSuggesting, setAiSuggesting] = useState(false);
-  const [simulating, setSimulating] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -43,7 +42,7 @@ export default function QueryInbox() {
     }
   };
 
-  const handleSendReply = async (viaWhatsApp: boolean = false) => {
+  const handleSendReply = async () => {
     if (!selectedQuery || !replyText.trim()) return;
     
     await updateQuery(selectedQuery.id!, {
@@ -51,64 +50,18 @@ export default function QueryInbox() {
       status: 'answered'
     });
 
-    if (viaWhatsApp || selectedQuery.source === 'whatsapp') {
-      try {
-        const res = await fetch('/api/whatsapp/send-reply', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            whatsappNumber: selectedQuery.whatsappNumber || '',
-            replyText,
-            patientName: selectedQuery.patientName,
-            patientId: selectedQuery.patientId
-          })
-        });
-        const data = await res.json();
-        if (!data.success && data.directWhatsAppUrl) {
-          window.open(data.directWhatsAppUrl, '_blank');
-        }
-      } catch (err) {
-        console.error('Failed to dispatch via Meta API:', err);
-      }
-    }
-
     setQueries(await getQueries());
     setReplyText('');
     setSelectedId(null);
   };
 
-  const handleSimulateWhatsAppQuery = async () => {
-    setSimulating(true);
-    const sampleWhatsAppQueries = [
-      "Hi Doctor, can I replace white rice with quinoa for dinner in my plan?",
-      "Hello! Is it okay to take my vitamin D supplement right after breakfast?",
-      "Hi, I am traveling today. What quick healthy snack can I get at the airport?",
-      "Good morning, I felt a bit bloated after yesterday's high-protein lunch. Any advice?"
-    ];
-    const names = ["Ananya Sharma", "Rahul Verma", "Priya Patel", "Vikram Malhotra"];
-    const phones = ["+1 (555) 234-5678", "+1 (555) 876-5432", "+1 (555) 345-6789", "+1 (555) 987-6543"];
-    const randomIdx = Math.floor(Math.random() * sampleWhatsAppQueries.length);
-
-    await submitQuery({
-      patientId: 'simulated_wa_patient_' + Math.random().toString(36).slice(-4),
-      patientName: names[randomIdx],
-      whatsappNumber: phones[randomIdx],
-      question: sampleWhatsAppQueries[randomIdx],
-      source: 'whatsapp',
-      status: 'pending',
-      date: new Date().toISOString().split('T')[0]
-    });
-
-    setQueries(await getQueries());
-    setSimulating(false);
-  };
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto h-screen flex flex-col">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
           <h1 className="text-2xl font-serif font-bold text-stone-900">Patient Queries & Communications</h1>
-          <p className="text-xs text-stone-500">View and respond to clinical questions received via In-App messaging or Meta WhatsApp Cloud API webhooks.</p>
+          <p className="text-xs text-stone-500">View and respond to clinical questions received via In-App messaging.</p>
         </div>
       </div>
 
@@ -138,9 +91,8 @@ export default function QueryInbox() {
                   <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded ${q.status === 'pending' ? 'bg-amber-100 text-amber-800' : q.status === 'answered' ? 'bg-green-100 text-green-800' : 'bg-stone-100 text-stone-700'}`}>
                     {q.status}
                   </span>
-                  <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded flex items-center gap-1 ${q.source === 'whatsapp' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-stone-100 text-stone-600'}`}>
-                    {q.source === 'whatsapp' ? <MessageSquare className="w-3 h-3 text-emerald-600" /> : null}
-                    {q.source === 'whatsapp' ? 'WhatsApp' : 'In-App'}
+                  <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded flex items-center gap-1 bg-stone-100 text-stone-600`}>
+                    In-App
                   </span>
                 </div>
               </button>
@@ -157,14 +109,9 @@ export default function QueryInbox() {
                 <div>
                   <h3 className="font-bold text-base text-stone-900 flex items-center gap-2">
                     {selectedQuery.patientName}
-                    {selectedQuery.source === 'whatsapp' && (
-                      <span className="text-xs font-semibold px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full flex items-center gap-1">
-                        <MessageSquare className="w-3 h-3" /> WhatsApp Webhook Channel
-                      </span>
-                    )}
                   </h3>
                   <p className="text-xs text-stone-500 mt-0.5">
-                    Received on {selectedQuery.date} {selectedQuery.whatsappNumber ? `• WhatsApp: ${selectedQuery.whatsappNumber}` : ''}
+                    Received on {selectedQuery.date}
                   </p>
                 </div>
               </div>
@@ -207,14 +154,7 @@ export default function QueryInbox() {
                   
                   <div className="flex justify-end gap-3">
                     <button 
-                      onClick={() => handleSendReply(true)}
-                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-widest transition-colors flex items-center gap-2"
-                    >
-                      <MessageSquare className="w-4 h-4" />
-                      Send via WhatsApp
-                    </button>
-                    <button 
-                      onClick={() => handleSendReply(false)}
+                      onClick={() => handleSendReply()}
                       className="px-5 py-2.5 bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs uppercase tracking-widest transition-colors flex items-center gap-2"
                     >
                       <Send className="w-4 h-4" />
@@ -227,7 +167,7 @@ export default function QueryInbox() {
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-stone-400 p-8 text-center">
               <MessageSquare className="w-12 h-12 stroke-1 mb-3 text-stone-300" />
-              <p className="text-sm font-medium">Select a patient query from the left list to respond via In-App or WhatsApp.</p>
+              <p className="text-sm font-medium">Select a patient query from the left list to respond via In-App.</p>
             </div>
           )}
         </div>

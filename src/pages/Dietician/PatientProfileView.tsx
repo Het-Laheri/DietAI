@@ -117,11 +117,6 @@ export default function PatientProfileView() {
           <div>
             <h1 className="text-2xl font-serif font-bold text-stone-900 flex flex-wrap items-center gap-2">
               {profile.name}
-              {profile.whatsappNumber && (
-                <span className="text-xs bg-emerald-50 text-emerald-700 px-2.5 py-0.5 border border-emerald-200 rounded-full flex items-center gap-1 font-medium font-mono">
-                  <Phone className="w-3 h-3 text-emerald-600" /> WhatsApp: +{profile.whatsappNumber}
-                </span>
-              )}
             </h1>
             <p className="text-stone-500 text-sm mt-0.5">{profile.email} • {profile.dietaryType} • {profile.activityLevel || 'Moderate'}</p>
           </div>

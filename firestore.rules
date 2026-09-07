@@ -50,11 +50,7 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    match /whatsapp_messages/{msgId} {
-      allow read, write: if true;
-    }
-
-    match /whatsapp_conversations/{convId} {
+    match /ai_coach_messages/{msgId} {
       allow read, write: if true;
     }
 

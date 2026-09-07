@@ -12,7 +12,6 @@ export default function PatientForm() {
     name: '',
     email: '',
     mobile: '',
-    whatsappNumber: '',
     dietaryType: 'Vegetarian',
     currentWeightKg: 60,
     targetWeightKg: 55,
@@ -84,14 +83,6 @@ export default function PatientForm() {
             <input 
               value={formData.mobile} onChange={e => setFormData({...formData, mobile: e.target.value})}
               className="w-full px-4 py-2 border border-stone-200 rounded-none focus:ring-2 focus:ring-stone-900 focus:border-stone-900 outline-none"
-              placeholder="+91 98765 43210"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-stone-700 mb-1">WhatsApp Number (Meta Cloud Channel)</label>
-            <input 
-              value={formData.whatsappNumber} onChange={e => setFormData({...formData, whatsappNumber: e.target.value})}
-              className="w-full px-4 py-2 border border-stone-200 rounded-none focus:ring-2 focus:ring-stone-900 focus:border-stone-900 outline-none font-mono"
               placeholder="+91 98765 43210"
             />
           </div>

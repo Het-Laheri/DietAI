@@ -7,18 +7,6 @@ import * as XLSX from 'xlsx';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { 
-  healthCheck, 
-  sendTextMessage, 
-  sendTemplateMessage, 
-  sendImageMessage, 
-  downloadMedia, 
-  normalizeWhatsAppNumber,
-  getWhatsAppConfig
-} from './whatsapp-service';
-import { 
-  findPatientByWhatsAppNumber, 
-  createOrUpdateWhatsAppConversation, 
-  saveWhatsAppMessage, 
   submitQuery, 
   createNotification,
   getPatientProfile,
@@ -774,244 +762,60 @@ Return ONLY a valid JSON array of objects with schema:
     }
   });
 
-  // ─── META WHATSAPP CLOUD API INTEGRATION ────────────────────────────────────
+  // ─── AI COACH (DIETICIAN-APPROVAL FLOW) ─────────────────────────────────────
 
-  // 1. Meta Webhook Verification Handshake
-  app.get('/api/whatsapp/webhook', (req, res) => {
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
-    const config = getWhatsAppConfig();
-
-    if (mode === 'subscribe' && token === config.verifyToken) {
-      console.log('✅ Meta WhatsApp Webhook Verified Successfully!');
-      res.status(200).send(challenge);
-    } else {
-      console.warn('⚠️ Webhook verification failed. Token mismatch or missing mode.');
-      res.sendStatus(403);
-    }
-  });
-
-  // 2. Meta WhatsApp Incoming Webhook Processor
-  app.post('/api/whatsapp/webhook', async (req, res) => {
+  // Patient sends a question → AI generates a draft → frontend saves to Firestore
+  // with status 'pending' → dietician reviews/edits/approves → patient sees approved answer.
+  app.post('/api/ai/coach', async (req, res) => {
     try {
-      // Return 200 immediately to Meta so webhooks are acknowledged
-      res.status(200).json({ status: 'received' });
-
-      const body = req.body;
-      if (!body.entry || !body.entry[0]?.changes[0]?.value?.messages) {
-        return; // Ignore status notifications (delivered/read) or empty events
+      const { patientId, patientName, question, patientProfile } = req.body;
+      if (!question) {
+        return res.status(400).json({ error: 'Missing question' });
       }
 
-      const value = body.entry[0].changes[0].value;
-      const msg = value.messages[0];
-      const contact = value.contacts?.[0];
-      
-      const whatsappMessageId = msg.id;
-      const rawFrom = msg.from;
-      const fromNumber = normalizeWhatsAppNumber(rawFrom);
-      const senderName = contact?.profile?.name || 'WhatsApp Patient';
-      const msgType = (msg.type || 'text').toUpperCase() as any;
+      // Build rich context for the AI draft
+      let contextInfo = '';
+      try {
+        const profile = patientProfile || (patientId ? await getPatientProfile(patientId) : null);
+        const plans = patientId ? await getMealPlans(patientId) : [];
+        const activePlan = plans.find((p: any) => p.status === 'published');
 
-      let messageText = '';
-      let mediaId: string | undefined;
-      let mediaMimeType: string | undefined;
-      let mediaUrl: string | undefined;
-
-      if (msg.type === 'text') {
-        messageText = msg.text?.body || '';
-      } else if (msg.type === 'image') {
-        messageText = msg.image?.caption || '📸 Food/Photo Received';
-        mediaId = msg.image?.id;
-        mediaMimeType = msg.image?.mime_type;
-
-        // Download photo securely from Meta
-        if (mediaId) {
-          const downloaded = await downloadMedia(mediaId);
-          if (downloaded.localPath) {
-            mediaUrl = downloaded.localPath;
-          }
-        }
-      } else if (msg.type === 'audio' || msg.type === 'voice') {
-        messageText = '🎙️ Voice Message Received';
-        mediaId = msg.audio?.id || msg.voice?.id;
-      } else if (msg.type === 'document') {
-        messageText = `📄 Document Received: ${msg.document?.filename || ''}`;
-        mediaId = msg.document?.id;
-      } else {
-        messageText = `Received ${msg.type} attachment`;
-      }
-
-      console.log(`📩 Inbound WhatsApp from ${senderName} (${fromNumber}): "${messageText}"`);
-
-      // Match patient in Firestore
-      const patient = await findPatientByWhatsAppNumber(fromNumber);
-      const patientId = patient?.id;
-      const patientName = patient?.name || senderName;
-
-      // Create or update conversation thread
-      const conversationId = await createOrUpdateWhatsAppConversation(
-        fromNumber,
-        patientName,
-        patientId,
-        messageText,
-        true, // increment unread
-        patientId ? 'ACTIVE' : 'UNRECOGNIZED'
-      );
-
-      // AI Suggested Reply Builder (if patient matched)
-      let aiSuggestedReply = '';
-      if (patientId && messageText) {
-        try {
-          const profile = await getPatientProfile(patientId);
-          const mealPlans = await getMealPlans(patientId);
-          const activePlan = mealPlans[0];
-
-          const contextPrompt = `You are NutriSnap AI clinical assistant. 
-Patient: ${patientName}
-Goals: ${profile?.goals?.join(', ') || 'General Wellness'}
+        contextInfo = `
+Patient: ${patientName || profile?.name || 'Unknown'}
+Age: ${profile?.age || 'N/A'}
+Goals: ${profile?.goals?.join(', ') || 'General wellness'}
 Diet Type: ${profile?.dietaryType || 'Standard'}
-Active Meal Plan Targets: ${activePlan ? JSON.stringify(activePlan.targets) : 'None'}
-
-Patient WhatsApp Question: "${messageText}"
-
-Draft a clinical, empathetic 2-sentence response for the dietician to review and approve.`;
-
-          aiSuggestedReply = await generateAIResponse({
-            systemInstruction: 'You are a clinical dietician assistant. Provide short, exact 2-sentence draft replies.',
-            userPrompt: contextPrompt
-          });
-        } catch (aiErr) {
-          console.error('Failed to generate AI suggestion for WhatsApp:', aiErr);
-        }
+Allergies: ${profile?.allergies?.join(', ') || 'None reported'}
+Active Plan Targets: ${activePlan ? JSON.stringify(activePlan.targets) : 'No active plan'}
+`;
+      } catch (ctxErr) {
+        console.warn('Could not load patient context for AI coach:', ctxErr);
       }
 
-      // Save WhatsApp message to Firestore
-      await saveWhatsAppMessage({
-        patientId,
-        conversationId,
-        direction: 'INCOMING',
-        messageType: msgType,
-        whatsappMessageId,
-        fromNumber,
-        toNumber: value.metadata?.display_phone_number || '',
-        body: messageText,
-        mediaId,
-        mediaUrl,
-        mediaMimeType,
-        timestamp: msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : new Date().toISOString(),
-        status: 'RECEIVED',
-        aiSuggestedReply
+      const systemPrompt = `You are NutriSnap AI Coach — a clinical nutrition assistant working under a licensed dietician.
+Your response will be reviewed and potentially edited by the lead dietician before being shown to the patient.
+Provide helpful, accurate, empathetic advice in 2-4 sentences.
+Do NOT prescribe medication or make medical diagnoses.
+Always recommend consulting the dietician for major dietary changes.`;
+
+      const userPrompt = `${contextInfo}
+Patient Question: "${question}"
+
+Draft a helpful clinical nutrition response for the dietician to review.`;
+
+      const aiDraft = await generateAIResponse({
+        systemInstruction: systemPrompt,
+        userPrompt
       });
 
-      // Submit to Query Inbox for Dietician
-      await submitQuery({
-        patientId: patientId || `unrecognized_${fromNumber}`,
-        patientName: patientId ? patientName : `Unrecognized (+${fromNumber})`,
-        whatsappNumber: fromNumber,
-        question: messageText,
-        source: 'whatsapp',
-        status: 'pending',
-        date: new Date().toISOString().split('T')[0]
-      });
-
-      // Notify Dietician Dashboard
-      await createNotification({
-        type: 'WHATSAPP_MESSAGE',
-        patientId,
-        patientName,
-        message: `New WhatsApp message from ${patientName}: "${messageText.slice(0, 50)}..."`,
-        read: false
-      });
-
-      // Send automated receipt acknowledgment (Non-medical operational confirmation)
-      await sendTextMessage(
-        fromNumber,
-        `Hello ${patientName}! Your message has been received by NutriSnap. Your dietician will review and reply shortly.`
-      ).catch(e => console.error('Auto-ack send error:', e));
-
-    } catch (error) {
-      console.error('WhatsApp Inbound Webhook Error:', error);
-    }
-  });
-
-  // 3. Outgoing Message Endpoint (Dietician Response Dispatcher)
-  app.post('/api/whatsapp/send-reply', async (req, res) => {
-    try {
-      const { whatsappNumber, replyText, patientName, conversationId, patientId } = req.body;
-      if (!whatsappNumber || !replyText) {
-        return res.status(400).json({ error: 'Missing whatsappNumber or replyText' });
-      }
-
-      const cleanPhone = normalizeWhatsAppNumber(whatsappNumber);
-      console.log(`📤 Sending WhatsApp reply to ${patientName || cleanPhone} (${cleanPhone}): ${replyText}`);
-
-      // Call Meta WhatsApp Cloud API
-      const result = await sendTextMessage(cleanPhone, replyText);
-
-      // Create conversation if not provided
-      const convId = conversationId || await createOrUpdateWhatsAppConversation(
-        cleanPhone,
-        patientName || 'Patient',
-        patientId,
-        replyText,
-        false
-      );
-
-      // Save outgoing message to Firestore
-      if (result.success && result.messageId) {
-        await saveWhatsAppMessage({
-          patientId,
-          conversationId: convId,
-          direction: 'OUTGOING',
-          messageType: 'TEXT',
-          whatsappMessageId: result.messageId,
-          fromNumber: 'SYSTEM_BUSINESS',
-          toNumber: cleanPhone,
-          body: replyText,
-          timestamp: new Date().toISOString(),
-          status: 'SENT'
-        });
-      }
-
-      res.json({
-        success: result.success,
-        messageId: result.messageId,
-        error: result.error,
-        method: result.success ? 'meta_cloud_api' : 'failed'
-      });
+      res.json({ aiDraft });
     } catch (error: any) {
-      console.error('Error in /api/whatsapp/send-reply:', error);
-      res.status(500).json({ error: 'Failed to send WhatsApp message', details: error.message });
+      console.error('Error in /api/ai/coach:', error);
+      res.status(500).json({ error: 'Failed to generate AI coach draft', details: error.message });
     }
   });
 
-  // 4. Send Meta Approved Template Message
-  app.post('/api/whatsapp/send-template', async (req, res) => {
-    try {
-      const { whatsappNumber, templateName, languageCode, components } = req.body;
-      if (!whatsappNumber || !templateName) {
-        return res.status(400).json({ error: 'Missing whatsappNumber or templateName' });
-      }
 
-      const cleanPhone = normalizeWhatsAppNumber(whatsappNumber);
-      const result = await sendTemplateMessage(cleanPhone, templateName, languageCode || 'en_US', components || []);
-
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to send template message', details: error.message });
-    }
-  });
-
-  // 5. Meta WhatsApp Connection Health Check Endpoint
-  app.get('/api/whatsapp/health', async (req, res) => {
-    try {
-      const status = await healthCheck();
-      res.json(status);
-    } catch (error: any) {
-      res.status(500).json({ connected: false, configured: false, error: error.message });
-    }
-  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {

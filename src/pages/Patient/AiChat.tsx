@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../services/firebase';
-import { saveAiCoachMessage, AiCoachMessage } from '../../services/db';
+import { saveAiCoachMessage, createNotification, AiCoachMessage } from '../../services/db';
 import { Clock } from 'lucide-react';
 
 export default function AiChat() {
@@ -54,6 +54,13 @@ export default function AiChat() {
           aiDraft: data.aiDraft,
           approvedAnswer: '',
           status: 'pending'
+        });
+        await createNotification({
+          type: 'AI_COACH_MESSAGE',
+          patientId: profile.uid,
+          patientName: profile.name,
+          message: `New AI Coach message from ${profile.name} awaiting approval.`,
+          read: false
         });
       } else {
         alert(data.error || 'Failed to generate AI response.');

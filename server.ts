@@ -6,37 +6,56 @@ import fs from 'fs';
 import * as XLSX from 'xlsx';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import { Redis } from '@upstash/redis';
+import { Ratelimit } from '@upstash/ratelimit';
 import { 
   submitQuery, 
   createNotification,
   getPatientProfile,
   getMealPlans,
-  getAllFoodLogsForPatient,
-  saveRecipesToDB,
-  getStoredRecipesFromDB,
-  clearRecipeDB
+  getAllFoodLogsForPatient
 } from './src/services/db';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const KNOWLEDGE_BASE_PATH = path.join(process.cwd(), 'knowledge_base.json');
 
-function getStoredKnowledge(): any[] {
+// Upstash Redis Initialization
+let redis: Redis | null = null;
+let aiRateLimiter: Ratelimit | null = null;
+
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  redis = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  });
+  aiRateLimiter = new Ratelimit({
+    redis: redis,
+    limiter: Ratelimit.slidingWindow(10, '1 h'),
+  });
+}
+
+// Global Express App Export for Vercel
+const app = express();
+export default app;
+
+async function getStoredKnowledge(): Promise<any[]> {
   try {
-    if (fs.existsSync(KNOWLEDGE_BASE_PATH)) {
-      const data = fs.readFileSync(KNOWLEDGE_BASE_PATH, 'utf-8');
-      return JSON.parse(data);
+    if (redis) {
+      const data = await redis.get('nutrisnap:knowledge_base');
+      if (data) return data as any[];
     }
   } catch (err) {
-    console.error('Error reading knowledge base:', err);
+    console.error('Error reading knowledge base from Upstash Redis:', err);
   }
   return [];
 }
 
-function saveStoredKnowledge(recipes: any[]) {
+async function saveStoredKnowledge(recipes: any[]) {
   try {
-    fs.writeFileSync(KNOWLEDGE_BASE_PATH, JSON.stringify(recipes, null, 2), 'utf-8');
+    if (redis) {
+      await redis.set('nutrisnap:knowledge_base', recipes);
+    }
   } catch (err) {
-    console.error('Error saving knowledge base:', err);
+    console.error('Error saving knowledge base to Upstash Redis:', err);
   }
 }
 
@@ -186,23 +205,29 @@ async function generateMultimodalAIResponse(params: {
 }
 
 async function startServer() {
-  const app = express();
+  // Upstash Rate Limiter Middleware for AI endpoints
+  const aiRateLimitMiddleware = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (!aiRateLimiter) return next();
+    const identifier = req.body?.patientId || req.ip || 'anonymous';
+    const { success } = await aiRateLimiter.limit(identifier);
+    if (!success) {
+      return res.status(429).json({ error: 'Too many AI requests. Please try again later.' });
+    }
+    next();
+  };
+
   const server = http.createServer(app);
   const PORT = 3000;
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-  // AI Meal Plan Generator
-  app.post('/api/ai/meal-plan', async (req, res) => {
+  app.post('/api/ai/meal-plan', aiRateLimitMiddleware, async (req: express.Request, res: express.Response): Promise<any> => {
     try {
       const { patientProfile, instructions, targets } = req.body;
       
-      // Fetch knowledge base recipes from Firestore DB matching patient preferences
-      let knowledgeBase = await getStoredRecipesFromDB(patientProfile?.dietaryType);
-      if (knowledgeBase.length === 0) {
-        knowledgeBase = getStoredKnowledge();
-      }
+      // Fetch knowledge base recipes from Upstash Redis
+      let knowledgeBase = await getStoredKnowledge();
 
       const knowledgeContext = knowledgeBase.length > 0 
         ? `\n\nIMPORTED EXCEL CLINICAL RECIPE KNOWLEDGE BASE DATABASE (STRICTLY PREFER & ADAPT THESE EXACT RECIPES AND INGREDIENTS):\n${JSON.stringify(knowledgeBase.slice(0, 50))}`
@@ -264,7 +289,7 @@ JSON Schema format:
   });
 
   // AI Assistant (Dietician & Patient)
-  app.post('/api/ai/chat', async (req, res) => {
+  app.post('/api/ai/chat', aiRateLimitMiddleware, async (req: express.Request, res: express.Response): Promise<any> => {
     try {
       const { messages, context, role } = req.body;
       const systemInstruction = role === 'dietician' 
@@ -294,7 +319,7 @@ JSON Schema format:
   });
 
   // Gemini Multimodal AI Food Scanner
-  app.post('/api/ai/scan-food', async (req, res) => {
+  app.post('/api/ai/scan-food', aiRateLimitMiddleware, async (req: express.Request, res: express.Response): Promise<any> => {
     try {
       const { image, mimeType, userNotes, patientProfile } = req.body;
       
@@ -714,12 +739,9 @@ Return ONLY a valid JSON array of objects with schema:
         allRecipes.push(...sheetRecipes);
       }
 
-      const existing = getStoredKnowledge();
+      const existing = await getStoredKnowledge();
       const updated = [...existing, ...allRecipes];
-      saveStoredKnowledge(updated);
-
-      // Save to Firestore Cloud Database
-      await saveRecipesToDB(allRecipes).catch(e => console.error('Failed to save to Firestore DB:', e));
+      await saveStoredKnowledge(updated);
 
       res.json({
         success: true,
@@ -736,26 +758,21 @@ Return ONLY a valid JSON array of objects with schema:
   // Get Ingested Excel Knowledge Base Stats & Recipe List from Database
   app.get('/api/knowledge/list', async (req, res) => {
     try {
-      let recipes = await getStoredRecipesFromDB();
-      if (recipes.length === 0) {
-        recipes = getStoredKnowledge();
-      }
+      let recipes = await getStoredKnowledge();
       res.json({
         count: recipes.length,
         recipes: recipes,
         sample: recipes.slice(0, 10)
       });
     } catch (e) {
-      const knowledge = getStoredKnowledge();
-      res.json({ count: knowledge.length, sample: knowledge.slice(0, 10), recipes: knowledge });
+      res.status(500).json({ error: 'Failed to retrieve knowledge base' });
     }
   });
 
   // Clear Ingested Excel Knowledge Base
   app.delete('/api/knowledge/clear', async (req, res) => {
     try {
-      saveStoredKnowledge([]);
-      await clearRecipeDB().catch(e => console.error('Error clearing Firestore DB:', e));
+      await saveStoredKnowledge([]);
       res.json({ success: true, message: 'Knowledge base database cleared' });
     } catch (e: any) {
       res.status(500).json({ error: 'Failed to clear knowledge base' });
@@ -766,7 +783,7 @@ Return ONLY a valid JSON array of objects with schema:
 
   // Patient sends a question → AI generates a draft → frontend saves to Firestore
   // with status 'pending' → dietician reviews/edits/approves → patient sees approved answer.
-  app.post('/api/ai/coach', async (req, res) => {
+  app.post('/api/ai/coach', aiRateLimitMiddleware, async (req: express.Request, res: express.Response): Promise<any> => {
     try {
       const { patientId, patientName, question, patientProfile } = req.body;
       if (!question) {
@@ -817,17 +834,16 @@ Draft a helpful clinical nutrition response for the dietician to review.`;
 
 
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
+  // Vite middleware for development (Only if not running on Vercel)
+  if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { 
-        middlewareMode: true,
-        hmr: { server } // Attach WebSocket to our HTTP server
+        middlewareMode: true
       },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
+  } else if (process.env.VERCEL !== '1') {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
@@ -835,9 +851,14 @@ Draft a helpful clinical nutrition response for the dietician to review.`;
     });
   }
 
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+  if (process.env.VERCEL !== '1') {
+    const PORT = process.env.PORT || 3000;
+    const server = http.createServer(app);
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  }
 }
 
-startServer();
+// Start server initialization
+startServer().catch(err => console.error('Failed to start server:', err));

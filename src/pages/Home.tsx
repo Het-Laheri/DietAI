@@ -34,20 +34,6 @@ const FEATURES = [
     bgGlow: 'bg-violet-500/10'
   },
   {
-    icon: Utensils,
-    title: '7-Day Smart Plans',
-    desc: 'Auto-generated clinical meal plans tailored to your health goals, allergies, and dietary preferences — with full recipes and prep times.',
-    gradient: 'from-amber-500 to-orange-600',
-    bgGlow: 'bg-amber-500/10'
-  },
-  {
-    icon: Phone,
-    title: 'WhatsApp Updates',
-    desc: 'Chat with your dietitian on WhatsApp. Send food photos, ask questions, and get personalized clinical replies — all via official Meta Cloud API.',
-    gradient: 'from-sky-500 to-cyan-600',
-    bgGlow: 'bg-sky-500/10'
-  },
-  {
     icon: Activity,
     title: 'Progress Tracking',
     desc: 'Monitor calorie budgets, macro breakdowns, weight trends, and hydration logs with interactive charts and real-time adherence scoring.',
@@ -60,13 +46,6 @@ const FEATURES = [
     desc: 'Your 24/7 AI assistant answers nutrition questions, suggests healthy alternatives, and provides clinical guidance.',
     gradient: 'from-indigo-500 to-blue-600',
     bgGlow: 'bg-indigo-500/10'
-  },
-  {
-    icon: BookOpen,
-    title: 'Clinical Database',
-    desc: 'ICMR/IFCT-verified recipe databases fuel culturally relevant, evidence-based meal plans that respect regional dietary traditions.',
-    gradient: 'from-teal-500 to-cyan-600',
-    bgGlow: 'bg-teal-500/10'
   }
 ];
 
@@ -478,46 +457,12 @@ export default function Home() {
                 })}
               </div>
 
-              <Link
-                to="/login"
-                className="group inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-full hover:shadow-xl hover:shadow-indigo-500/30 transition-all hover:scale-[1.02] active:scale-95 text-sm"
-              >
-                Book a Consultation
-                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </Link>
+
             </div>
           </div>
         </div>
       </section>
 
-      {/* ─── TESTIMONIAL ────────────────────────────────────── */}
-      <section className="py-20 md:py-24 bg-white relative overflow-hidden">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-gradient-to-b from-violet-50/40 to-transparent rounded-full blur-3xl pointer-events-none" />
-        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <span className="inline-flex items-center gap-2 text-[11px] uppercase tracking-widest font-bold text-amber-600 mb-5">
-            <span className="w-8 h-[2px] bg-amber-400 rounded" />
-            Testimonials
-            <span className="w-8 h-[2px] bg-amber-400 rounded" />
-          </span>
-          <div className="flex justify-center gap-1 mb-8">
-            {[1, 2, 3, 4, 5].map(i => (
-              <Star key={i} className="w-6 h-6 fill-amber-400 text-amber-400" />
-            ))}
-          </div>
-          <blockquote className="text-xl md:text-2xl font-heading font-semibold text-stone-800 leading-relaxed mb-8">
-            "NutriSnap completely changed how I manage my PCOS diet. The food scanner is incredibly accurate —
-            I just take a photo and it knows exactly what I'm eating. Dt. Bhatt's meal plans through WhatsApp
-            feel like having a <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">personal nutritionist in my pocket</span>."
-          </blockquote>
-          <div className="inline-flex items-center gap-3 bg-stone-50 rounded-full px-5 py-3 border border-stone-100">
-            <div className="w-10 h-10 bg-gradient-to-br from-rose-400 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm">P</div>
-            <div className="text-left">
-              <p className="font-heading font-bold text-stone-900 text-sm">Priya M.</p>
-              <p className="text-[11px] text-stone-400">PCOS Management · 6 months on NutriSnap</p>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* ─── BLOG ───────────────────────────────────────────── */}
       <section id="blog" className="py-20 md:py-28 bg-stone-50/50">
@@ -623,7 +568,7 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
                 <p className="text-stone-600 text-[11px] font-bold uppercase tracking-wider">
-                  Powered by AI & Meta WhatsApp Cloud API
+                  Powered by AI
                 </p>
               </div>
             </div>

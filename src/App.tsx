@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Landing from './pages/Landing';
+import Home from './pages/Home';
 import Login from './pages/Login';
 import DieticianDashboard from './pages/DieticianDashboard';
 import PatientDashboard from './pages/PatientDashboard';
@@ -34,7 +34,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/" element={user && profile ? <Navigate to={`/${profile.role}`} replace /> : <Landing />} />
+      <Route path="/" element={user && profile ? <Navigate to={`/${profile.role}`} replace /> : <Home />} />
       <Route path="/login" element={user && profile ? <Navigate to={`/${profile.role}`} replace /> : <Login />} />
       
       <Route path="/dietician/*" element={<ProtectedRoute requiredRole="dietician"><DieticianDashboard /></ProtectedRoute>} />

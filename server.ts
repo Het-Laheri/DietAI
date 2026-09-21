@@ -852,7 +852,7 @@ Draft a helpful clinical nutrition response for the dietician to review.`;
   }
 
   if (process.env.VERCEL !== '1') {
-    const PORT = process.env.PORT || 3000;
+    const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
     const server = http.createServer(app);
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`Server running on port ${PORT}`);

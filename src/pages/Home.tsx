@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   Play,
-  CheckCircle2
+  CheckCircle2,
+  Zap
 } from 'lucide-react';
 import { useState } from 'react';
 

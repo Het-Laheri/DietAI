@@ -74,7 +74,8 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             <Link to="/" className="flex items-center gap-3 shrink-0">
-              <span className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500">NutriSnap</span>
+              <img src="/logo.jpg" alt="NutriSnap" className="h-12 w-auto rounded-lg" />
+              <span className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500 hidden sm:block">NutriSnap</span>
             </Link>
 
             <div className="hidden md:flex items-center gap-8">
@@ -426,6 +427,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-12 mb-16">
             <div className="md:col-span-2">
+              <img src="/logo.jpg" alt="NutriSnap" className="h-10 w-auto mb-4 rounded" />
               <span className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500 block mb-6">NutriSnap</span>
               <p className="text-stone-500 text-sm leading-relaxed max-w-sm mb-6">
                 NutriSnap is an AI-powered clinical nutrition platform by Dt. Jyoti Bhatt.

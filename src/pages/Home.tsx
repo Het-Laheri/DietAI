@@ -179,7 +179,7 @@ export default function Home() {
             <div className="order-1 md:order-2 flex justify-center">
               <div className="relative w-full max-w-md">
                 <img
-                  src="/hero-apple.png"
+                  src="/Nutrisnap.png"
                   alt="NutriSnap — AI Nutrition Assistant"
                   className="w-full h-auto drop-shadow-2xl"
                 />

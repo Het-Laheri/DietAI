@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import {
   Camera,
-  Sparkles,
   Activity,
   Phone,
   MessageCircle,
@@ -15,7 +14,10 @@ import {
   X,
   Play,
   CheckCircle2,
-  Zap
+  Zap,
+  ClipboardList,
+  Bot,
+  Sparkles
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -35,7 +37,7 @@ const FEATURES = [
     gradient: 'from-pink-500 to-fuchsia-600'
   },
   {
-    icon: Sparkles,
+    icon: Bot,
     title: 'AI Nutrition Coach',
     desc: 'Your 24/7 AI assistant answers nutrition questions, suggests healthy alternatives, and provides clinical guidance.',
     gradient: 'from-fuchsia-600 to-purple-600'
@@ -74,7 +76,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             <Link to="/" className="flex items-center gap-3 shrink-0">
-              <img src="/logo.jpg" alt="NutriSnap" className="h-12 w-auto rounded-lg" />
+              <img src="/logo.jpg" alt="NutriSnap" className="h-12 w-auto rounded-lg shadow-sm" />
               <span className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500 hidden sm:block">NutriSnap</span>
             </Link>
 
@@ -179,11 +181,12 @@ export default function Home() {
 
             {/* Right: Hero Image */}
             <div className="order-1 md:order-2 flex justify-center">
-              <div className="relative w-full max-w-md">
+              <div className="relative w-full max-w-md group">
+                <div className="absolute inset-0 bg-gradient-to-tr from-orange-400 via-pink-500 to-fuchsia-600 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity duration-700 translate-y-8"></div>
                 <img
                   src="/Nutrisnap.png"
                   alt="NutriSnap — AI Nutrition Assistant"
-                  className="w-full h-auto drop-shadow-2xl"
+                  className="relative w-full h-auto drop-shadow-2xl hover:scale-105 transition-transform duration-700 ease-out"
                 />
               </div>
             </div>
@@ -213,34 +216,37 @@ export default function Home() {
                 title: 'Sign Up & Set Goals',
                 desc: 'Complete your clinical onboarding — health conditions, allergies, dietary preferences, and wellness goals.',
                 gradient: 'from-orange-400 to-pink-500',
-                emoji: '🎯'
+                icon: ClipboardList
               },
               {
                 step: '02',
                 title: 'Get Your AI Meal Plan',
                 desc: 'Your dietitian generates a personalized 7-day plan with recipes, ingredients, and macro targets powered by AI.',
                 gradient: 'from-pink-500 to-fuchsia-600',
-                emoji: '🍽️'
+                icon: Heart
               },
               {
                 step: '03',
                 title: 'Track, Scan & Thrive',
                 desc: 'Snap your meals for instant analysis, track progress, and stay connected with your dietitian.',
                 gradient: 'from-fuchsia-600 to-purple-600',
-                emoji: '📈'
+                icon: Activity
               }
-            ].map((item, i) => (
-              <div key={i} className="bg-stone-50 p-8 rounded-3xl border border-stone-100 hover:border-pink-200 transition-colors">
-                <div className="flex items-center gap-4 mb-6">
-                  <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center text-white font-black text-sm shadow-md`}>
-                    {item.step}
+            ].map((item, i) => {
+              const Icon = item.icon;
+              return (
+                <div key={i} className="bg-stone-50 p-8 rounded-3xl border border-stone-100 hover:border-pink-200 transition-colors shadow-sm hover:shadow-lg">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center text-white shadow-md`}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <span className="text-lg font-bold text-stone-900">Step {item.step}</span>
                   </div>
-                  <span className="text-2xl">{item.emoji}</span>
+                  <h3 className="text-xl font-bold text-stone-900 mb-3">{item.title}</h3>
+                  <p className="text-stone-500 leading-relaxed text-sm">{item.desc}</p>
                 </div>
-                <h3 className="text-xl font-bold text-stone-900 mb-3">{item.title}</h3>
-                <p className="text-stone-500 leading-relaxed text-sm">{item.desc}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -427,8 +433,10 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-12 mb-16">
             <div className="md:col-span-2">
-              <img src="/logo.jpg" alt="NutriSnap" className="h-10 w-auto mb-4 rounded" />
-              <span className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500 block mb-6">NutriSnap</span>
+              <div className="flex items-center gap-3 mb-6">
+                <img src="/logo.jpg" alt="NutriSnap" className="h-10 w-auto rounded" />
+                <span className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500 block">NutriSnap</span>
+              </div>
               <p className="text-stone-500 text-sm leading-relaxed max-w-sm mb-6">
                 NutriSnap is an AI-powered clinical nutrition platform by Dt. Jyoti Bhatt.
                 Connecting patients and dietitians through intelligent meal planning and food analysis.

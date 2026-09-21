@@ -59,12 +59,15 @@ export default function DieticianDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#FDFCFB] flex">
+    <div className="min-h-screen bg-stone-50 flex font-sans">
       {/* Sidebar */}
-      <aside className="w-64 bg-stone-50 border-r border-stone-200 flex flex-col">
+      <aside className="w-64 bg-white border-r border-stone-100 flex flex-col shadow-sm z-10">
         <div className="p-8 pb-4">
-          <h2 className="text-2xl font-serif font-bold text-stone-900 tracking-tight">NutriSnap.</h2>
-          <p className="text-xs uppercase tracking-widest text-stone-500 font-bold mt-1">Clinical Portal</p>
+          <Link to="/" className="flex items-center gap-2 mb-2">
+            <img src="/logo.jpg" alt="NutriSnap" className="h-8 w-auto rounded-md shadow-sm" />
+            <h2 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500">NutriSnap</h2>
+          </Link>
+          <p className="text-[10px] uppercase tracking-widest text-pink-600 font-bold mt-1">Clinical Portal</p>
         </div>
         
         <nav className="flex-1 px-4 py-8 space-y-2">
@@ -75,18 +78,18 @@ export default function DieticianDashboard() {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-none text-sm transition-all ${active ? 'border-l-2 border-stone-900 text-stone-900 font-bold bg-stone-200/50' : 'border-l-2 border-transparent text-stone-500 font-medium hover:text-stone-900 hover:bg-stone-100'}`}
+                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all ${active ? 'bg-orange-50 text-orange-600 shadow-sm border border-orange-200' : 'border border-transparent text-stone-500 hover:text-orange-500 hover:bg-orange-50/50'}`}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className={`w-4 h-4 ${active ? 'text-pink-500' : 'text-stone-400'}`} />
                 {item.name}
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-6 border-t border-stone-200">
+        <div className="p-6 border-t border-stone-100">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-full bg-brand-900 flex items-center justify-center text-stone-50 font-serif text-lg">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold text-lg shadow-md">
               {profile?.name.charAt(0)}
             </div>
             <div>
@@ -96,7 +99,7 @@ export default function DieticianDashboard() {
           </div>
           <button 
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 w-full text-left rounded-none text-sm font-medium text-stone-500 hover:text-stone-900 transition-colors"
+            className="flex items-center gap-3 px-4 py-3 w-full text-left rounded-xl text-sm font-bold text-stone-500 hover:text-pink-600 hover:bg-pink-50 transition-colors"
           >
             <LogOut className="w-4 h-4" />
             Sign Out
@@ -105,17 +108,17 @@ export default function DieticianDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[#FAFAFA]">
+      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-stone-50/50">
         {/* Top Header for Notifications */}
-        <header className="h-16 border-b border-stone-200 bg-white flex items-center justify-end px-8 shrink-0">
+        <header className="h-16 border-b border-stone-100 bg-white/80 backdrop-blur-md flex items-center justify-end px-8 shrink-0">
           <div className="relative">
             <button 
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 text-stone-500 hover:text-stone-900 transition-colors focus:outline-none"
+              className="relative p-2 text-stone-500 hover:text-orange-500 transition-colors focus:outline-none"
             >
               <Bell className="w-5 h-5" />
               {notifications.some(n => !n.read) && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 border-2 border-white"></span>
+                <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-fuchsia-500 border-2 border-white shadow-sm"></span>
               )}
             </button>
             

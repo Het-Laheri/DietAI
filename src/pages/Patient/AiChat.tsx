@@ -34,40 +34,52 @@ export default function AiChat() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/ai/coach', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patientId: profile.uid,
-          patientName: profile.name,
-          question: questionText,
-          patientProfile: profile
-        })
-      });
-      const data = await res.json();
-      
-      if (res.ok && data.aiDraft) {
-        await saveAiCoachMessage({
-          patientId: profile.uid,
-          patientName: profile.name,
-          question: questionText,
-          aiDraft: data.aiDraft,
-          approvedAnswer: '',
-          status: 'pending'
+      let aiDraft = '';
+      try {
+        const res = await fetch('/api/ai/coach', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patientId: profile.uid,
+            patientName: profile.name,
+            question: questionText,
+            patientProfile: profile
+          })
         });
-        await createNotification({
-          type: 'AI_COACH_MESSAGE',
-          patientId: profile.uid,
-          patientName: profile.name,
-          message: `New AI Coach message from ${profile.name} awaiting approval.`,
-          read: false
-        });
-      } else {
-        alert(data.error || 'Failed to generate AI response.');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.aiDraft) {
+            aiDraft = data.aiDraft;
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('AI endpoint draft warning, using clinical fallback draft:', fetchErr);
       }
+
+      // If AI draft generation is delayed or failed, ensure dietician can still review and answer
+      if (!aiDraft) {
+        aiDraft = "Thank you for reaching out! To best support your nutritional goals, ensure you are staying hydrated and spacing your protein intake throughout the day. Your lead dietician will provide your customized clinical recommendation shortly.";
+      }
+
+      await saveAiCoachMessage({
+        patientId: profile.uid,
+        patientName: profile.name,
+        question: questionText,
+        aiDraft: aiDraft,
+        approvedAnswer: '',
+        status: 'pending'
+      });
+
+      await createNotification({
+        type: 'AI_COACH_MESSAGE',
+        patientId: profile.uid,
+        patientName: profile.name,
+        message: `New AI Coach message from ${profile.name} awaiting approval.`,
+        read: false
+      });
     } catch (e: any) {
-      console.error('AI Coach error:', e);
-      alert('Error communicating with AI assistant.');
+      console.error('AI Coach submission error:', e);
+      alert('Could not submit message. Please check your internet connection.');
     } finally {
       setLoading(false);
     }

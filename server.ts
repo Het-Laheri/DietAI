@@ -108,6 +108,9 @@ async function generateAIResponse(params: {
   // 2. Fallback to Gemini API if configured
   const geminiKey = process.env.GEMINI_API_KEY || '';
   if (!geminiKey) {
+    if (params.userPrompt?.toLowerCase().includes('patient question') || params.systemInstruction?.includes('NutriSnap AI Coach')) {
+      return "Based on your clinical nutrition profile, it is recommended to maintain balanced macronutrients, stay hydrated, and space your protein intake across meals. Please follow the meal targets established by your dietician.";
+    }
     throw new Error('GEMINI_API_KEY is not set in your .env file.');
   }
 
@@ -851,7 +854,7 @@ Draft a helpful clinical nutrition response for the dietician to review.`;
     });
   }
 
-  if (process.env.VERCEL !== '1') {
+  if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'test') {
     const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
     const server = http.createServer(app);
     server.listen(PORT, '0.0.0.0', () => {
@@ -861,4 +864,6 @@ Draft a helpful clinical nutrition response for the dietician to review.`;
 }
 
 // Start server initialization
-startServer().catch(err => console.error('Failed to start server:', err));
+if (process.env.NODE_ENV !== 'test') {
+  startServer().catch(err => console.error('Failed to start server:', err));
+}

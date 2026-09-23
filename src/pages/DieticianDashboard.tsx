@@ -8,11 +8,10 @@ import Overview from './Dietician/Overview';
 import PatientsList from './Dietician/PatientsList';
 import PatientProfileView from './Dietician/PatientProfileView';
 import PatientForm from './Dietician/PatientForm';
-import QueryInbox from './Dietician/QueryInbox';
+import MessageInbox from './Dietician/MessageInbox';
 import AiAssistant from './Dietician/AiAssistant';
 import KnowledgeBase from './Dietician/KnowledgeBase';
 import MealPlanGenerator from './Dietician/MealPlanGenerator';
-import AiApprovals from './Dietician/AiApprovals';
 
 export default function DieticianDashboard() {
 
@@ -40,7 +39,7 @@ export default function DieticianDashboard() {
     }
     // Navigate if appropriate based on type
     if (n.type === 'NEW_PATIENT') navigate('/dietician/patients');
-    if (n.type === 'AI_COACH_MESSAGE') navigate('/dietician/ai-approvals');
+    if (n.type === 'AI_COACH_MESSAGE') navigate('/dietician/inbox');
   };
 
   const handleLogout = async () => {
@@ -48,11 +47,12 @@ export default function DieticianDashboard() {
     navigate('/');
   };
 
+  const pendingApprovalsCount = notifications.filter(n => n.type === 'AI_COACH_MESSAGE' && !n.read).length;
+
   const navItems = [
     { name: 'Dashboard', path: '/dietician', icon: LayoutDashboard },
     { name: 'Patients', path: '/dietician/patients', icon: Users },
-    { name: 'AI Approvals', path: '/dietician/ai-approvals', icon: ShieldCheck },
-    { name: 'Inbox', path: '/dietician/inbox', icon: MessageSquare },
+    { name: 'Message Inbox', path: '/dietician/inbox', icon: MessageSquare, badge: pendingApprovalsCount },
     { name: 'Plan Generator', path: '/dietician/generator', icon: Wand2 },
     { name: 'Knowledge Base', path: '/dietician/knowledge', icon: BookOpen },
     { name: 'AI Assistant', path: '/dietician/ai', icon: Bot },
@@ -78,10 +78,17 @@ export default function DieticianDashboard() {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all ${active ? 'bg-orange-50 text-orange-600 shadow-sm border border-orange-200' : 'border border-transparent text-stone-500 hover:text-orange-500 hover:bg-orange-50/50'}`}
+                className={`flex items-center justify-between px-4 py-3.5 rounded-xl text-sm font-bold transition-all ${active ? 'bg-orange-50 text-orange-600 shadow-sm border border-orange-200' : 'border border-transparent text-stone-500 hover:text-orange-500 hover:bg-orange-50/50'}`}
               >
-                <Icon className={`w-4 h-4 ${active ? 'text-pink-500' : 'text-stone-400'}`} />
-                {item.name}
+                <div className="flex items-center gap-3">
+                  <Icon className={`w-4 h-4 ${active ? 'text-pink-500' : 'text-stone-400'}`} />
+                  {item.name}
+                </div>
+                {item.badge ? (
+                  <span className="px-2 py-0.5 text-[10px] font-bold bg-orange-500 text-white rounded-full shadow-xs">
+                    {item.badge}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
@@ -158,8 +165,8 @@ export default function DieticianDashboard() {
             <Route path="/patients" element={<PatientsList />} />
             <Route path="/patients/new" element={<PatientForm />} />
             <Route path="/patients/:id/*" element={<PatientProfileView />} />
-            <Route path="/inbox" element={<QueryInbox />} />
-            <Route path="/ai-approvals" element={<AiApprovals />} />
+            <Route path="/inbox" element={<MessageInbox />} />
+            <Route path="/ai-approvals" element={<MessageInbox />} />
             <Route path="/generator" element={<MealPlanGenerator />} />
             <Route path="/knowledge" element={<KnowledgeBase />} />
             <Route path="/ai" element={<AiAssistant />} />

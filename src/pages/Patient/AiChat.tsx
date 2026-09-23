@@ -81,32 +81,78 @@ export default function AiChat() {
       <div className="bg-white rounded-none border border-stone-100 flex-1 flex flex-col overflow-hidden mb-16 md:mb-0">
         <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
           {messages.length === 0 && (
-            <div className="text-center text-stone-500 mt-10">
-              <p>Hello! I'm your AI assistant.</p>
-              <p className="text-sm mt-2">I will generate advice that your dietician reviews before sending back to you.</p>
+            <div className="text-center text-stone-500 py-12 px-4">
+              <div className="w-12 h-12 rounded-full bg-brand-50 border border-brand-200 text-brand-700 flex items-center justify-center mx-auto mb-3">
+                <Clock className="w-6 h-6" />
+              </div>
+              <h3 className="font-serif font-bold text-lg text-stone-800">Ask Your Nutrition Coach</h3>
+              <p className="text-xs text-stone-500 max-w-sm mx-auto mt-1 mb-6">
+                Ask any question about your diet. The AI will draft clinical advice, which your lead dietician authorizes before delivering it to you.
+              </p>
+              
+              <div className="flex flex-wrap justify-center gap-2 max-w-md mx-auto">
+                {[
+                  'Can I swap white rice with quinoa for dinner?',
+                  'What are good high-protein vegetarian snacks?',
+                  'How much water should I drink on workout days?'
+                ].map(prompt => (
+                  <button
+                    key={prompt}
+                    onClick={() => setInput(prompt)}
+                    className="text-xs px-3 py-1.5 bg-stone-50 hover:bg-stone-100 border border-stone-200 text-stone-700 rounded-full transition-colors text-left"
+                  >
+                    "{prompt}"
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {messages.map((m) => (
             <div key={m.id} className="space-y-4">
               {/* User Message */}
               <div className="flex justify-end">
-                <div className="p-4 rounded-none max-w-[85%] bg-stone-900 text-white">
+                <div className="p-4 rounded-xl max-w-[85%] bg-stone-900 text-white shadow-xs">
                   <p className="whitespace-pre-wrap text-sm md:text-base">{m.question}</p>
                 </div>
               </div>
               
               {/* AI/Dietician Response */}
               <div className="flex justify-start">
-                <div className={`p-4 rounded-none max-w-[85%] border-l-4 ${m.status === 'approved' ? 'bg-stone-50 text-stone-900 border-emerald-500' : m.status === 'rejected' ? 'bg-red-50 text-red-900 border-red-500' : 'bg-amber-50 text-amber-900 border-amber-500'}`}>
+                <div className={`p-4 rounded-xl max-w-[85%] border-l-4 shadow-xs ${
+                  m.status === 'approved' 
+                    ? 'bg-emerald-50/40 text-stone-900 border-emerald-500' 
+                    : m.status === 'rejected' 
+                    ? 'bg-rose-50 text-rose-900 border-rose-500' 
+                    : 'bg-amber-50 text-amber-900 border-amber-500'
+                }`}>
                   {m.status === 'pending' ? (
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 animate-pulse text-amber-600" />
-                      <p className="text-sm italic">AI has drafted a response. Waiting for your dietician's approval...</p>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-amber-800 bg-amber-100 px-2 py-0.5 rounded flex items-center gap-1 w-fit mb-2">
+                        <Clock className="w-3 h-3 animate-pulse" />
+                        Pending Dietician Approval
+                      </span>
+                      <p className="text-xs md:text-sm text-amber-800 italic">
+                        AI has drafted an answer. Your lead dietician is currently reviewing and verifying it before delivery...
+                      </p>
                     </div>
                   ) : m.status === 'rejected' ? (
-                    <p className="text-sm italic text-red-700">This question was declined by your dietician. Please reach out in your Inbox.</p>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-rose-800 bg-rose-100 px-2 py-0.5 rounded w-fit mb-2 block">
+                        Declined
+                      </span>
+                      <p className="text-xs md:text-sm italic text-rose-700">
+                        This query was declined by your dietician. Please consult your dietician during your next review or ask another question.
+                      </p>
+                    </div>
                   ) : (
-                    <p className="whitespace-pre-wrap text-sm md:text-base">{m.approvedAnswer}</p>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded flex items-center gap-1 w-fit mb-2">
+                        ✓ Authorized by Lead Dietician
+                      </span>
+                      <p className="whitespace-pre-wrap text-sm md:text-base leading-relaxed text-stone-800">
+                        {m.approvedAnswer}
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>

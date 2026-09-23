@@ -471,6 +471,25 @@ export async function rejectAiCoachMessage(id: string, dieticianNote?: string): 
   });
 }
 
+export async function deleteAiCoachMessage(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'ai_coach_messages', id));
+}
+
+export async function sendDirectPatientMessage(patientId: string, patientName: string, message: string, dieticianNote?: string): Promise<string> {
+  const docRef = await addDoc(collection(db, 'ai_coach_messages'), {
+    patientId,
+    patientName,
+    question: dieticianNote || 'Direct Dietician Recommendation',
+    aiDraft: message,
+    approvedAnswer: message,
+    status: 'approved',
+    dieticianNote: dieticianNote || 'Direct message from Lead Dietician',
+    createdAt: serverTimestamp(),
+    approvedAt: serverTimestamp()
+  });
+  return docRef.id;
+}
+
 // ─── RECIPE KNOWLEDGE BASE FIRESTORE DB FUNCTIONS ────────────────────────────
 
 export async function saveRecipesToDB(recipes: RecipeDBItem[]): Promise<number> {

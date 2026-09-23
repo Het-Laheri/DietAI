@@ -22,8 +22,7 @@ export default function PatientDashboard() {
     { name: 'Today', path: '/patient', icon: Home },
     { name: 'Scanner', path: '/patient/scanner', icon: ClipboardList },
     { name: 'Progress', path: '/patient/progress', icon: Activity },
-    { name: 'Inbox', path: '/patient/inbox', icon: MessageCircle },
-    { name: 'AI Coach', path: '/patient/ai', icon: MessageCircle }, // Reusing icon for MVP
+    { name: 'AI Coach', path: '/patient/ai', icon: MessageCircle },
   ];
 
   return (
@@ -81,7 +80,7 @@ export default function PatientDashboard() {
           <Route path="/" element={<TodayPlan />} />
           <Route path="/scanner" element={<FoodScanner />} />
           <Route path="/progress" element={<Progress />} />
-          <Route path="/inbox" element={<Inbox />} />
+          <Route path="/inbox" element={<AiChat />} />
           <Route path="/ai" element={<AiChat />} />
         </Routes>
       </main>

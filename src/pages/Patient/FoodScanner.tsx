@@ -85,18 +85,60 @@ export default function FoodScanner() {
     return 'Dinner';
   };
 
-  const handleImageChange = (selectedFile: File | null) => {
+  const compressImage = (selectedFile: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 1024;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.85);
+            resolve(compressed);
+          } else {
+            resolve(e.target?.result as string);
+          }
+        };
+        img.onerror = () => resolve(e.target?.result as string);
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(selectedFile);
+    });
+  };
+
+  const handleImageChange = async (selectedFile: File | null) => {
     if (!selectedFile) return;
     setFile(selectedFile);
     setResult(null);
     setLogged(false);
     setScanError(null);
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setImagePreview(reader.result as string);
-    };
-    reader.readAsDataURL(selectedFile);
+    try {
+      const compressedDataUrl = await compressImage(selectedFile);
+      setImagePreview(compressedDataUrl);
+    } catch {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(selectedFile);
+    }
   };
 
   const handleChipClick = (chip: string) => {
@@ -114,13 +156,12 @@ export default function FoodScanner() {
     setLogged(false);
 
     try {
-      const mimeType = file?.type || 'image/jpeg';
       const res = await fetch('/api/ai/scan-food', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           image: imagePreview,
-          mimeType,
+          mimeType: 'image/jpeg',
           userNotes,
           patientProfile: profile ? {
             name: profile.name,
@@ -131,7 +172,18 @@ export default function FoodScanner() {
         })
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        throw new Error(
+          resText.toLowerCase().includes('server error') || !res.ok
+            ? 'The scanner service is currently busy. Please try scanning again.'
+            : resText
+        );
+      }
+
       if (!res.ok || data.error) {
         throw new Error(data.details || data.error || 'Failed to analyze food photo');
       }
@@ -144,7 +196,7 @@ export default function FoodScanner() {
       }
     } catch (e: any) {
       console.error('Scan error:', e);
-      setScanError(e.message || 'Failed to scan food photo. Please check your Gemini API key and try again.');
+      setScanError(e.message || 'Failed to scan food photo. Please check your network and try again.');
     } finally {
       setScanning(false);
     }

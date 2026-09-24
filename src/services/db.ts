@@ -41,6 +41,20 @@ export interface PatientProfile {
   };
   status: 'active' | 'inactive';
   needsAttention: boolean;
+  adherencePercentage?: number;
+  lastConsultationDate?: string;
+  nextFollowUpDate?: string;
+  age?: number;
+  createdAt?: any;
+}
+
+export interface ClinicalNote {
+  id?: string;
+  patientId: string;
+  category: 'Consultation' | 'Nutrition' | 'Behaviour' | 'Follow-up' | 'Meal plan' | 'General';
+  content: string;
+  authorName: string;
+  date: string;
   createdAt?: any;
 }
 
@@ -529,6 +543,95 @@ export async function markNotificationRead(id: string) {
     console.warn('Notice: markNotificationRead failed:', err);
   }
 }
+
+// ─── CLINICAL CONSULTATION NOTES ─────────────────────────────────────────────
+const LOCAL_NOTES_KEY = 'nutrisnap_clinical_notes';
+
+export async function addClinicalNote(note: ClinicalNote): Promise<string> {
+  const noteId = `note_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const newNote: ClinicalNote = {
+    ...note,
+    id: noteId,
+    createdAt: new Date().toISOString()
+  };
+
+  // Local storage cache
+  try {
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(LOCAL_NOTES_KEY);
+      const list: ClinicalNote[] = raw ? JSON.parse(raw) : [];
+      list.unshift(newNote);
+      localStorage.setItem(LOCAL_NOTES_KEY, JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('nutrisnap:notes_change', { detail: newNote }));
+    }
+  } catch (e) {
+    console.warn('Failed to cache clinical note:', e);
+  }
+
+  // Firestore attempt
+  try {
+    const docRef = await addDoc(collection(db, 'dietician_notes'), {
+      ...note,
+      createdAt: serverTimestamp()
+    });
+    return docRef.id;
+  } catch (e) {
+    console.warn('Notice: Clinical note saved to client cache:', e);
+    return noteId;
+  }
+}
+
+export async function getClinicalNotes(patientId: string): Promise<ClinicalNote[]> {
+  let localNotes: ClinicalNote[] = [];
+  try {
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(LOCAL_NOTES_KEY);
+      if (raw) {
+        const parsed: ClinicalNote[] = JSON.parse(raw);
+        localNotes = parsed.filter(n => n.patientId === patientId);
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading local clinical notes:', e);
+  }
+
+  try {
+    const q = query(
+      collection(db, 'dietician_notes'),
+      where('patientId', '==', patientId),
+      orderBy('createdAt', 'desc')
+    );
+    const snap = await getDocs(q);
+    const remoteNotes = snap.docs.map(d => ({ ...d.data(), id: d.id } as ClinicalNote));
+    
+    // Merge remote and local
+    const map = new Map<string, ClinicalNote>();
+    remoteNotes.forEach(n => { if (n.id) map.set(n.id, n); });
+    localNotes.forEach(n => { if (n.id && !map.has(n.id)) map.set(n.id, n); });
+    return Array.from(map.values());
+  } catch (err) {
+    return localNotes;
+  }
+}
+
+export async function deleteClinicalNote(noteId: string): Promise<void> {
+  try {
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(LOCAL_NOTES_KEY);
+      if (raw) {
+        const parsed: ClinicalNote[] = JSON.parse(raw);
+        const filtered = parsed.filter(n => n.id !== noteId);
+        localStorage.setItem(LOCAL_NOTES_KEY, JSON.stringify(filtered));
+        window.dispatchEvent(new CustomEvent('nutrisnap:notes_change', { detail: { noteId } }));
+      }
+    }
+    await deleteDoc(doc(db, 'dietician_notes', noteId));
+  } catch (err) {
+    console.warn('Notice: deleteClinicalNote notice:', err);
+  }
+}
+
+
 
 // ─── AI COACH FIRESTORE FUNCTIONS ────────────────────────────────────────────
 

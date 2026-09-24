@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Check, X, Clock, RefreshCw, Search, Trash2, 
   Send, Sparkles, User, ExternalLink, CheckCircle2, 
-  MessageSquare, AlertCircle, Bot
+  MessageSquare, AlertCircle, Bot, Activity, Heart, AlertTriangle, ShieldCheck
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -401,13 +401,50 @@ export default function MessageInbox() {
                 </div>
 
                 {/* Content */}
-                <div className="p-6 space-y-6">
+                <div className="p-6 space-y-5">
+                  {/* Patient Clinical Context Card */}
+                  {patient && (
+                    <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Dietary Profile</span>
+                        <span className="font-bold text-stone-900">{patient.dietaryType || 'Standard Balanced'}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Current / Target Wt</span>
+                        <span className="font-bold text-stone-900">
+                          {patient.currentWeightKg ? `${patient.currentWeightKg}kg` : '--'} → {patient.targetWeightKg ? `${patient.targetWeightKg}kg` : '--'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Adherence Rate</span>
+                        <span className={`font-bold ${
+                          (patient.adherencePercentage ?? 75) >= 70 ? 'text-emerald-700' : 'text-amber-700'
+                        }`}>
+                          {patient.adherencePercentage ?? 75}%
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Conditions / Allergies</span>
+                        <div className="truncate">
+                          {patient.allergies && patient.allergies.length > 0 ? (
+                            <span className="inline-flex items-center gap-1 font-bold text-rose-700">
+                              <AlertTriangle className="w-3 h-3 text-rose-600" />
+                              {patient.allergies.join(', ')}
+                            </span>
+                          ) : (
+                            <span className="text-stone-600 font-medium">None noted</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Patient Question */}
                   <div>
                     <span className="text-[10px] uppercase font-bold tracking-widest text-stone-400 block mb-1">
                       Patient Query
                     </span>
-                    <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl text-sm text-stone-900 leading-relaxed font-sans font-medium">
+                    <div className="p-4 bg-orange-50/30 border border-orange-200/60 rounded-xl text-sm text-stone-900 leading-relaxed font-sans font-medium">
                       "{q.question}"
                     </div>
                   </div>

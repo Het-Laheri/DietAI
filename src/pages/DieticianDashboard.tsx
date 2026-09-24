@@ -39,7 +39,7 @@ export default function DieticianDashboard() {
     }
     // Navigate if appropriate based on type
     if (n.type === 'NEW_PATIENT') navigate('/dietician/patients');
-    if (n.type === 'AI_COACH_MESSAGE') navigate('/dietician/inbox');
+    if (n.type === 'AI_COACH_MESSAGE' || n.type === 'SYSTEM') navigate('/dietician/inbox');
   };
 
   const handleLogout = async () => {
@@ -47,7 +47,7 @@ export default function DieticianDashboard() {
     navigate('/');
   };
 
-  const pendingApprovalsCount = notifications.filter(n => n.type === 'AI_COACH_MESSAGE' && !n.read).length;
+  const pendingApprovalsCount = notifications.filter(n => (n.type === 'AI_COACH_MESSAGE' || n.type === 'SYSTEM') && !n.read).length;
 
   const navItems = [
     { name: 'Dashboard', path: '/dietician', icon: LayoutDashboard },

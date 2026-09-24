@@ -122,6 +122,8 @@ export interface Query {
   status: 'pending' | 'viewed' | 'answered';
   date: string;
   reply?: string;
+  aiSuggestion?: string;
+  repliedAt?: any;
   createdAt?: any;
 }
 
@@ -402,6 +404,10 @@ export async function getQueries(dieticianId?: string, patientId?: string): Prom
 
 export async function updateQuery(id: string, updates: Partial<Query>) {
   await updateDoc(doc(db, 'queries', id), updates);
+}
+
+export async function deleteQuery(id: string) {
+  await deleteDoc(doc(db, 'queries', id));
 }
 
 export async function createNotification(data: Notification) {

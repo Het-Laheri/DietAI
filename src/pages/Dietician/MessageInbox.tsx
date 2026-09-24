@@ -11,6 +11,7 @@ import {
   updateQuery, 
   deleteQuery, 
   getPatients, 
+  getLocalQueries,
   Query as PatientQuery, 
   PatientProfile 
 } from '../../services/db';
@@ -29,32 +30,58 @@ export default function MessageInbox() {
   const [processing, setProcessing] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Live real-time Firestore sync
+  // Live real-time Firestore sync & persistent client cache fallback
   useEffect(() => {
     setLoading(true);
-    const q = query(collection(db, 'queries'), orderBy('createdAt', 'desc'));
 
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const loaded = snap.docs.map(d => ({ ...(d.data() as any), id: d.id } as PatientQuery));
-      setQueries(loaded);
+    const refreshMergedQueries = (remoteItems: PatientQuery[] = []) => {
+      const localItems = getLocalQueries() as PatientQuery[];
+      const map = new Map<string, PatientQuery>();
+      remoteItems.forEach(item => { if (item.id) map.set(item.id, item); });
+      localItems.forEach(item => { if (item.id && !map.has(item.id)) map.set(item.id, item); });
+      const combined = Array.from(map.values()).sort((a, b) => {
+        const timeA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt || 0).getTime();
+        const timeB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
+      setQueries(combined);
 
-      // Pre-generate / assign smart clinical drafts for pending queries
-      loaded.forEach(item => {
+      combined.forEach(item => {
         if (item.id && item.status === 'pending' && !aiDrafts[item.id]) {
           generateDraftForQuery(item);
         }
       });
+      setLoading(false);
+    };
 
-      setLoading(false);
-    }, (err) => {
-      console.error('Error listening to queries:', err);
-      setLoading(false);
-    });
+    // Immediate initial display
+    refreshMergedQueries([]);
+
+    const q = query(collection(db, 'queries'), orderBy('createdAt', 'desc'));
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = onSnapshot(q, (snap) => {
+        const loaded = snap.docs.map(d => ({ ...(d.data() as any), id: d.id } as PatientQuery));
+        refreshMergedQueries(loaded);
+      }, (err) => {
+        console.warn('Notice: Firestore query stream error:', err);
+        refreshMergedQueries([]);
+      });
+    } catch (e) {
+      console.warn('Notice: onSnapshot failed to init:', e);
+      refreshMergedQueries([]);
+    }
+
+    const handleLocalChange = () => refreshMergedQueries([]);
+    window.addEventListener('nutrisnap:query_change', handleLocalChange);
 
     // Load patients for context
     getPatients().then(pts => setPatients(pts)).catch(console.error);
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      window.removeEventListener('nutrisnap:query_change', handleLocalChange);
+    };
   }, []);
 
   // Generate an AI clinical draft for a patient query

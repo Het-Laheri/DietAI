@@ -385,43 +385,149 @@ export async function getProgressRecords(patientId: string): Promise<ProgressRec
   return snap.docs.map(d => ({ ...d.data(), id: d.id } as ProgressRecord));
 }
 
-export async function submitQuery(queryData: Query) {
-  await addDoc(collection(db, 'queries'), { ...queryData, createdAt: serverTimestamp() });
+const LOCAL_QUERIES_KEY = 'nutrisnap_cached_queries';
+
+export function getLocalQueries(patientId?: string): Query[] {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_QUERIES_KEY) : null;
+    if (!raw) return [];
+    const list: Query[] = JSON.parse(raw);
+    if (patientId) {
+      return list.filter(q => q.patientId === patientId);
+    }
+    return list;
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalQuery(queryData: Query): Query {
+  try {
+    const list = getLocalQueries();
+    const newQuery: Query = {
+      ...queryData,
+      id: queryData.id || `query_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      createdAt: queryData.createdAt || new Date()
+    };
+    const updated = [newQuery, ...list.filter(q => q.id !== newQuery.id)];
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LOCAL_QUERIES_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('nutrisnap:query_change', { detail: newQuery }));
+    }
+    return newQuery;
+  } catch (e) {
+    console.warn('Failed to save to local query cache:', e);
+    return queryData;
+  }
+}
+
+export function updateLocalQuery(id: string, updates: Partial<Query>) {
+  try {
+    const list = getLocalQueries();
+    const updated = list.map(q => q.id === id ? { ...q, ...updates } : q);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LOCAL_QUERIES_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('nutrisnap:query_change', { detail: { id, updates } }));
+    }
+  } catch (e) {
+    console.warn('Failed to update local query cache:', e);
+  }
+}
+
+export function deleteLocalQuery(id: string) {
+  try {
+    const list = getLocalQueries();
+    const updated = list.filter(q => q.id !== id);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LOCAL_QUERIES_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('nutrisnap:query_change', { detail: { id, deleted: true } }));
+    }
+  } catch (e) {
+    console.warn('Failed to delete from local query cache:', e);
+  }
+}
+
+export async function submitQuery(queryData: Query): Promise<string> {
+  // Save locally first to guarantee zero data loss
+  const local = saveLocalQuery(queryData);
+
+  try {
+    const docRef = await addDoc(collection(db, 'queries'), { ...queryData, createdAt: serverTimestamp() });
+    if (docRef.id) {
+      updateLocalQuery(local.id!, { id: docRef.id });
+      return docRef.id;
+    }
+  } catch (err) {
+    console.warn('Notice: Firestore query write failed (retained in client cache):', err);
+  }
+  return local.id!;
 }
 
 export async function getQueries(dieticianId?: string, patientId?: string): Promise<Query[]> {
-  let q;
-  if (patientId) {
-    q = query(collection(db, 'queries'), where('patientId', '==', patientId), orderBy('createdAt', 'desc'));
-  } else {
-    // Dietician sees all queries. Since there's only one dietician, we can just fetch all queries.
-    // In a real app, we'd filter by dieticianId if multiple existed.
-    q = query(collection(db, 'queries'), orderBy('createdAt', 'desc'));
+  const localList = getLocalQueries(patientId);
+  try {
+    let q;
+    if (patientId) {
+      q = query(collection(db, 'queries'), where('patientId', '==', patientId), orderBy('createdAt', 'desc'));
+    } else {
+      q = query(collection(db, 'queries'), orderBy('createdAt', 'desc'));
+    }
+    const snap = await getDocs(q);
+    const remoteList = snap.docs.map(d => ({ ...(d.data() as any), id: d.id } as Query));
+    
+    // Merge remote and local (remote takes precedence, local fills any gaps)
+    const map = new Map<string, Query>();
+    remoteList.forEach(item => { if (item.id) map.set(item.id, item); });
+    localList.forEach(item => { if (item.id && !map.has(item.id)) map.set(item.id, item); });
+    return Array.from(map.values());
+  } catch (err) {
+    console.warn('Notice: Firestore getQueries failed, returning local cache:', err);
+    return localList;
   }
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ ...(d.data() as any), id: d.id } as Query));
 }
 
 export async function updateQuery(id: string, updates: Partial<Query>) {
-  await updateDoc(doc(db, 'queries', id), updates);
+  updateLocalQuery(id, updates);
+  try {
+    await updateDoc(doc(db, 'queries', id), updates);
+  } catch (err) {
+    console.warn('Notice: Firestore updateDoc failed, retained in client cache:', err);
+  }
 }
 
 export async function deleteQuery(id: string) {
-  await deleteDoc(doc(db, 'queries', id));
+  deleteLocalQuery(id);
+  try {
+    await deleteDoc(doc(db, 'queries', id));
+  } catch (err) {
+    console.warn('Notice: Firestore deleteDoc failed, removed from client cache:', err);
+  }
 }
 
 export async function createNotification(data: Notification) {
-  await addDoc(collection(db, 'notifications'), { ...data, createdAt: serverTimestamp() });
+  try {
+    await addDoc(collection(db, 'notifications'), { ...data, createdAt: serverTimestamp() });
+  } catch (err) {
+    console.warn('Notice: Background notification not written to Firestore:', err);
+  }
 }
 
 export async function getNotifications(): Promise<Notification[]> {
-  const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ ...d.data(), id: d.id } as Notification));
+  try {
+    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ ...d.data(), id: d.id } as Notification));
+  } catch {
+    return [];
+  }
 }
 
 export async function markNotificationRead(id: string) {
-  await updateDoc(doc(db, 'notifications', id), { read: true });
+  try {
+    await updateDoc(doc(db, 'notifications', id), { read: true });
+  } catch (err) {
+    console.warn('Notice: markNotificationRead failed:', err);
+  }
 }
 
 // ─── AI COACH FIRESTORE FUNCTIONS ────────────────────────────────────────────

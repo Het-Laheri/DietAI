@@ -3,6 +3,8 @@ import express from 'express';
 import path from 'path';
 import http from 'http';
 import fs from 'fs';
+import crypto from 'crypto';
+import Razorpay from 'razorpay';
 import * as XLSX from 'xlsx';
 import { GoogleGenAI } from '@google/genai';
 import { Redis } from '@upstash/redis';
@@ -222,6 +224,119 @@ const aiRateLimitMiddleware = async (req: express.Request, res: express.Response
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// ─── RAZORPAY PAYMENT GATEWAY ────────────────────────────────────────────────
+const getRazorpayClient = () => {
+  const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID;
+  const key_secret = process.env.RAZORPAY_KEY_SECRET;
+
+  if (!key_id || !key_secret) {
+    return null;
+  }
+  return new Razorpay({ key_id, key_secret });
+};
+
+// 1. Create Order Endpoint
+app.post(['/api/create-order', '/create-order'], async (req: express.Request, res: express.Response): Promise<any> => {
+  try {
+    const { amount, currency = 'INR', receipt, notes } = req.body;
+
+    const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID;
+    const key_secret = process.env.RAZORPAY_KEY_SECRET;
+
+    if (!key_id || !key_secret) {
+      return res.status(401).json({ error: 'Razorpay credentials not configured on server' });
+    }
+
+    // Minimum amount validation: 100 paise
+    const numericAmount = Number(amount);
+    if (!numericAmount || isNaN(numericAmount) || numericAmount < 100) {
+      return res.status(400).json({ error: 'Invalid amount. Minimum amount is 100 paise (₹1.00).' });
+    }
+
+    const razorpay = getRazorpayClient();
+    if (!razorpay) {
+      return res.status(401).json({ error: 'Razorpay client initialization failed' });
+    }
+
+    const orderOptions = {
+      amount: Math.round(numericAmount),
+      currency: currency || 'INR',
+      receipt: receipt || `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      notes: notes || {}
+    };
+
+    const order = await razorpay.orders.create(orderOptions);
+
+    return res.status(200).json({
+      order_id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      key_id
+    });
+  } catch (error: any) {
+    console.error('Razorpay create-order error:', error);
+    return res.status(500).json({
+      error: 'Failed to create payment order with Razorpay',
+      details: error?.message || error
+    });
+  }
+});
+
+// 2. Verify Payment Signature Endpoint
+app.post(['/api/verify-payment', '/verify-payment'], async (req: express.Request, res: express.Response): Promise<any> => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    // Missing fields validation
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: razorpay_order_id, razorpay_payment_id, and razorpay_signature are required'
+      });
+    }
+
+    const key_secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!key_secret) {
+      return res.status(500).json({
+        success: false,
+        error: 'Razorpay secret key not configured on server'
+      });
+    }
+
+    // HMAC-SHA256 signature verification
+    const expectedSignature = crypto
+      .createHmac('sha256', key_secret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      console.warn('Payment signature verification failed. Generated vs Provided:', {
+        expectedSignature,
+        razorpay_signature
+      });
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid payment signature. Verification failed.'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Payment verified successfully',
+      paymentId: razorpay_payment_id,
+      orderId: razorpay_order_id
+    });
+  } catch (error: any) {
+    console.error('Razorpay verify-payment error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Internal server error while verifying payment',
+      details: error?.message || error
+    });
+  }
+});
+
 
   app.post(['/api/ai/meal-plan', '/ai/meal-plan'], aiRateLimitMiddleware, async (req: express.Request, res: express.Response): Promise<any> => {
     try {

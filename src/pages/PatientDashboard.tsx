@@ -2,6 +2,7 @@ import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { Home, ClipboardList, Activity, MessageCircle, LogOut } from 'lucide-react';
+import { isPatientSubscribed } from '../services/subscription';
 import TodayPlan from './Patient/TodayPlan';
 import FoodScanner from './Patient/FoodScanner';
 import Progress from './Patient/Progress';
@@ -61,7 +62,18 @@ export default function PatientDashboard() {
             </div>
             <div>
               <p className="text-sm font-bold text-stone-900">{profile?.name}</p>
-              <p className="text-xs text-stone-500">Patient</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-xs text-stone-500">Patient</span>
+                {isPatientSubscribed(profile) ? (
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    ★ Premium
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-stone-100 text-stone-600 px-2 py-0.5 rounded-full">
+                    Free
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <button 

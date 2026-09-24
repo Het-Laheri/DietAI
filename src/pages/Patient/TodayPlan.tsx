@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMealPlans, getFoodLogs, MealPlan, FoodLog, logMeal, Meal } from '../../services/db';
 import { CheckCircle, Circle, Plus, ChefHat, Clock, ChevronDown, ChevronUp, Utensils } from 'lucide-react';
+import { isPatientSubscribed } from '../../services/subscription';
+import SubscriptionPaywall from '../../components/SubscriptionPaywall';
 
 export default function TodayPlan() {
   const { profile } = useAuth();
@@ -9,6 +11,7 @@ export default function TodayPlan() {
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
+  const [subscribed, setSubscribed] = useState(false);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -21,9 +24,14 @@ export default function TodayPlan() {
         const dailyLogs = await getFoodLogs(profile.uid, todayStr);
         setLogs(dailyLogs);
       }
+      setSubscribed(isPatientSubscribed(profile));
       setLoading(false);
     }
     load();
+
+    const handleSubChange = () => setSubscribed(isPatientSubscribed(profile));
+    window.addEventListener('nutrisnap:subscription_change', handleSubChange);
+    return () => window.removeEventListener('nutrisnap:subscription_change', handleSubChange);
   }, [profile, todayStr]);
 
   const handleQuickLog = async (mealType: string, description: string, nutrition: any) => {
@@ -42,7 +50,16 @@ export default function TodayPlan() {
     setExpandedMeal(prev => prev === mealType ? null : mealType);
   };
 
-  if (loading) return <div className="p-8">Loading your plan...</div>;
+  if (loading) return <div className="p-8 text-center text-stone-500 font-medium">Loading your plan...</div>;
+
+  if (!subscribed) {
+    return (
+      <SubscriptionPaywall 
+        featureName="Personalized Meals & Chef Recipes" 
+        onUnlocked={() => setSubscribed(true)} 
+      />
+    );
+  }
 
   const todayDay = plan?.days[0]; // Active day plan
   const totalCaloriesLogged = logs.reduce((sum, l) => sum + l.nutrition.calories, 0);

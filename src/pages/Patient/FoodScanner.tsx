@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { logMeal, FoodLogItem } from '../../services/db';
+import { isPatientSubscribed } from '../../services/subscription';
+import SubscriptionPaywall from '../../components/SubscriptionPaywall';
 import { 
   Camera, 
   Upload, 
@@ -56,6 +58,23 @@ export default function FoodScanner() {
   const [selectedMealType, setSelectedMealType] = useState<string>('Lunch');
   const [logging, setLogging] = useState(false);
   const [logged, setLogged] = useState(false);
+  const [subscribed, setSubscribed] = useState(() => isPatientSubscribed(profile));
+
+  useEffect(() => {
+    setSubscribed(isPatientSubscribed(profile));
+    const handleSubChange = () => setSubscribed(isPatientSubscribed(profile));
+    window.addEventListener('nutrisnap:subscription_change', handleSubChange);
+    return () => window.removeEventListener('nutrisnap:subscription_change', handleSubChange);
+  }, [profile]);
+
+  if (!subscribed) {
+    return (
+      <SubscriptionPaywall 
+        featureName="AI Multimodal Food Scanner" 
+        onUnlocked={() => setSubscribed(true)} 
+      />
+    );
+  }
 
   // Determine initial meal type based on hour
   const getAutoMealType = () => {

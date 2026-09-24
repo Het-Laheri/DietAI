@@ -117,7 +117,7 @@ export default function MessageInbox() {
     if (!q.id) return;
     const finalAnswer = (editReplies[q.id] || aiDrafts[q.id] || '').trim();
     if (!finalAnswer) {
-      alert('Please provide an answer before approving.');
+      showToast('Please provide an answer before approving.');
       return;
     }
 

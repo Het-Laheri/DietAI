@@ -12,6 +12,7 @@ export default function Inbox() {
   const [question, setQuestion] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [successToast, setSuccessToast] = useState(false);
+  const [errorToast, setErrorToast] = useState<string | null>(null);
 
   // Live real-time listener for patient's queries
   useEffect(() => {
@@ -52,20 +53,27 @@ export default function Inbox() {
         date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       });
 
-      await createNotification({
-        type: 'SYSTEM',
-        patientId: profile.uid,
-        patientName: profile.name,
-        message: `New clinical query from ${profile.name}: "${questionText.slice(0, 50)}..."`,
-        read: false
-      });
-
+      // Clear textarea and show success toast immediately
       setQuestion('');
       setSuccessToast(true);
-      setTimeout(() => setSuccessToast(false), 3000);
-    } catch (err) {
+      setTimeout(() => setSuccessToast(false), 3500);
+
+      // Create notification in background without blocking UI
+      try {
+        await createNotification({
+          type: 'SYSTEM',
+          patientId: profile.uid,
+          patientName: profile.name,
+          message: `New clinical query from ${profile.name}: "${questionText.slice(0, 50)}..."`,
+          read: false
+        });
+      } catch (notifErr) {
+        console.warn('Background notification notice:', notifErr);
+      }
+    } catch (err: any) {
       console.error('Failed to submit query:', err);
-      alert('Could not submit query. Please check your network and try again.');
+      setErrorToast(err?.message || 'Could not submit query. Please check your network and try again.');
+      setTimeout(() => setErrorToast(null), 4500);
     } finally {
       setSubmitting(false);
     }
@@ -85,6 +93,13 @@ export default function Inbox() {
         <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-stone-50 px-5 py-3 rounded-xl shadow-xl text-sm font-medium flex items-center gap-2 border border-stone-700 animate-in fade-in slide-in-from-bottom-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           Query sent directly to your lead dietician!
+        </div>
+      )}
+
+      {errorToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-red-900 text-white px-5 py-3 rounded-xl shadow-xl text-sm font-medium flex items-center gap-2 border border-red-700 animate-in fade-in slide-in-from-bottom-2">
+          <HelpCircle className="w-4 h-4 text-red-300" />
+          {errorToast}
         </div>
       )}
 

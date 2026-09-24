@@ -133,11 +133,13 @@ export default function Login() {
       if (email.toLowerCase() === SPECIAL_ID && password === SPECIAL_PASS) {
         try {
           await signInWithEmailAndPassword(auth, email, password);
+          navigate('/dietician');
         } catch (authError: any) {
           if (authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential') {
             // Dietician account doesn't exist yet, create it on the fly
             const { createDietician } = await import('../services/db');
             await createDietician(email, password, 'Lead Dietician');
+            navigate('/dietician');
           } else {
             throw authError; // rethrow other errors
           }
@@ -154,9 +156,10 @@ export default function Login() {
             startDate: new Date().toISOString(),
             expiresAt: new Date(Date.now() + 365 * 86400000).toISOString()
           });
+          navigate('/patient');
         } catch (authError: any) {
           if (authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential') {
-            const { registerPatient, saveMealPlan } = await import('../services/db');
+            const { registerPatient } = await import('../services/db');
             const { saveLocalSubscription } = await import('../services/subscription');
             const user = await registerPatient(email, password, 'Demo VIP Patient', {
               goals: ['Overall Wellness & Longevity', 'Energy, Focus & Vitality', 'Muscle Gain & Athletic Performance'],
@@ -176,66 +179,7 @@ export default function Login() {
             };
 
             saveLocalSubscription(user.uid, vipSub);
-
-            // Seed initial published meal plan so the notepad checklist is populated
-            await saveMealPlan({
-              patientId: user.uid,
-              startDate: new Date().toISOString().split('T')[0],
-              endDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-              status: 'published',
-              targets: { calories: 2000, protein: 120, carbs: 200, fat: 60 },
-              days: [
-                {
-                  dayNumber: 1,
-                  meals: [
-                    {
-                      type: 'Breakfast',
-                      name: 'Spiced Rolled Oats with Chia & Crushed Almonds',
-                      portion: '1 medium bowl (250g)',
-                      calories: 380,
-                      protein: 16,
-                      carbs: 54,
-                      fat: 11,
-                      ingredients: ['50g rolled oats', '1 cup almond milk', '1 tbsp chia seeds', '10 crushed almonds', '1/2 tsp cinnamon'],
-                      recipe: ['Simmer oats in almond milk for 5-7 mins.', 'Stir in chia seeds and cinnamon.', 'Top with crushed almonds and serve warm.']
-                    },
-                    {
-                      type: 'Lunch',
-                      name: 'Grilled Herb Paneer with Quinoa & Steamed Broccoli',
-                      portion: '1 plate',
-                      calories: 540,
-                      protein: 32,
-                      carbs: 48,
-                      fat: 22,
-                      ingredients: ['150g low-fat paneer', '1 cup cooked quinoa', '1 cup steamed broccoli & bell peppers', '1 tsp olive oil', 'mixed herbs & lemon'],
-                      recipe: ['Marinate paneer cubes with herbs, salt, and lemon.', 'Pan grill with light olive oil until golden.', 'Serve alongside fluffy quinoa and steamed greens.']
-                    },
-                    {
-                      type: 'Snack',
-                      name: 'Roasted Spiced Chana & Green Tea',
-                      portion: '1 bowl (45g)',
-                      calories: 180,
-                      protein: 9,
-                      carbs: 26,
-                      fat: 4,
-                      ingredients: ['45g dry roasted chickpeas', 'pinch of chaat masala', '1 cup fresh brewed green tea'],
-                      recipe: ['Toss roasted chana with spices.', 'Enjoy with freshly brewed green tea for an antioxidant boost.']
-                    },
-                    {
-                      type: 'Dinner',
-                      name: 'Yellow Moong Dal Khichdi with Cucumber Mint Raita',
-                      portion: '1 bowl + 1 small katori raita',
-                      calories: 460,
-                      protein: 20,
-                      carbs: 68,
-                      fat: 10,
-                      ingredients: ['1/2 cup split yellow moong dal', '1/2 cup brown rice', '1/2 cup fresh curd', 'cucumber, cumin, mint'],
-                      recipe: ['Pressure cook dal and rice with turmeric and light cumin seasoning.', 'Whisk curd with grated cucumber, roasted cumin, and mint.', 'Serve warm and comforting.']
-                    }
-                  ]
-                }
-              ]
-            }).catch(console.error);
+            navigate('/patient');
           } else {
             throw authError;
           }
@@ -243,13 +187,14 @@ export default function Login() {
       } else {
         const userCred = await signInWithEmailAndPassword(auth, email, password);
         const { createNotification } = await import('../services/db');
-        await createNotification({
+        createNotification({
           type: 'PATIENT_LOGIN',
           patientId: userCred.user.uid,
           patientName: userCred.user.displayName || email,
           message: `${userCred.user.displayName || email} just logged in.`,
           read: false
         }).catch(e => console.error('Failed to notify login:', e));
+        navigate('/patient');
       }
     } catch (e: any) {
       console.error('Sign in error:', e);

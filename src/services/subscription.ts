@@ -114,6 +114,19 @@ export function isPatientSubscribed(profile?: User | null): boolean {
   // Dieticians never need to pay
   if (profile.role === 'dietician') return true;
 
+  // Test / VIP Demo Patient bypass - grant full unlocked access without paying
+  const emailLower = (profile.email || '').toLowerCase();
+  if (
+    emailLower === 'testpatient@nutrisnap.com' ||
+    emailLower === 'demo@nutrisnap.com' ||
+    emailLower === 'test@nutrisnap.com' ||
+    emailLower.startsWith('testpatient') ||
+    (profile as any).isTestPatient === true ||
+    (profile as any).isVip === true
+  ) {
+    return true;
+  }
+
   // 1. Check profile in Firestore state
   const subInProfile = (profile as any).subscription as ActiveSubscription | undefined;
   if (subInProfile?.status === 'active' && new Date(subInProfile.expiresAt).getTime() > Date.now()) {

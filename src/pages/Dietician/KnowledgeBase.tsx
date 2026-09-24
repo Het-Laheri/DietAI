@@ -34,24 +34,34 @@ export default function KnowledgeBase() {
 
     setUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64 = event.target?.result;
-        if (typeof base64 === 'string') {
-          const res = await fetch('/api/knowledge/import-excel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ base64File: base64, fileName: file.name })
-          });
-          if (res.ok) {
-            alert('Excel recipes uploaded & saved to database successfully!');
-            fetchRecipes();
-          } else {
-            alert('Failed to process Excel file.');
+      await new Promise<void>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          try {
+            const base64 = event.target?.result;
+            if (typeof base64 === 'string') {
+              const res = await fetch('/api/knowledge/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ base64File: base64, fileName: file.name })
+              });
+              if (res.ok) {
+                const data = await res.json();
+                alert(`Successfully processed file. Imported ${data.importedCount} recipes.`);
+                fetchRecipes();
+              } else {
+                const errorData = await res.json().catch(() => ({}));
+                alert(`Failed to process file: ${errorData.error || 'Unknown error'}`);
+              }
+            }
+            resolve();
+          } catch (err) {
+            reject(err);
           }
-        }
-      };
-      reader.readAsDataURL(file);
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+      });
     } catch (error) {
       console.error(error);
       alert('Upload error');
@@ -77,9 +87,11 @@ export default function KnowledgeBase() {
   };
 
   const filtered = recipes.filter(r => {
-    const matchesSearch = r.name.toLowerCase().includes(search.toLowerCase()) || 
+    const name = r.name || '';
+    const dietaryType = r.dietaryType || '';
+    const matchesSearch = name.toLowerCase().includes(search.toLowerCase()) || 
                           (r.ingredients || []).join(' ').toLowerCase().includes(search.toLowerCase());
-    const matchesDiet = filterDiet === 'All' || r.dietaryType.toLowerCase() === filterDiet.toLowerCase();
+    const matchesDiet = filterDiet === 'All' || dietaryType.toLowerCase() === filterDiet.toLowerCase();
     return matchesSearch && matchesDiet;
   });
 
@@ -96,14 +108,14 @@ export default function KnowledgeBase() {
           <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center mb-3 text-emerald-700">
             <UploadCloud className="w-7 h-7" />
           </div>
-          <h3 className="font-bold text-stone-900 mb-1">Upload Recipes (Excel / CSV)</h3>
-          <p className="text-xs text-stone-500 mb-5">Accepts columns: Meal Name, Dietary Type, Calories, Protein, Carbs, Fat, Ingredients, Preparation Steps, Prep/Cook time.</p>
+          <h3 className="font-bold text-stone-900 mb-1">Upload Recipes (Excel/PDF/Word/ZIP)</h3>
+          <p className="text-xs text-stone-500 mb-5">Upload clinical recipe sheets or text documents. You can also ZIP them together!</p>
           
           <input 
             type="file" 
             ref={fileInputRef}
             onChange={handleFileChange} 
-            accept=".xlsx,.xls,.csv" 
+            accept=".xlsx,.xls,.csv,.zip,.pdf,.doc,.docx" 
             className="hidden" 
           />
           <button 
@@ -112,7 +124,7 @@ export default function KnowledgeBase() {
             className="px-6 py-2.5 bg-stone-900 text-white font-medium hover:bg-stone-800 transition-colors disabled:opacity-50 flex items-center gap-2 text-xs uppercase tracking-wider font-bold rounded-full"
           >
             {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 text-emerald-400" />}
-            {uploading ? 'Processing Excel...' : 'Select Excel File'}
+            {uploading ? 'Processing File...' : 'Select File'}
           </button>
         </div>
 

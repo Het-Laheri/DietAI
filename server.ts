@@ -6,9 +6,16 @@ import fs from 'fs';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import * as XLSX from 'xlsx';
+import { createServer as createViteServer } from 'vite';
+import AdmZip from 'adm-zip';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdf = require('pdf-parse');
+import mammoth from 'mammoth';
 import { GoogleGenAI } from '@google/genai';
 import { Redis } from '@upstash/redis';
 import { Ratelimit } from '@upstash/ratelimit';
+import { Search } from '@upstash/search';
 import { 
   submitQuery, 
   createNotification,
@@ -32,29 +39,55 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   });
 }
 
+// Upstash Search Initialization
+let searchIndex: any = null;
+if (process.env.UPSTASH_VECTOR_REST_URL && process.env.UPSTASH_VECTOR_REST_TOKEN) {
+  const searchClient = new Search({
+    url: process.env.UPSTASH_VECTOR_REST_URL,
+    token: process.env.UPSTASH_VECTOR_REST_TOKEN,
+  });
+  searchIndex = searchClient.index('recipes');
+}
+
 // Global Express App Export for Vercel
 const app = express();
 export default app;
 
 async function getStoredKnowledge(): Promise<any[]> {
   try {
-    if (redis) {
-      const data = await redis.get('nutrisnap:knowledge_base');
-      if (data) return data as any[];
+    if (searchIndex) {
+      const stats = await searchIndex.info();
+      if (stats.documentCount === 0) return [];
+      
+      const res = await searchIndex.search({
+        query: 'healthy diet recipes',
+        topK: 100
+      });
+      return res.map((match: any) => match.content);
     }
   } catch (err) {
-    console.error('Error reading knowledge base from Upstash Redis:', err);
+    console.error('Error reading knowledge base from Upstash Search:', err);
   }
   return [];
 }
 
 async function saveStoredKnowledge(recipes: any[]) {
   try {
-    if (redis) {
-      await redis.set('nutrisnap:knowledge_base', recipes);
+    if (searchIndex) {
+      const documents = recipes.map((recipe, index) => ({
+        id: `recipe-${Date.now()}-${index}`,
+        content: recipe
+      }));
+      
+      const batchSize = 100;
+      for (let i = 0; i < documents.length; i += batchSize) {
+        const batch = documents.slice(i, i + batchSize);
+        await searchIndex.upsert(batch);
+      }
+      console.log(`Successfully upserted ${documents.length} recipes to Upstash Search.`);
     }
   } catch (err) {
-    console.error('Error saving knowledge base to Upstash Redis:', err);
+    console.error('Error saving knowledge base to Upstash Search:', err);
   }
 }
 
@@ -379,12 +412,20 @@ app.post(['/api/verify-payment', '/verify-payment'], async (req: express.Request
     try {
       const { patientProfile, instructions, targets } = req.body;
       
-      // Fetch knowledge base recipes from Upstash Redis
-      let knowledgeBase = await getStoredKnowledge();
-
-      const knowledgeContext = knowledgeBase.length > 0 
-        ? `\n\nIMPORTED EXCEL CLINICAL RECIPE KNOWLEDGE BASE DATABASE (STRICTLY PREFER & ADAPT THESE EXACT RECIPES AND INGREDIENTS):\n${JSON.stringify(knowledgeBase.slice(0, 50))}`
-        : '';
+      // Fetch knowledge base recipes from Upstash Search (RAG)
+      let knowledgeContext = '';
+      if (searchIndex) {
+        const queryText = `A ${patientProfile.dietaryType || 'healthy'} diet for ${patientProfile.goals?.join(', ') || 'wellness'}. Conditions: ${patientProfile.healthInfo?.conditions || 'None'}.`;
+        const searchResults = await searchIndex.search({
+          query: queryText,
+          topK: 15
+        });
+        
+        const relevantRecipes = searchResults.map((res: any) => res.content);
+        if (relevantRecipes.length > 0) {
+          knowledgeContext = `\n\nIMPORTED CLINICAL RECIPE KNOWLEDGE BASE (STRICTLY PREFER & ADAPT THESE EXACT RECIPES AND INGREDIENTS):\n${JSON.stringify(relevantRecipes)}`;
+        }
+      }
 
       const prompt = `You are an expert clinical dietician. Generate a 7-day meal plan for a patient with the following profile:
 Profile: ${JSON.stringify(patientProfile)}
@@ -778,133 +819,154 @@ Return ONLY a valid JSON object matching this exact structure:
     };
   }
 
-  // Excel Knowledge Base Import Route (.xlsx / .csv)
-  app.post(['/api/knowledge/import-excel', '/knowledge/import-excel'], async (req, res) => {
-    try {
-      const { base64File, fileData, fileName } = req.body;
-      let workbook: XLSX.WorkBook;
 
-      if (base64File) {
-        const base64Clean = base64File.replace(/^data:.*;base64,/, '');
-        const buffer = Buffer.from(base64Clean, 'base64');
-        try {
-          // Supports .xlsx, .xlsm, .csv, .xls (Excel 97-2003)
-          workbook = XLSX.read(buffer, { type: 'buffer', raw: true });
-        } catch (e1) {
-          try {
-            workbook = XLSX.read(base64Clean, { type: 'base64', raw: true });
-          } catch (e2) {
-            workbook = XLSX.read(buffer.toString('binary'), { type: 'binary' });
-          }
-        }
-      } else if (fileData) {
-        workbook = XLSX.read(fileData, { type: 'string' });
-      } else {
-        return res.status(400).json({ error: 'No Excel file content provided' });
+  // Helper to extract recipes from unstructured text (PDF/Word) using Gemini
+  async function parseRecipesFromText(text: string, sourceFileName: string): Promise<any[]> {
+    try {
+      console.log(`🤖 Using Gemini AI to parse recipes from unstructured document: "${sourceFileName}"`);
+      const aiPrompt = `You are a clinical nutritionist and recipe extractor. Extract all distinct recipes or meals from the following raw document text:\nDocument Name: "${sourceFileName}"\nRaw Text:\n${text.substring(0, 15000)}\n\nReturn ONLY a valid JSON array of objects with this schema:\n[\n  {\n    "name": "Distinct Meal/Dish Name",\n    "dietaryType": "Vegetarian",\n    "calories": 350,\n    "protein": 15,\n    "carbs": 40,\n    "fat": 10,\n    "ingredients": ["ingredient 1"],\n    "recipe": ["step 1"],\n    "prepTime": "10 mins",\n    "cookTime": "15 mins",\n    "clinicalFocus": "General Wellness"\n  }\n]\n`;
+
+      const aiText = await generateAIResponse({
+        systemInstruction: 'Respond with a valid JSON array only. Do not wrap in markdown.',
+        userPrompt: aiPrompt,
+        jsonMode: true
+      });
+
+      const cleanedAI = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsedAI = JSON.parse(cleanedAI);
+      
+      if (Array.isArray(parsedAI)) {
+        return parsedAI.map(r => ({
+          ...r,
+          sourceFileName
+        }));
       }
+    } catch (err) {
+      console.error('Failed to parse unstructured text into recipes:', err);
+    }
+    return [];
+  }
+
+  // Unified Knowledge Base Import Route (.zip, .pdf, .docx, .xlsx, .csv)
+  app.post('/api/knowledge/import', async (req, res) => {
+    try {
+      const { base64File, fileName } = req.body;
+      if (!base64File) {
+        return res.status(400).json({ error: 'No file content provided' });
+      }
+
+      const base64Clean = base64File.replace(/^data:.*;base64,/, '');
+      const buffer = Buffer.from(base64Clean, 'base64');
+      const lowerName = fileName.toLowerCase();
 
       const allRecipes: any[] = [];
-      const sourceFileName = fileName || 'Uploaded_Spreadsheet.xlsx';
-
-      for (const sheetName of workbook.SheetNames) {
-        const sheet = workbook.Sheets[sheetName];
+      
+      const processSingleFile = async (fileBuffer: Buffer, name: string) => {
+        const ext = name.split('.').pop()?.toLowerCase();
         
-        // 1. Extract 2D matrix to test for ICMR/IFCT Clinical Analysis Format
-        const rawMatrix: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        if (!rawMatrix || rawMatrix.length === 0) continue;
-
-        const fullText = rawMatrix.map(r => r.join(' ')).join('\n').toLowerCase();
-        const isClinicalFormat = 
-          fullText.includes('food details') || 
-          fullText.includes('nutritive value') || 
-          fullText.includes('edible portion') || 
-          fullText.includes('food code') ||
-          (fullText.includes('energy [kcal]') || fullText.includes('carbohydrates [gms]'));
-
-        if (isClinicalFormat) {
-          console.log(`🥗 Processing ICMR/IFCT Clinical Single-Dish Sheet: "${sheetName}" in file "${sourceFileName}"`);
-          const clinicalRecipe = parseClinicalNutritionSheetFromMatrix(rawMatrix, sheetName, sourceFileName);
-          allRecipes.push(clinicalRecipe);
-          continue;
-        }
-
-        const rows: any[] = XLSX.utils.sheet_to_json(sheet);
-        if (!rows || rows.length === 0) continue;
-
-        let sheetRecipes: any[] = [];
-        let genericCount = 0;
-
-        // Normalize each row
-        rows.forEach((row, idx) => {
-          const recipe = normalizeExcelRow(row, sheetName, sourceFileName, idx);
-          if (recipe.name.includes('Recipe #') || recipe.name === 'Custom Meal') {
-            genericCount++;
-          }
-          sheetRecipes.push(recipe);
-        });
-
-        // AI Fallback Parser if >40% of rows produced generic names (e.g. matrix/grid layout)
-        if (genericCount / Math.max(rows.length, 1) > 0.4 && rows.length > 0) {
+        if (ext === 'pdf') {
+          console.log(`📄 Processing PDF: ${name}`);
+          const data = await pdf(fileBuffer);
+          const recipes = await parseRecipesFromText(data.text, name);
+          allRecipes.push(...recipes);
+          
+        } else if (ext === 'docx' || ext === 'doc') {
+          console.log(`📝 Processing Word Document: ${name}`);
+          const { value: text } = await mammoth.extractRawText({ buffer: fileBuffer });
+          const recipes = await parseRecipesFromText(text, name);
+          allRecipes.push(...recipes);
+          
+        } else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+          console.log(`📊 Processing Spreadsheet: ${name}`);
+          let workbook: XLSX.WorkBook;
           try {
-            console.log(`🤖 Using AI Fallback Parser for matrix layout sheet: "${sheetName}"`);
-            const aiPrompt = `You are a clinical Excel spreadsheet parser. Extract all distinct recipes/meals from this raw sheet data:
-Sheet Name: "${sheetName}"
-Raw Data: ${JSON.stringify(rows.slice(0, 40))}
+            workbook = XLSX.read(fileBuffer, { type: 'buffer', raw: true });
+          } catch (e) {
+            workbook = XLSX.read(fileBuffer.toString('binary'), { type: 'binary' });
+          }
+          
+          for (const sheetName of workbook.SheetNames) {
+            const sheet = workbook.Sheets[sheetName];
+            
+            const rawMatrix: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            if (!rawMatrix || rawMatrix.length === 0) continue;
 
-Return ONLY a valid JSON array of objects with schema:
-[
-  {
-    "name": "Distinct Meal/Dish Name",
-    "dietaryType": "Vegetarian",
-    "calories": 350,
-    "protein": 15,
-    "carbs": 40,
-    "fat": 10,
-    "ingredients": ["ingredient 1"],
-    "recipe": ["step 1"],
-    "prepTime": "10 mins",
-    "cookTime": "15 mins",
-    "clinicalFocus": "General Wellness"
-  }
-]`;
+            const fullText = rawMatrix.map(r => r.join(' ')).join('\n').toLowerCase();
+            const isClinicalFormat = 
+              fullText.includes('food details') || 
+              fullText.includes('nutritive value') || 
+              fullText.includes('edible portion') || 
+              (fullText.includes('energy [kcal]') || fullText.includes('carbohydrates [gms]'));
 
-            const aiText = await generateAIResponse({
-              systemInstruction: 'Respond with valid JSON array only.',
-              userPrompt: aiPrompt,
-              jsonMode: true
+            if (isClinicalFormat) {
+              const clinicalRecipe = parseClinicalNutritionSheetFromMatrix(rawMatrix, sheetName, name);
+              allRecipes.push(clinicalRecipe);
+              continue;
+            }
+
+            const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+            if (!rows || rows.length === 0) continue;
+
+            let sheetRecipes: any[] = [];
+            let genericCount = 0;
+            rows.forEach((row, idx) => {
+              const recipe = normalizeExcelRow(row, sheetName, name, idx);
+              if (recipe.name.includes('Recipe #') || recipe.name === 'Custom Meal') {
+                genericCount++;
+              }
+              sheetRecipes.push(recipe);
             });
 
-            const cleanedAI = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const parsedAI = JSON.parse(cleanedAI);
-
-            if (Array.isArray(parsedAI) && parsedAI.length > 0) {
-              sheetRecipes = parsedAI.map(r => ({
-                ...r,
-                sourceFileName,
-                sheetName
-              }));
+            if (genericCount / Math.max(rows.length, 1) > 0.4 && rows.length > 0) {
+              try {
+                const aiPrompt = `Extract recipes from this raw sheet data: Sheet Name: "${sheetName}". Raw Data: ${JSON.stringify(rows.slice(0, 40))} \nReturn ONLY a valid JSON array of objects.`;
+                const aiText = await generateAIResponse({
+                  systemInstruction: 'Respond with valid JSON array only.',
+                  userPrompt: aiPrompt,
+                  jsonMode: true
+                });
+                const cleanedAI = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+                const parsedAI = JSON.parse(cleanedAI);
+                if (Array.isArray(parsedAI) && parsedAI.length > 0) {
+                  sheetRecipes = parsedAI.map(r => ({ ...r, sourceFileName: name, sheetName }));
+                }
+              } catch (aiErr) {
+                console.warn('AI Fallback Parser failed:', aiErr);
+              }
             }
-          } catch (aiErr) {
-            console.warn('AI Fallback Parser encountered error, retaining normalized rows:', aiErr);
+            allRecipes.push(...sheetRecipes);
           }
         }
+      };
 
-        allRecipes.push(...sheetRecipes);
+      if (lowerName.endsWith('.zip')) {
+        console.log(`📦 Unzipping archive: ${fileName}`);
+        const zip = new AdmZip(buffer);
+        const zipEntries = zip.getEntries();
+        for (const zipEntry of zipEntries) {
+          if (!zipEntry.isDirectory && !zipEntry.entryName.includes('__MACOSX')) {
+            const entryBuffer = zipEntry.getData();
+            await processSingleFile(entryBuffer, zipEntry.entryName);
+          }
+        }
+      } else {
+        await processSingleFile(buffer, fileName);
       }
 
-      const existing = await getStoredKnowledge();
-      const updated = [...existing, ...allRecipes];
-      await saveStoredKnowledge(updated);
+      if (allRecipes.length > 0) {
+        const existing = await getStoredKnowledge();
+        const updated = [...existing, ...allRecipes];
+        await saveStoredKnowledge(updated);
+      }
 
       res.json({
         success: true,
         importedCount: allRecipes.length,
-        totalKnowledgeCount: updated.length,
         sample: allRecipes.slice(0, 3)
       });
     } catch (error: any) {
-      console.error('Error parsing Excel file:', error);
-      res.status(500).json({ error: 'Failed to process Excel file', details: error.message });
+      console.error('Error importing file:', error);
+      res.status(500).json({ error: 'Failed to process file', details: error.message });
     }
   });
 

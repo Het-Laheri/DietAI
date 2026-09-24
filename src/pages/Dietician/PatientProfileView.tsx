@@ -52,7 +52,7 @@ import {
   Search,
   ChevronDown,
   ChevronUp
-} from 'lucide-react';
+, Wand2 } from 'lucide-react';
 
 type ActiveTab = 'overview' | 'food_logs' | 'meal_plans' | 'progress' | 'chat' | 'notes' | 'reports';
 

@@ -1,13 +1,13 @@
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
-import { Home, ClipboardList, Activity, MessageCircle, LogOut } from 'lucide-react';
+import { Home, ClipboardList, Camera, Activity, MessageCircle, LogOut } from 'lucide-react';
 import { isPatientSubscribed } from '../services/subscription';
-import TodayPlan from './Patient/TodayPlan';
+import PatientOverview from './Patient/PatientOverview';
+import MealNotepad from './Patient/MealNotepad';
 import FoodScanner from './Patient/FoodScanner';
 import Progress from './Patient/Progress';
 import Inbox from './Patient/Inbox';
-import AiChat from './Patient/AiChat';
 
 export default function PatientDashboard() {
   const { profile } = useAuth();
@@ -20,8 +20,9 @@ export default function PatientDashboard() {
   };
 
   const navItems = [
-    { name: 'Today', path: '/patient', icon: Home },
-    { name: 'Scanner', path: '/patient/scanner', icon: ClipboardList },
+    { name: 'Dashboard', path: '/patient', icon: Home },
+    { name: "Today's Meals", path: '/patient/meals', icon: ClipboardList },
+    { name: 'AI Scanner', path: '/patient/scanner', icon: Camera },
     { name: 'Progress', path: '/patient/progress', icon: Activity },
     { name: 'Ask Dietician', path: '/patient/inbox', icon: MessageCircle },
   ];
@@ -89,7 +90,9 @@ export default function PatientDashboard() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto pb-16 md:pb-0 bg-[#FAFAFA]">
         <Routes>
-          <Route path="/" element={<TodayPlan />} />
+          <Route path="/" element={<PatientOverview />} />
+          <Route path="/meals" element={<MealNotepad />} />
+          <Route path="/today" element={<MealNotepad />} />
           <Route path="/scanner" element={<FoodScanner />} />
           <Route path="/progress" element={<Progress />} />
           <Route path="/inbox" element={<Inbox />} />

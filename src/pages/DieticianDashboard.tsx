@@ -18,38 +18,46 @@ export default function DieticianDashboard() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Live real-time listener on queries collection for consultation notifications & badge
   useEffect(() => {
-    async function loadNotifications() {
-      const notifs = await getNotifications();
-      setNotifications(notifs);
-    }
-    loadNotifications();
-    // In a real app we would use onSnapshot for real-time updates.
-    const interval = setInterval(loadNotifications, 10000); // Poll every 10s for demo
-    return () => clearInterval(interval);
+    const q = query(collection(db, 'queries'));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const items = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
+      const pending = items.filter(i => i.status === 'pending');
+      setPendingApprovalsCount(pending.length);
+
+      // Convert recent queries into notification cards
+      const notifCards = items.slice(0, 15).map(item => ({
+        id: item.id,
+        type: 'SYSTEM',
+        read: item.status === 'answered',
+        message: `${item.patientName || 'Patient'}: "${(item.question || '').slice(0, 50)}..."`,
+        date: item.date || 'Recently',
+        status: item.status
+      }));
+      setNotifications(notifCards);
+    }, (err) => {
+      console.warn('Dietician queries stream note:', err);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const handleNotificationClick = async (n: Notification) => {
-    if (!n.read && n.id) {
-      await markNotificationRead(n.id);
-      setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x));
-    }
-    // Navigate if appropriate based on type
-    if (n.type === 'NEW_PATIENT') navigate('/dietician/patients');
-    if (n.type === 'AI_COACH_MESSAGE' || n.type === 'SYSTEM') navigate('/dietician/inbox');
+  const handleNotificationClick = async (n: any) => {
+    navigate('/dietician/inbox');
+    setShowNotifications(false);
   };
 
   const handleLogout = async () => {
     await auth.signOut();
     navigate('/');
   };
-
-  const pendingApprovalsCount = notifications.filter(n => (n.type === 'AI_COACH_MESSAGE' || n.type === 'SYSTEM') && !n.read).length;
 
   const navItems = [
     { name: 'Command Center', path: '/dietician', icon: LayoutDashboard },

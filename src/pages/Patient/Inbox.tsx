@@ -6,7 +6,7 @@ import { db } from '../../services/firebase';
 import { MessageSquare, Send, Clock, CheckCircle2, User, Sparkles, HelpCircle } from 'lucide-react';
 
 export default function Inbox() {
-  const { profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const [queries, setQueries] = useState<Query[]>([]);
   const [loading, setLoading] = useState(true);
   const [question, setQuestion] = useState('');
@@ -14,9 +14,15 @@ export default function Inbox() {
   const [successToast, setSuccessToast] = useState(false);
   const [errorToast, setErrorToast] = useState<string | null>(null);
 
+  const patientUid = profile?.uid || user?.uid || '';
+  const patientName = profile?.name || user?.displayName || user?.email?.split('@')[0] || 'Patient';
+
   // Live real-time listener for patient's queries (merging Firestore and persistent local cache)
   useEffect(() => {
-    if (!profile?.uid) return;
+    if (!patientUid) {
+      if (!authLoading) setLoading(false);
+      return;
+    }
     setLoading(true);
 
     const parseTime = (val: any) => {
@@ -29,7 +35,7 @@ export default function Inbox() {
     };
 
     const refreshMergedQueries = (remoteItems: Query[] = []) => {
-      const localItems = getLocalQueries(profile.uid);
+      const localItems = getLocalQueries(patientUid);
       const map = new Map<string, Query>();
       remoteItems.forEach(item => { if (item.id) map.set(item.id, item); });
       localItems.forEach(item => { if (item.id && !map.has(item.id)) map.set(item.id, item); });
@@ -45,7 +51,7 @@ export default function Inbox() {
 
     const q = query(
       collection(db, 'queries'),
-      where('patientId', '==', profile.uid)
+      where('patientId', '==', patientUid)
     );
 
     let unsubscribe = () => {};
@@ -54,7 +60,7 @@ export default function Inbox() {
         const remoteLoaded = snap.docs.map(d => ({ ...(d.data() as any), id: d.id } as Query));
         refreshMergedQueries(remoteLoaded);
       }, (err) => {
-        console.warn('Notice: Firestore listener restricted or network offline. Using persistent client cache:', err);
+        console.warn('Notice: Firestore listener note. Using persistent client cache:', err);
         refreshMergedQueries([]);
       });
     } catch (e) {
@@ -69,40 +75,55 @@ export default function Inbox() {
       unsubscribe();
       window.removeEventListener('nutrisnap:query_change', handleLocalEvent);
     };
-  }, [profile?.uid]);
+  }, [patientUid, authLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile || !question.trim()) return;
     const questionText = question.trim();
+    if (!questionText) return;
+
+    if (!patientUid) {
+      setErrorToast('Please log in to submit a clinical consultation query.');
+      setTimeout(() => setErrorToast(null), 3500);
+      return;
+    }
+
     setSubmitting(true);
 
+    const tempId = `temp_${Date.now()}`;
+    const optimisticQuery: Query = {
+      id: tempId,
+      patientId: patientUid,
+      patientName: patientName,
+      question: questionText,
+      source: 'app',
+      status: 'pending',
+      date: 'Today',
+      createdAt: new Date()
+    };
+
+    // Optimistically show immediately in UI
+    setQueries(prev => [optimisticQuery, ...prev.filter(x => x.id !== tempId)]);
+    setQuestion('');
+
     try {
-      await submitQuery({
-        patientId: profile.uid,
-        patientName: profile.name,
+      const realId = await submitQuery({
+        patientId: patientUid,
+        patientName: patientName,
         question: questionText,
         source: 'app',
         status: 'pending',
         date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       });
 
-      // Clear textarea and show success toast immediately
-      setQuestion('');
+      if (realId) {
+        setQueries(prev => prev.map(q => q.id === tempId ? { ...q, id: realId } : q));
+      }
+
       setSuccessToast(true);
       setTimeout(() => setSuccessToast(false), 3500);
-
-      // Create notification in background without blocking UI
-      createNotification({
-        type: 'SYSTEM',
-        patientId: profile.uid,
-        patientName: profile.name,
-        message: `New clinical query from ${profile.name}: "${questionText.slice(0, 50)}..."`,
-        read: false
-      }).catch(e => console.warn('Background notification notice:', e));
     } catch (err: any) {
       console.warn('Query handled via local fallback:', err);
-      setQuestion('');
       setSuccessToast(true);
       setTimeout(() => setSuccessToast(false), 3500);
     } finally {

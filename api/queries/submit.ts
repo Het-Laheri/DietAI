@@ -33,22 +33,34 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { patientId, patientName, question, source, status, date } = req.body || {};
-
-    if (!question || !patientId) {
-      return res.status(400).json({ error: 'Missing required query fields (question and patientId)' });
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch {}
+    } else if (Buffer.isBuffer(body)) {
+      try { body = JSON.parse(body.toString('utf-8')); } catch {}
     }
+
+    const { patientId, patientName, question, source, status, date } = body || {};
+
+    if (!question || !question.trim()) {
+      return res.status(400).json({ error: 'Question text is required' });
+    }
+
+    const finalPatientId = patientId || 'demo_patient';
+    const finalPatientName = patientName || 'Patient';
 
     // Authenticate as administrative dietician to ensure authorized Firestore write
     try {
-      await signInWithEmailAndPassword(auth, 'admin@aidiet.com', 'Admin123!');
+      if (!auth.currentUser) {
+        await signInWithEmailAndPassword(auth, 'admin@aidiet.com', 'Admin123!');
+      }
     } catch (authErr: any) {
       console.warn('Auth note:', authErr?.message || authErr);
     }
 
     const docData = {
-      patientId,
-      patientName: patientName || 'Patient',
+      patientId: finalPatientId,
+      patientName: finalPatientName,
       question: question.trim(),
       source: source || 'app',
       status: status || 'pending',
@@ -57,20 +69,6 @@ export default async function handler(req: any, res: any) {
     };
 
     const docRef = await addDoc(collection(db, 'queries'), docData);
-
-    // Create system notification for dietician in background
-    try {
-      await addDoc(collection(db, 'notifications'), {
-        type: 'SYSTEM',
-        patientId,
-        patientName: patientName || 'Patient',
-        message: `New clinical consultation query from ${patientName || 'Patient'}: "${question.slice(0, 45)}..."`,
-        read: false,
-        createdAt: serverTimestamp()
-      });
-    } catch (notifErr) {
-      console.warn('Notification log:', notifErr);
-    }
 
     return res.status(200).json({
       success: true,

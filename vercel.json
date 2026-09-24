@@ -2,6 +2,10 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/api/ai/scan-food",
+      "destination": "/api/ai/scan-food"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/index"
     },

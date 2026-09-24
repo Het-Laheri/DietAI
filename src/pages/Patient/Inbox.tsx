@@ -19,15 +19,22 @@ export default function Inbox() {
     if (!profile?.uid) return;
     setLoading(true);
 
+    const parseTime = (val: any) => {
+      if (!val) return 0;
+      if (typeof val === 'number') return val;
+      if (val?.seconds) return val.seconds * 1000;
+      if (typeof val?.toDate === 'function') return val.toDate().getTime();
+      const parsed = new Date(val).getTime();
+      return isNaN(parsed) ? 0 : parsed;
+    };
+
     const refreshMergedQueries = (remoteItems: Query[] = []) => {
       const localItems = getLocalQueries(profile.uid);
       const map = new Map<string, Query>();
       remoteItems.forEach(item => { if (item.id) map.set(item.id, item); });
       localItems.forEach(item => { if (item.id && !map.has(item.id)) map.set(item.id, item); });
       const combined = Array.from(map.values()).sort((a, b) => {
-        const timeA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt || 0).getTime();
-        const timeB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt || 0).getTime();
-        return timeB - timeA;
+        return parseTime(b.createdAt) - parseTime(a.createdAt);
       });
       setQueries(combined);
       setLoading(false);
@@ -38,8 +45,7 @@ export default function Inbox() {
 
     const q = query(
       collection(db, 'queries'),
-      where('patientId', '==', profile.uid),
-      orderBy('createdAt', 'desc')
+      where('patientId', '==', profile.uid)
     );
 
     let unsubscribe = () => {};

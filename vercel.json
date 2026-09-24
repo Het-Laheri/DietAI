@@ -6,6 +6,18 @@
       "destination": "/api/ai/scan-food"
     },
     {
+      "source": "/api/ai/chat",
+      "destination": "/api/ai/chat"
+    },
+    {
+      "source": "/api/queries/submit",
+      "destination": "/api/queries/submit"
+    },
+    {
+      "source": "/api/queries/reply",
+      "destination": "/api/queries/reply"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/index"
     },

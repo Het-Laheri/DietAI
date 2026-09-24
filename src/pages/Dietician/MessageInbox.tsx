@@ -34,15 +34,22 @@ export default function MessageInbox() {
   useEffect(() => {
     setLoading(true);
 
+    const parseTime = (val: any) => {
+      if (!val) return 0;
+      if (typeof val === 'number') return val;
+      if (val?.seconds) return val.seconds * 1000;
+      if (typeof val?.toDate === 'function') return val.toDate().getTime();
+      const parsed = new Date(val).getTime();
+      return isNaN(parsed) ? 0 : parsed;
+    };
+
     const refreshMergedQueries = (remoteItems: PatientQuery[] = []) => {
       const localItems = getLocalQueries() as PatientQuery[];
       const map = new Map<string, PatientQuery>();
       remoteItems.forEach(item => { if (item.id) map.set(item.id, item); });
       localItems.forEach(item => { if (item.id && !map.has(item.id)) map.set(item.id, item); });
       const combined = Array.from(map.values()).sort((a, b) => {
-        const timeA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt || 0).getTime();
-        const timeB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt || 0).getTime();
-        return timeB - timeA;
+        return parseTime(b.createdAt) - parseTime(a.createdAt);
       });
       setQueries(combined);
 
@@ -57,7 +64,7 @@ export default function MessageInbox() {
     // Immediate initial display
     refreshMergedQueries([]);
 
-    const q = query(collection(db, 'queries'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'queries'));
     let unsubscribe = () => {};
     try {
       unsubscribe = onSnapshot(q, (snap) => {
@@ -103,8 +110,14 @@ export default function MessageInbox() {
         })
       });
 
-      const data = await res.json();
-      const draft = data?.text?.trim() || generateFallbackDraft(q.question);
+      let draft = '';
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        draft = data?.text?.trim() || '';
+      }
+      if (!draft) {
+        draft = generateFallbackDraft(q.question);
+      }
       setAiDrafts(prev => ({ ...prev, [q.id!]: draft }));
       if (!editReplies[q.id!]) {
         setEditReplies(prev => ({ ...prev, [q.id!]: draft }));

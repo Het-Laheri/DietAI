@@ -465,6 +465,25 @@ export async function submitQuery(queryData: Query): Promise<string> {
   // Save locally first to guarantee zero data loss
   const local = saveLocalQuery(queryData);
 
+  // 1. Try serverless backend endpoint first (handles auth and Firestore write)
+  try {
+    const res = await fetch('/api/queries/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(queryData)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.id) {
+        updateLocalQuery(local.id!, { id: data.id });
+        return data.id;
+      }
+    }
+  } catch (backendErr) {
+    console.warn('Backend query submit endpoint note:', backendErr);
+  }
+
+  // 2. Direct Firestore fallback
   try {
     const docRef = await addDoc(collection(db, 'queries'), { ...queryData, createdAt: serverTimestamp() });
     if (docRef.id) {
@@ -479,12 +498,22 @@ export async function submitQuery(queryData: Query): Promise<string> {
 
 export async function getQueries(dieticianId?: string, patientId?: string): Promise<Query[]> {
   const localList = getLocalQueries(patientId);
+  const getTime = (item: Query) => {
+    const val = item.createdAt;
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    if ((val as any)?.seconds) return (val as any).seconds * 1000;
+    if (typeof (val as any)?.toDate === 'function') return (val as any).toDate().getTime();
+    const parsed = new Date(val as any).getTime();
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
   try {
     let q;
     if (patientId) {
-      q = query(collection(db, 'queries'), where('patientId', '==', patientId), orderBy('createdAt', 'desc'));
+      q = query(collection(db, 'queries'), where('patientId', '==', patientId));
     } else {
-      q = query(collection(db, 'queries'), orderBy('createdAt', 'desc'));
+      q = query(collection(db, 'queries'));
     }
     const snap = await getDocs(q);
     const remoteList = snap.docs.map(d => ({ ...(d.data() as any), id: d.id } as Query));
@@ -493,28 +522,54 @@ export async function getQueries(dieticianId?: string, patientId?: string): Prom
     const map = new Map<string, Query>();
     remoteList.forEach(item => { if (item.id) map.set(item.id, item); });
     localList.forEach(item => { if (item.id && !map.has(item.id)) map.set(item.id, item); });
-    return Array.from(map.values());
+    return Array.from(map.values()).sort((a, b) => getTime(b) - getTime(a));
   } catch (err) {
     console.warn('Notice: Firestore getQueries failed, returning local cache:', err);
-    return localList;
+    return localList.sort((a, b) => getTime(b) - getTime(a));
   }
 }
 
 export async function updateQuery(id: string, updates: Partial<Query>) {
   updateLocalQuery(id, updates);
+  // 1. Direct Firestore update
   try {
     await updateDoc(doc(db, 'queries', id), updates);
+    return;
   } catch (err) {
-    console.warn('Notice: Firestore updateDoc failed, retained in client cache:', err);
+    console.warn('Notice: Firestore updateDoc note, trying backend endpoint:', err);
+  }
+
+  // 2. Backend endpoint fallback
+  try {
+    await fetch('/api/queries/reply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queryId: id, ...updates })
+    });
+  } catch (err2) {
+    console.warn('Backend update query failed:', err2);
   }
 }
 
 export async function deleteQuery(id: string) {
   deleteLocalQuery(id);
+  // 1. Direct Firestore delete
   try {
     await deleteDoc(doc(db, 'queries', id));
+    return;
   } catch (err) {
-    console.warn('Notice: Firestore deleteDoc failed, removed from client cache:', err);
+    console.warn('Notice: Firestore deleteDoc note, trying backend endpoint:', err);
+  }
+
+  // 2. Backend endpoint fallback
+  try {
+    await fetch('/api/queries/reply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queryId: id, action: 'delete' })
+    });
+  } catch (err2) {
+    console.warn('Backend delete query failed:', err2);
   }
 }
 

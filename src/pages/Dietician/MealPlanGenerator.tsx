@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { getPatients, PatientProfile, MealPlan, saveMealPlan, getStoredRecipesFromDB, RecipeDBItem } from '../../services/db';
+import { getPatients, PatientProfile, MealPlan, saveMealPlan, getStoredRecipesFromDB, RecipeDBItem,
+  savePatientWeekPlan, getAllDraftWeekPlans, PatientWeekPlan, WeekDay, MealSlot, WeekPlanEntry
+} from '../../services/db';
 import { 
   Loader2, Wand2, Save, BookOpen, Utensils, RefreshCw, 
-  Check, Search, Edit3, Trash2, Plus, Copy, 
-  Sparkles, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck
+  Check, Search, Edit3, Trash2, Plus, Copy, Calendar,
+  Sparkles, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+
 
 interface MealItem {
   type: string;
@@ -54,7 +57,98 @@ export default function MealPlanGenerator() {
     meal: MealItem;
   } | null>(null);
 
+  // Studio tab: 'ai' | 'kb'
+  const [studioTab, setStudioTab] = useState<'ai' | 'kb'>('ai');
+
+  // KB Week Planner state
+  const WEEK_DAYS: WeekDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const MEAL_SLOTS: MealSlot[] = ['Breakfast', 'Morning Snack', 'Lunch', 'Evening Snack', 'Dinner', 'Bedtime Snack'];
+  const [kbWeekPlan, setKbWeekPlan] = useState<Record<string, Record<string, { recipe: RecipeDBItem; portion: string; notes: string } | null>>>({});
+  const [kbSaving, setKbSaving] = useState(false);
+  const [kbExpandedRecipe, setKbExpandedRecipe] = useState<string | null>(null);
+  const [kbAssigning, setKbAssigning] = useState<{ day: WeekDay; slot: MealSlot } | null>(null);
+
+  const initKbWeekPlan = () => {
+    const empty: Record<string, Record<string, null>> = {};
+    for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']) {
+      empty[day] = {};
+      for (const slot of ['Breakfast', 'Morning Snack', 'Lunch', 'Evening Snack', 'Dinner', 'Bedtime Snack']) {
+        empty[day][slot] = null;
+      }
+    }
+    return empty;
+  };
+
+  useEffect(() => { setKbWeekPlan(initKbWeekPlan()); }, []);
+
+  const assignKbRecipe = (recipe: RecipeDBItem) => {
+    if (!kbAssigning) return;
+    setKbWeekPlan(prev => ({
+      ...prev,
+      [kbAssigning.day]: {
+        ...prev[kbAssigning.day],
+        [kbAssigning.slot]: { recipe, portion: '1 serving', notes: '' }
+      }
+    }));
+    setKbAssigning(null);
+  };
+
+  const removeKbEntry = (day: string, slot: string) => {
+    setKbWeekPlan(prev => ({
+      ...prev,
+      [day]: { ...prev[day], [slot]: null }
+    }));
+  };
+
+  const saveKbWeekPlan = async (status: 'draft' | 'published') => {
+    if (!selectedPatientId) { alert('Select a patient first.'); return; }
+    setKbSaving(true);
+    try {
+      const entries: WeekPlanEntry[] = [];
+      for (const [day, slots] of Object.entries(kbWeekPlan)) {
+        for (const [slot, val] of Object.entries(slots)) {
+          if (val) {
+            entries.push({
+              day: day as WeekDay,
+              mealSlot: slot as MealSlot,
+              recipeId: val.recipe.id || val.recipe.name,
+              recipeName: val.recipe.name,
+              portion: val.portion,
+              notes: val.notes
+            });
+          }
+        }
+      }
+      if (entries.length === 0) { alert('No meals added to the plan yet.'); setKbSaving(false); return; }
+
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      const monday = new Date(today.setDate(diff));
+      const weekStart = monday.toISOString().split('T')[0];
+
+      const existingPlans = await getAllDraftWeekPlans(selectedPatientId);
+      const existing = existingPlans.find(p => p.weekStartDate === weekStart);
+
+      const plan: PatientWeekPlan = {
+        ...(existing || {}),
+        patientId: selectedPatientId,
+        weekStartDate: weekStart,
+        entries,
+        status
+      };
+      await savePatientWeekPlan(plan);
+      alert(`Week plan ${status === 'published' ? 'published to patient!' : 'saved as draft!'}`);
+      if (status === 'published') navigate(`/dietician/patients/${selectedPatientId}`);
+    } catch (e) {
+      alert('Failed to save week plan.');
+    } finally {
+      setKbSaving(false);
+    }
+  };
+
   const navigate = useNavigate();
+
 
   useEffect(() => {
     async function load() {
@@ -256,7 +350,7 @@ export default function MealPlanGenerator() {
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto h-full overflow-y-auto pb-28 font-sans">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-serif font-bold text-stone-900">Meal Plan Studio</h1>
@@ -265,14 +359,158 @@ export default function MealPlanGenerator() {
             </span>
           </div>
           <p className="text-stone-500 text-xs mt-1">
-            Construct tailored nutrition plans via AI generation, fine-tune individual meals, and swap verified recipes directly from your practice knowledge base.
+            Build AI-generated plans or manually assign recipes from your Knowledge Base to a patient's full week.
           </p>
         </div>
       </div>
 
+      {/* Mode Tabs */}
+      <div className="flex gap-1 mb-6 border-b border-stone-200">
+        <button
+          onClick={() => setStudioTab('ai')}
+          className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px flex items-center gap-2 ${studioTab === 'ai' ? 'border-orange-500 text-orange-700' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
+        >
+          <Sparkles className="w-3.5 h-3.5" /> AI Generator
+        </button>
+        <button
+          onClick={() => setStudioTab('kb')}
+          className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px flex items-center gap-2 ${studioTab === 'kb' ? 'border-orange-500 text-orange-700' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
+        >
+          <BookOpen className="w-3.5 h-3.5" /> Build from Knowledge Base
+        </button>
+      </div>
+
+      {/* ═════════════ KB WEEK PLANNER TAB ════════════════════════════════════ */}
+      {studioTab === 'kb' && (
+        <div className="space-y-6">
+          {/* Patient selector */}
+          <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs">
+            <h3 className="font-bold text-stone-900 text-sm mb-3 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs font-bold">1</span>
+              Select Patient
+            </h3>
+            <select value={selectedPatientId} onChange={e => setSelectedPatientId(e.target.value)}
+              className="w-full border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs font-medium outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+            >
+              <option value="">Select patient profile...</option>
+              {patients.map(p => (
+                <option key={p.id} value={p.id}>{p.name} ({p.dietaryType || 'Standard'})</option>
+              ))}
+            </select>
+          </div>
+
+          {/* KB Recipe Picker */}
+          {kbAssigning && (
+            <div className="bg-amber-50 border border-amber-300 rounded-2xl p-5 shadow-xs">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-amber-900 text-sm flex items-center gap-2">
+                  <BookOpen className="w-4 h-4" />
+                  Choose a recipe for <strong>{kbAssigning.day} — {kbAssigning.slot}</strong>
+                </h3>
+                <button onClick={() => setKbAssigning(null)} className="text-amber-700 text-xs font-bold underline">Cancel</button>
+              </div>
+              <div className="relative mb-3">
+                <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input type="text" placeholder="Search recipes..." value={recipeSearch} onChange={e => setRecipeSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 border border-amber-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto">
+                {filteredDbRecipes.map((r, i) => (
+                  <button key={r.id || i} onClick={() => assignKbRecipe(r)}
+                    className="p-3 border border-amber-200 bg-white hover:bg-emerald-50 hover:border-emerald-400 text-left rounded-xl transition-colors"
+                  >
+                    <p className="font-bold text-stone-900 text-xs">{r.name}</p>
+                    <p className="text-[10px] text-stone-500 mt-0.5">{r.calories} kcal · {r.dietaryType}</p>
+                    <p className="text-[10px] text-stone-400">P:{r.protein}g C:{r.carbs}g F:{r.fat}g</p>
+                    <p className="text-[10px] text-emerald-700 font-bold mt-1">→ Assign to {kbAssigning.slot}</p>
+                  </button>
+                ))}
+                {filteredDbRecipes.length === 0 && <p className="text-xs text-stone-400 py-4 col-span-3 text-center">No recipes found.</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Week Grid */}
+          <div className="bg-white border border-stone-200 rounded-2xl shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-stone-200 bg-stone-50 flex justify-between items-center">
+              <h3 className="font-bold text-stone-900 text-sm flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-orange-500" /> Weekly Meal Assignment Grid
+              </h3>
+              {loadingRecipes && <Loader2 className="w-4 h-4 animate-spin text-orange-500" />}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-stone-50 border-b border-stone-200">
+                    <th className="p-3 text-left font-bold text-stone-600 uppercase tracking-wider w-32">Meal Slot</th>
+                    {WEEK_DAYS.map(day => (
+                      <th key={day} className="p-3 text-center font-bold text-stone-600 uppercase tracking-wider min-w-[120px]">{day.slice(0, 3)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {MEAL_SLOTS.map(slot => (
+                    <tr key={slot} className="border-b border-stone-100 hover:bg-stone-50/40">
+                      <td className="p-3 font-bold text-stone-700 bg-stone-50 border-r border-stone-200">
+                        {slot}
+                      </td>
+                      {WEEK_DAYS.map(day => {
+                        const cell = kbWeekPlan[day]?.[slot];
+                        return (
+                          <td key={day} className="p-2 border-r border-stone-100 align-top">
+                            {cell ? (
+                              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 relative">
+                                <button onClick={() => removeKbEntry(day, slot)}
+                                  className="absolute top-1 right-1 text-stone-400 hover:text-rose-600"
+                                  title="Remove"
+                                >×</button>
+                                <p className="font-bold text-emerald-900 pr-3 leading-tight">{cell.recipe.name}</p>
+                                <p className="text-emerald-700 text-[10px]">{cell.recipe.calories} kcal</p>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { if (!selectedPatientId) { alert('Select a patient first'); return; } setKbAssigning({ day, slot }); }}
+                                className="w-full h-14 border border-dashed border-stone-200 rounded-lg text-stone-400 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/30 transition-all flex items-center justify-center"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Save buttons */}
+            <div className="p-4 border-t border-stone-200 bg-stone-50 flex justify-end gap-3">
+              <button onClick={() => saveKbWeekPlan('draft')} disabled={kbSaving || !selectedPatientId}
+                className="px-5 py-2.5 border border-stone-300 rounded-xl text-xs font-bold text-stone-700 hover:bg-stone-100 disabled:opacity-50 flex items-center gap-2"
+              >
+                {kbSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save Draft
+              </button>
+              <button onClick={() => saveKbWeekPlan('published')} disabled={kbSaving || !selectedPatientId}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-50 flex items-center gap-2 shadow-sm"
+              >
+                {kbSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Publish to Patient
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═════════════ AI GENERATOR TAB ════════════════════════════════════════ */}
+      {studioTab === 'ai' && (<>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Client Dossier & Targets (4 cols) */}
         <div className="lg:col-span-4 space-y-6">
+
           {/* Step 1: Patient Select */}
           <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs">
             <h3 className="font-bold text-stone-900 text-sm mb-3 flex items-center gap-2">
@@ -650,6 +888,7 @@ export default function MealPlanGenerator() {
 
       {/* Edit Meal Modal */}
       {editingMeal && (
+
         <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-stone-200 animate-in fade-in zoom-in-95">
             <h3 className="font-bold text-stone-900 text-base mb-4 flex items-center gap-2">
@@ -786,7 +1025,8 @@ export default function MealPlanGenerator() {
             </div>
           </div>
         </div>
-      )}
+      )} {/* end editingMeal modal */}
+      </>)} {/* end studioTab === 'ai' */}
     </div>
   );
 }

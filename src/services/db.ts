@@ -204,7 +204,127 @@ export interface RecipeDBItem {
   clinicalFocus?: string;
   sourceFileName?: string;
   sheetName?: string;
+  // New fields for access control & meal plan assignment
+  tags?: string[];                     // e.g. ['diabetes_safe', 'low_sodium', 'high_fiber']
+  restrictedConditions?: string[];     // e.g. ['diabetes', 'hypertension'] — patients with these conditions CANNOT access
+  mealTypes?: string[];                // which meal slots this fits: ['Breakfast','Lunch','Dinner','Snack']
+  isActive?: boolean;                  // false = soft-deleted / hidden
   createdAt?: any;
+}
+
+// ─── WEEK MEAL PLAN FROM KNOWLEDGE BASE ──────────────────────────────────────
+
+export type WeekDay = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+export type MealSlot = 'Breakfast' | 'Morning Snack' | 'Lunch' | 'Evening Snack' | 'Dinner' | 'Bedtime Snack';
+
+export interface WeekPlanEntry {
+  day: WeekDay;
+  mealSlot: MealSlot;
+  recipeId: string;
+  recipeName: string;
+  portion?: string;
+  notes?: string;
+}
+
+export interface PatientWeekPlan {
+  id?: string;
+  patientId: string;
+  weekStartDate: string;  // ISO date of Monday
+  entries: WeekPlanEntry[];
+  status: 'draft' | 'published';
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export async function savePatientWeekPlan(plan: PatientWeekPlan): Promise<string> {
+  if (plan.id) {
+    await updateDoc(doc(db, 'patient_week_plans', plan.id), {
+      ...plan,
+      updatedAt: serverTimestamp()
+    });
+    return plan.id;
+  } else {
+    const ref = await addDoc(collection(db, 'patient_week_plans'), {
+      ...plan,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    return ref.id;
+  }
+}
+
+export async function getPatientWeekPlan(patientId: string): Promise<PatientWeekPlan | null> {
+  try {
+    const q = query(
+      collection(db, 'patient_week_plans'),
+      where('patientId', '==', patientId),
+      where('status', '==', 'published')
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    // Return most recent plan
+    const docs = snap.docs.map(d => ({ ...d.data(), id: d.id } as PatientWeekPlan));
+    docs.sort((a, b) => {
+      const aTime = (a.createdAt as any)?.seconds || 0;
+      const bTime = (b.createdAt as any)?.seconds || 0;
+      return bTime - aTime;
+    });
+    return docs[0];
+  } catch (e) {
+    console.error('Error fetching patient week plan:', e);
+    return null;
+  }
+}
+
+export async function getAllDraftWeekPlans(patientId: string): Promise<PatientWeekPlan[]> {
+  try {
+    const q = query(collection(db, 'patient_week_plans'), where('patientId', '==', patientId));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ ...d.data(), id: d.id } as PatientWeekPlan));
+  } catch (e) {
+    return [];
+  }
+}
+
+export async function updateRecipeTags(
+  recipeName: string,
+  tags: string[],
+  restrictedConditions: string[],
+  mealTypes: string[]
+): Promise<boolean> {
+  try {
+    const snap = await getDoc(doc(db, 'dietician_notes', 'clinical_knowledge_base'));
+    if (!snap.exists()) return false;
+    const data = snap.data();
+    const recipes: RecipeDBItem[] = Array.isArray(data.recipes) ? data.recipes : [];
+    const updated = recipes.map(r =>
+      r.name.toLowerCase() === recipeName.toLowerCase()
+        ? { ...r, tags, restrictedConditions, mealTypes }
+        : r
+    );
+    await setDoc(doc(db, 'dietician_notes', 'clinical_knowledge_base'), {
+      recipes: updated,
+      count: updated.length,
+      updatedAt: serverTimestamp()
+    });
+    return true;
+  } catch (e) {
+    console.error('Error updating recipe tags:', e);
+    return false;
+  }
+}
+
+export function filterRecipesForPatient(
+  recipes: RecipeDBItem[],
+  patientConditions: string[]
+): RecipeDBItem[] {
+  if (!patientConditions || patientConditions.length === 0) return recipes;
+  const lowerConditions = patientConditions.map(c => c.toLowerCase().trim());
+  return recipes.filter(recipe => {
+    if (!recipe.restrictedConditions || recipe.restrictedConditions.length === 0) return true;
+    const restricted = recipe.restrictedConditions.map(c => c.toLowerCase().trim());
+    return !restricted.some(rc => lowerConditions.some(pc => pc.includes(rc) || rc.includes(pc)));
+  });
 }
 
 // Ensure Dietician Exists

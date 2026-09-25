@@ -1,6 +1,80 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UploadCloud, FileSpreadsheet, Trash2, Loader2, Info, Search, Utensils, Clock, BookOpen } from 'lucide-react';
-import { RecipeDBItem } from '../../services/db';
+import { UploadCloud, FileSpreadsheet, Trash2, Loader2, Info, Search, Utensils, Clock, BookOpen, CheckCircle } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { RecipeDBItem, getStoredRecipesFromDB, saveRecipesToDB, clearRecipeDB } from '../../services/db';
+
+function findRowValue(row: any, keywords: string[]): any {
+  if (!row || typeof row !== 'object') return null;
+  const keys = Object.keys(row);
+  for (const kw of keywords) {
+    const matchedKey = keys.find(k => k.toLowerCase().trim().includes(kw.toLowerCase()));
+    if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null && String(row[matchedKey]).trim() !== '') {
+      return row[matchedKey];
+    }
+  }
+  return null;
+}
+
+function normalizeExcelRow(row: any, sheetName: string, fileName: string, rowIndex: number): RecipeDBItem {
+  let rawName = findRowValue(row, [
+    'meal name', 'recipe name', 'dish name', 'food item', 'item name', 
+    'dish', 'recipe', 'meal', 'item', 'food', 'name', 'title', 'menu'
+  ]);
+
+  if (!rawName) {
+    for (const [key, val] of Object.entries(row)) {
+      if (typeof val === 'string' && val.trim().length > 2 && !['day', 'time', 'type', 'sn'].includes(key.toLowerCase())) {
+        rawName = val.trim();
+        break;
+      }
+    }
+  }
+
+  const name = rawName ? String(rawName).trim() : `${sheetName} Recipe #${rowIndex + 1}`;
+
+  let dietaryType = findRowValue(row, ['dietary type', 'diet type', 'diet', 'veg/non-veg', 'category', 'type']) || 'Vegetarian';
+  const nameAndIng = (name + ' ' + (row['Ingredients'] || '')).toLowerCase();
+  if (nameAndIng.includes('chicken') || nameAndIng.includes('fish') || nameAndIng.includes('mutton') || nameAndIng.includes('beef') || nameAndIng.includes('pork')) {
+    dietaryType = 'Non-Vegetarian';
+  } else if (nameAndIng.includes('egg')) {
+    dietaryType = 'Eggetarian';
+  }
+
+  const calories = Number(findRowValue(row, ['calorie', 'kcal', 'energy', 'cal']) || 300);
+  const protein = Number(findRowValue(row, ['protein', 'prot', 'p(g)']) || 15);
+  const carbs = Number(findRowValue(row, ['carbohydrate', 'carb', 'cho', 'c(g)']) || 40);
+  const fat = Number(findRowValue(row, ['fat', 'f(g)']) || 10);
+
+  const rawIng = findRowValue(row, ['ingredient', 'items needed', 'composition', 'raw ingredients']);
+  const ingredients = rawIng 
+    ? String(rawIng).split(/;|\n|,/).map((i: string) => i.trim()).filter(Boolean)
+    : [`1 portion of ${name}`];
+
+  const rawRecipe = findRowValue(row, ['preparation', 'recipe', 'method', 'instruction', 'step', 'how to prepare']);
+  const recipe = rawRecipe
+    ? String(rawRecipe).split(/;|\n|\. /).map((s: string) => s.trim()).filter(Boolean)
+    : [`Prepare ${name} according to standard portion sizes. Serve warm.`];
+
+  const prepTime = String(findRowValue(row, ['prep time', 'preptime']) || '10 mins');
+  const cookTime = String(findRowValue(row, ['cook time', 'cooktime']) || '15 mins');
+  const clinicalFocus = String(findRowValue(row, ['clinical focus', 'health goal', 'focus', 'tag']) || 'Clinical Recipe');
+
+  return {
+    name,
+    dietaryType,
+    calories: Math.round(calories) || 250,
+    protein: Math.round(protein) || 12,
+    carbs: Math.round(carbs) || 35,
+    fat: Math.round(fat) || 8,
+    ingredients,
+    recipe,
+    prepTime,
+    cookTime,
+    clinicalFocus,
+    sourceFileName: fileName || 'Uploaded_Excel.xlsx',
+    sheetName: sheetName || 'Sheet1'
+  };
+}
 
 export default function KnowledgeBase() {
   const [recipes, setRecipes] = useState<RecipeDBItem[]>([]);
@@ -14,11 +88,25 @@ export default function KnowledgeBase() {
   const fetchRecipes = async () => {
     try {
       setLoading(true);
+      // 1. First fetch directly from Firestore dietician_notes/clinical_knowledge_base
+      const dbRecipes = await getStoredRecipesFromDB();
+      if (dbRecipes && dbRecipes.length > 0) {
+        setRecipes(dbRecipes);
+        return;
+      }
+      // 2. Fallback to API endpoint
       const res = await fetch('/api/knowledge/list');
       const data = await res.json();
       setRecipes(data.recipes || data.sample || []);
     } catch (e) {
       console.error('Failed to fetch recipes', e);
+      try {
+        const res = await fetch('/api/knowledge/list');
+        const data = await res.json();
+        setRecipes(data.recipes || data.sample || []);
+      } catch (apiErr) {
+        console.error('Fallback API also failed:', apiErr);
+      }
     } finally {
       setLoading(false);
     }
@@ -34,37 +122,68 @@ export default function KnowledgeBase() {
 
     setUploading(true);
     try {
-      await new Promise<void>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-          try {
-            const base64 = event.target?.result;
-            if (typeof base64 === 'string') {
-              const res = await fetch('/api/knowledge/import', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ base64File: base64, fileName: file.name })
-              });
-              if (res.ok) {
-                const data = await res.json();
-                alert(`Successfully processed file. Imported ${data.importedCount} recipes.`);
-                fetchRecipes();
-              } else {
-                const errorData = await res.json().catch(() => ({}));
-                alert(`Failed to process file: ${errorData.error || 'Unknown error'}`);
-              }
+      const ext = file.name.split('.').pop()?.toLowerCase();
+
+      // For spreadsheets (.xlsx, .xls, .csv), parse directly in browser
+      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const extracted: RecipeDBItem[] = [];
+
+        for (const sheetName of workbook.SheetNames) {
+          const sheet = workbook.Sheets[sheetName];
+          const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+          if (!rows || rows.length === 0) continue;
+
+          rows.forEach((row, idx) => {
+            const recipe = normalizeExcelRow(row, sheetName, file.name, idx);
+            if (recipe.name) {
+              extracted.push(recipe);
             }
-            resolve();
-          } catch (err) {
-            reject(err);
-          }
-        };
-        reader.onerror = (err) => reject(err);
-        reader.readAsDataURL(file);
-      });
-    } catch (error) {
-      console.error(error);
-      alert('Upload error');
+          });
+        }
+
+        if (extracted.length > 0) {
+          await saveRecipesToDB(extracted);
+          alert(`Successfully imported and saved ${extracted.length} clinical recipes directly to Firestore DB!`);
+          await fetchRecipes();
+        } else {
+          alert('Could not find readable recipe rows in spreadsheet. Please verify the column headers.');
+        }
+      } else {
+        // Unstructured file (PDF, Doc, ZIP) -> process via API
+        const reader = new FileReader();
+        await new Promise<void>((resolve, reject) => {
+          reader.onload = async (event) => {
+            try {
+              const base64 = event.target?.result;
+              if (typeof base64 === 'string') {
+                const res = await fetch('/api/knowledge/import', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ base64File: base64, fileName: file.name })
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  alert(`Successfully processed file. Imported ${data.importedCount} recipes.`);
+                  await fetchRecipes();
+                } else {
+                  const errorData = await res.json().catch(() => ({}));
+                  alert(`Failed to process file: ${errorData.error || 'Unknown error'}`);
+                }
+              }
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          };
+          reader.onerror = (err) => reject(err);
+          reader.readAsDataURL(file);
+        });
+      }
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      alert(`Upload error: ${error.message || 'Failed to process file'}`);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -75,10 +194,11 @@ export default function KnowledgeBase() {
     if (!window.confirm('Are you sure you want to clear the entire recipe knowledge base database?')) return;
     setClearing(true);
     try {
-      const res = await fetch('/api/knowledge/clear', { method: 'DELETE' });
-      if (res.ok) {
-        setRecipes([]);
-      }
+      await clearRecipeDB();
+      try {
+        await fetch('/api/knowledge/clear', { method: 'DELETE' });
+      } catch {}
+      setRecipes([]);
     } catch (e) {
       alert('Failed to clear');
     } finally {

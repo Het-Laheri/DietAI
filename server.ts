@@ -7,21 +7,18 @@ import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import * as XLSX from 'xlsx';
 import { createServer as createViteServer } from 'vite';
-import AdmZip from 'adm-zip';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const pdf = require('pdf-parse');
-import mammoth from 'mammoth';
 import { GoogleGenAI } from '@google/genai';
 import { Redis } from '@upstash/redis';
 import { Ratelimit } from '@upstash/ratelimit';
-import { Search } from '@upstash/search';
 import { 
   submitQuery, 
   createNotification,
   getPatientProfile,
   getMealPlans,
-  getAllFoodLogsForPatient
+  getAllFoodLogsForPatient,
+  getStoredRecipesFromDB,
+  saveRecipesToDB,
+  clearRecipeDB
 } from './src/services/db';
 
 // Upstash Redis Initialization
@@ -39,55 +36,24 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   });
 }
 
-// Upstash Search Initialization
-let searchIndex: any = null;
-if (process.env.UPSTASH_VECTOR_REST_URL && process.env.UPSTASH_VECTOR_REST_TOKEN) {
-  const searchClient = new Search({
-    url: process.env.UPSTASH_VECTOR_REST_URL,
-    token: process.env.UPSTASH_VECTOR_REST_TOKEN,
-  });
-  searchIndex = searchClient.index('recipes');
-}
-
 // Global Express App Export for Vercel
 const app = express();
 export default app;
 
 async function getStoredKnowledge(): Promise<any[]> {
   try {
-    if (searchIndex) {
-      const stats = await searchIndex.info();
-      if (stats.documentCount === 0) return [];
-      
-      const res = await searchIndex.search({
-        query: 'healthy diet recipes',
-        topK: 100
-      });
-      return res.map((match: any) => match.content);
-    }
+    return await getStoredRecipesFromDB();
   } catch (err) {
-    console.error('Error reading knowledge base from Upstash Search:', err);
+    console.error('Error reading knowledge base from Firestore:', err);
+    return [];
   }
-  return [];
 }
 
 async function saveStoredKnowledge(recipes: any[]) {
   try {
-    if (searchIndex) {
-      const documents = recipes.map((recipe, index) => ({
-        id: `recipe-${Date.now()}-${index}`,
-        content: recipe
-      }));
-      
-      const batchSize = 100;
-      for (let i = 0; i < documents.length; i += batchSize) {
-        const batch = documents.slice(i, i + batchSize);
-        await searchIndex.upsert(batch);
-      }
-      console.log(`Successfully upserted ${documents.length} recipes to Upstash Search.`);
-    }
+    await saveRecipesToDB(recipes);
   } catch (err) {
-    console.error('Error saving knowledge base to Upstash Search:', err);
+    console.error('Error saving knowledge base to Firestore:', err);
   }
 }
 
@@ -412,19 +378,23 @@ app.post(['/api/verify-payment', '/verify-payment'], async (req: express.Request
     try {
       const { patientProfile, instructions, targets } = req.body;
       
-      // Fetch knowledge base recipes from Upstash Search (RAG)
+      // Fetch knowledge base recipes from Firestore Knowledge Base (RAG)
       let knowledgeContext = '';
-      if (searchIndex) {
-        const queryText = `A ${patientProfile.dietaryType || 'healthy'} diet for ${patientProfile.goals?.join(', ') || 'wellness'}. Conditions: ${patientProfile.healthInfo?.conditions || 'None'}.`;
-        const searchResults = await searchIndex.search({
-          query: queryText,
-          topK: 15
-        });
-        
-        const relevantRecipes = searchResults.map((res: any) => res.content);
-        if (relevantRecipes.length > 0) {
+      try {
+        const stored = await getStoredRecipesFromDB(patientProfile?.dietaryType);
+        if (stored && stored.length > 0) {
+          const relevantRecipes = stored.slice(0, 15).map(r => ({
+            name: r.name,
+            dietaryType: r.dietaryType,
+            calories: r.calories,
+            macros: { protein: r.protein, carbs: r.carbs, fat: r.fat },
+            ingredients: r.ingredients,
+            recipe: r.recipe
+          }));
           knowledgeContext = `\n\nIMPORTED CLINICAL RECIPE KNOWLEDGE BASE (STRICTLY PREFER & ADAPT THESE EXACT RECIPES AND INGREDIENTS):\n${JSON.stringify(relevantRecipes)}`;
         }
+      } catch (ragErr) {
+        console.warn('Knowledge base RAG retrieval skipped:', ragErr);
       }
 
       const prompt = `You are an expert clinical dietician. Generate a 7-day meal plan for a patient with the following profile:
@@ -864,18 +834,11 @@ Return ONLY a valid JSON object matching this exact structure:
       const processSingleFile = async (fileBuffer: Buffer, name: string) => {
         const ext = name.split('.').pop()?.toLowerCase();
         
-        if (ext === 'pdf') {
-          console.log(`📄 Processing PDF: ${name}`);
-          const data = await pdf(fileBuffer);
-          const recipes = await parseRecipesFromText(data.text, name);
-          allRecipes.push(...recipes);
-          
-        } else if (ext === 'docx' || ext === 'doc') {
-          console.log(`📝 Processing Word Document: ${name}`);
-          const { value: text } = await mammoth.extractRawText({ buffer: fileBuffer });
+        if (ext === 'txt' || ext === 'md' || ext === 'json') {
+          console.log(`📄 Processing Document: ${name}`);
+          const text = fileBuffer.toString('utf-8');
           const recipes = await parseRecipesFromText(text, name);
           allRecipes.push(...recipes);
-          
         } else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
           console.log(`📊 Processing Spreadsheet: ${name}`);
           let workbook: XLSX.WorkBook;
@@ -939,19 +902,7 @@ Return ONLY a valid JSON object matching this exact structure:
         }
       };
 
-      if (lowerName.endsWith('.zip')) {
-        console.log(`📦 Unzipping archive: ${fileName}`);
-        const zip = new AdmZip(buffer);
-        const zipEntries = zip.getEntries();
-        for (const zipEntry of zipEntries) {
-          if (!zipEntry.isDirectory && !zipEntry.entryName.includes('__MACOSX')) {
-            const entryBuffer = zipEntry.getData();
-            await processSingleFile(entryBuffer, zipEntry.entryName);
-          }
-        }
-      } else {
-        await processSingleFile(buffer, fileName);
-      }
+      await processSingleFile(buffer, fileName);
 
       if (allRecipes.length > 0) {
         const existing = await getStoredKnowledge();

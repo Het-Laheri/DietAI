@@ -1,5 +1,3 @@
-import { db } from '../services/firebase';
-import { query, collection, onSnapshot } from 'firebase/firestore';
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { auth, db } from '../services/firebase';

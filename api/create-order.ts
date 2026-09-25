@@ -1,3 +1,59 @@
+import https from 'https';
+
+function requestRazorpayOrder(options: {
+  key_id: string;
+  key_secret: string;
+  amount: number;
+  currency: string;
+  receipt: string;
+  notes?: Record<string, string>;
+}): Promise<{ statusCode: number; data: any }> {
+  return new Promise((resolve, reject) => {
+    const auth = Buffer.from(`${options.key_id}:${options.key_secret}`).toString('base64');
+    const payload = JSON.stringify({
+      amount: options.amount,
+      currency: options.currency || 'INR',
+      receipt: options.receipt,
+      notes: options.notes || {}
+    });
+
+    const req = https.request(
+      {
+        hostname: 'api.razorpay.com',
+        port: 443,
+        path: '/v1/orders',
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload)
+        }
+      },
+      (res) => {
+        let rawData = '';
+        res.on('data', (chunk) => {
+          rawData += chunk;
+        });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(rawData);
+            resolve({ statusCode: res.statusCode || 200, data: parsed });
+          } catch {
+            resolve({ statusCode: res.statusCode || 500, data: rawData });
+          }
+        });
+      }
+    );
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    req.write(payload);
+    req.end();
+  });
+}
+
 export default async function handler(req: any, res: any) {
   // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -13,7 +69,6 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    // Parse body if received as string or Buffer
     let body = req.body;
     if (typeof body === 'string') {
       try { body = JSON.parse(body); } catch {}
@@ -26,13 +81,12 @@ export default async function handler(req: any, res: any) {
 
     if (!key_id || !key_secret) {
       return res.status(401).json({
-        error: 'Razorpay credentials missing. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.'
+        error: 'Razorpay credentials not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.'
       });
     }
 
     const { amount, currency = 'INR', receipt, notes } = body || {};
 
-    // Validate minimum amount: 100 paise (₹1.00)
     const numericAmount = Number(amount);
     if (!numericAmount || isNaN(numericAmount) || numericAmount < 100) {
       return res.status(400).json({
@@ -40,44 +94,33 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    const authHeader = 'Basic ' + Buffer.from(`${key_id}:${key_secret}`).toString('base64');
-
-    const orderPayload = {
+    const response = await requestRazorpayOrder({
+      key_id,
+      key_secret,
       amount: Math.round(numericAmount),
-      currency: currency || 'INR',
+      currency,
       receipt: receipt || `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      notes: notes || {}
-    };
-
-    const rzpResponse = await fetch('https://api.razorpay.com/v1/orders', {
-      method: 'POST',
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(orderPayload)
+      notes
     });
 
-    const responseData = await rzpResponse.json();
-
-    if (!rzpResponse.ok) {
-      console.error('Razorpay API error response:', responseData);
-      if (rzpResponse.status === 401) {
+    if (response.statusCode >= 400) {
+      console.error('Razorpay API error response:', response);
+      if (response.statusCode === 401) {
         return res.status(401).json({
           error: 'Razorpay authentication failed. Verify Key ID and Secret.',
-          details: responseData
+          details: response.data
         });
       }
-      return res.status(rzpResponse.status || 500).json({
-        error: responseData.error?.description || 'Failed to create payment order with Razorpay',
-        details: responseData
+      return res.status(response.statusCode).json({
+        error: response.data?.error?.description || 'Failed to create payment order with Razorpay',
+        details: response.data
       });
     }
 
     return res.status(200).json({
-      order_id: responseData.id,
-      amount: responseData.amount,
-      currency: responseData.currency,
+      order_id: response.data.id,
+      amount: response.data.amount,
+      currency: response.data.currency,
       key_id
     });
   } catch (error: any) {

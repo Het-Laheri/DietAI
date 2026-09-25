@@ -30,6 +30,14 @@
       "destination": "/api/knowledge/clear"
     },
     {
+      "source": "/api/create-order",
+      "destination": "/api/create-order"
+    },
+    {
+      "source": "/api/verify-payment",
+      "destination": "/api/verify-payment"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/index"
     },

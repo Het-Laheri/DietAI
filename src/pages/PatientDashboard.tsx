@@ -1,13 +1,14 @@
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
-import { Home, ClipboardList, Camera, Activity, MessageCircle, LogOut } from 'lucide-react';
+import { Home, ClipboardList, Camera, Activity, MessageCircle, LogOut, CreditCard } from 'lucide-react';
 import { isPatientSubscribed } from '../services/subscription';
 import PatientOverview from './Patient/PatientOverview';
 import MealNotepad from './Patient/MealNotepad';
 import FoodScanner from './Patient/FoodScanner';
 import Progress from './Patient/Progress';
 import Inbox from './Patient/Inbox';
+import SubscriptionPage from './Patient/SubscriptionPage';
 
 export default function PatientDashboard() {
   const { profile } = useAuth();
@@ -25,6 +26,7 @@ export default function PatientDashboard() {
     { name: 'AI Scanner', path: '/patient/scanner', icon: Camera },
     { name: 'Progress', path: '/patient/progress', icon: Activity },
     { name: 'Ask Dietician', path: '/patient/inbox', icon: MessageCircle },
+    { name: 'Membership', path: '/patient/subscription', icon: CreditCard },
   ];
 
   return (
@@ -65,15 +67,17 @@ export default function PatientDashboard() {
               <p className="text-sm font-bold text-stone-900">{profile?.name}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="text-xs text-stone-500">Patient</span>
-                {isPatientSubscribed(profile) ? (
-                  <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    ★ Premium
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-black uppercase tracking-wider bg-stone-100 text-stone-600 px-2 py-0.5 rounded-full">
-                    Free
-                  </span>
-                )}
+                <Link to="/patient/subscription" className="hover:opacity-80 transition-opacity">
+                  {isPatientSubscribed(profile) ? (
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      ★ Premium
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+                      Upgrade
+                    </span>
+                  )}
+                </Link>
               </div>
             </div>
           </div>
@@ -97,6 +101,8 @@ export default function PatientDashboard() {
           <Route path="/progress" element={<Progress />} />
           <Route path="/inbox" element={<Inbox />} />
           <Route path="/ai" element={<Inbox />} />
+          <Route path="/subscription" element={<SubscriptionPage />} />
+          <Route path="/billing" element={<SubscriptionPage />} />
         </Routes>
       </main>
     </div>

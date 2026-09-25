@@ -1,0 +1,64 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import Razorpay from 'razorpay';
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Only allow POST
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
+  }
+
+  try {
+    const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TgHwgxTVyxnCry';
+    const key_secret = process.env.RAZORPAY_KEY_SECRET || 'hLGoXT0tsAHstxufVieSXqCN';
+
+    if (!key_id || !key_secret) {
+      return res.status(401).json({
+        error: 'Razorpay authentication credentials missing. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in environment variables.'
+      });
+    }
+
+    const { amount, currency = 'INR', receipt, notes } = req.body || {};
+
+    // Validate minimum amount: 100 paise
+    const numericAmount = Number(amount);
+    if (!numericAmount || isNaN(numericAmount) || numericAmount < 100) {
+      return res.status(400).json({
+        error: 'Invalid amount. Minimum amount is 100 paise (₹1.00).'
+      });
+    }
+
+    const razorpay = new Razorpay({ key_id, key_secret });
+
+    const orderOptions = {
+      amount: Math.round(numericAmount),
+      currency: currency || 'INR',
+      receipt: receipt || `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      notes: notes || {}
+    };
+
+    const order = await razorpay.orders.create(orderOptions);
+
+    return res.status(200).json({
+      order_id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      key_id
+    });
+  } catch (error: any) {
+    console.error('Razorpay create-order API error:', error);
+    if (
+      error?.statusCode === 401 ||
+      error?.status === 401 ||
+      (error?.error?.code === 'BAD_REQUEST_ERROR' && error?.error?.description?.includes('auth'))
+    ) {
+      return res.status(401).json({
+        error: 'Razorpay authentication failed. Please verify your Key ID and Secret.',
+        details: error?.message || error
+      });
+    }
+    return res.status(500).json({
+      error: 'Failed to create payment order with Razorpay',
+      details: error?.message || error
+    });
+  }
+}

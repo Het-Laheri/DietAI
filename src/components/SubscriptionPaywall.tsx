@@ -60,6 +60,9 @@ export default function SubscriptionPaywall({ featureName = 'Meals & AI Food Sca
       onError: (err) => {
         setPaying(false);
         setErrorMessage(err);
+      },
+      onDismiss: () => {
+        setPaying(false);
       }
     });
   };

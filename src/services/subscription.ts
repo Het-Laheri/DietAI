@@ -142,18 +142,41 @@ export function isPatientSubscribed(profile?: User | null): boolean {
   return false;
 }
 
+export function ensureRazorpayScriptLoaded(): Promise<boolean> {
+  if (typeof window === 'undefined') return Promise.resolve(false);
+  if ((window as any).Razorpay) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      setTimeout(() => resolve(!!(window as any).Razorpay), 1500);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
 export async function initiateRazorpayPayment(params: {
   plan: SubscriptionPlan;
   user: { uid: string; email?: string | null; displayName?: string | null };
   onSuccess: (sub: ActiveSubscription) => void;
   onError: (errorMsg: string) => void;
+  onDismiss?: () => void;
 }) {
-  const { plan, user, onSuccess, onError } = params;
+  const { plan, user, onSuccess, onError, onDismiss } = params;
 
   try {
-    // 1. Check if Razorpay script is loaded
-    if (typeof window === 'undefined' || !(window as any).Razorpay) {
-      onError('Payment gateway is still loading. Please refresh the page and try again.');
+    // 1. Ensure Razorpay script is loaded
+    const scriptLoaded = await ensureRazorpayScriptLoaded();
+    if (!scriptLoaded || typeof window === 'undefined' || !(window as any).Razorpay) {
+      onError('Razorpay checkout SDK failed to load. Please check your internet connection and try again.');
       return;
     }
 
@@ -175,13 +198,17 @@ export async function initiateRazorpayPayment(params: {
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `Server error ${res.status}: Failed to create payment order`);
+      throw new Error(errData.error || errData.details || `Server error ${res.status}: Failed to create payment order`);
     }
 
     const orderData = await res.json();
-    const keyId = orderData.key_id || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_test_TeiwuIBQ2HzmnL';
+    const keyId = orderData.key_id || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_test_TgHwgxTVyxnCry';
 
-    // 3. Configure Razorpay modal options
+    if (!keyId) {
+      throw new Error('Razorpay Key ID is not configured. Please check VITE_RAZORPAY_KEY_ID in .env');
+    }
+
+    // 3. Configure Razorpay Standard Checkout modal options
     const options = {
       key: keyId,
       amount: orderData.amount,
@@ -258,19 +285,25 @@ export async function initiateRazorpayPayment(params: {
         patientId: user.uid
       },
       theme: {
-        color: '#f97316' // NutriSnap orange
+        color: '#f97316' // NutriSnap brand orange
       },
       modal: {
         ondismiss: function () {
-          console.log('Payment modal dismissed by user');
+          console.log('Razorpay payment modal dismissed by user');
+          if (onDismiss) {
+            onDismiss();
+          } else {
+            onError('Payment window closed. Transaction was not completed.');
+          }
         }
       }
     };
 
     const rzpInstance = new (window as any).Razorpay(options);
     rzpInstance.on('payment.failed', function (response: any) {
-      console.error('Payment failed event:', response.error);
-      onError(response.error?.description || 'Payment was unsuccessful or declined by your bank.');
+      console.error('Razorpay payment failed:', response.error);
+      const desc = response.error?.description || response.error?.reason || 'Payment failed or declined by your bank.';
+      onError(`Payment failed: ${desc}`);
     });
 
     rzpInstance.open();

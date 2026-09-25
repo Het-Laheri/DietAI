@@ -278,21 +278,30 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // ─── RAZORPAY PAYMENT GATEWAY ────────────────────────────────────────────────
 const getRazorpayCredentials = () => {
-  const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TeiwuIBQ2HzmnL';
-  const key_secret = process.env.RAZORPAY_KEY_SECRET || 'EYpCWDx0rIFIQHnbJfJfkoYx';
+  const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TgHwgxTVyxnCry';
+  const key_secret = process.env.RAZORPAY_KEY_SECRET || 'hLGoXT0tsAHstxufVieSXqCN';
   return { key_id, key_secret };
 };
 
 const getRazorpayClient = () => {
   const { key_id, key_secret } = getRazorpayCredentials();
+  if (!key_id || !key_secret) {
+    return null;
+  }
   return new Razorpay({ key_id, key_secret });
 };
 
 // 1. Create Order Endpoint
 app.post(['/api/create-order', '/create-order'], async (req: express.Request, res: express.Response): Promise<any> => {
   try {
+    const { key_id, key_secret } = getRazorpayCredentials();
+    if (!key_id || !key_secret) {
+      return res.status(401).json({
+        error: 'Razorpay authentication credentials missing. Please configure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env'
+      });
+    }
+
     const { amount, currency = 'INR', receipt, notes } = req.body;
-    const { key_id } = getRazorpayCredentials();
 
     // Minimum amount validation: 100 paise
     const numericAmount = Number(amount);
@@ -301,6 +310,10 @@ app.post(['/api/create-order', '/create-order'], async (req: express.Request, re
     }
 
     const razorpay = getRazorpayClient();
+    if (!razorpay) {
+      return res.status(401).json({ error: 'Failed to initialize Razorpay client. Invalid credentials.' });
+    }
+
     const orderOptions = {
       amount: Math.round(numericAmount),
       currency: currency || 'INR',
@@ -318,6 +331,12 @@ app.post(['/api/create-order', '/create-order'], async (req: express.Request, re
     });
   } catch (error: any) {
     console.error('Razorpay create-order error:', error);
+    if (error?.statusCode === 401 || error?.status === 401 || error?.error?.code === 'BAD_REQUEST_ERROR' && error?.error?.description?.includes('auth')) {
+      return res.status(401).json({
+        error: 'Razorpay authentication failed. Please verify your Key ID and Secret.',
+        details: error?.message || error
+      });
+    }
     return res.status(500).json({
       error: 'Failed to create payment order with Razorpay',
       details: error?.message || error
@@ -328,6 +347,14 @@ app.post(['/api/create-order', '/create-order'], async (req: express.Request, re
 // 2. Verify Payment Signature Endpoint
 app.post(['/api/verify-payment', '/verify-payment'], async (req: express.Request, res: express.Response): Promise<any> => {
   try {
+    const { key_secret } = getRazorpayCredentials();
+    if (!key_secret) {
+      return res.status(401).json({
+        success: false,
+        error: 'Razorpay Key Secret is not configured on the server'
+      });
+    }
+
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
     // Missing fields validation
@@ -338,9 +365,7 @@ app.post(['/api/verify-payment', '/verify-payment'], async (req: express.Request
       });
     }
 
-    const { key_secret } = getRazorpayCredentials();
-
-    // HMAC-SHA256 signature verification
+    // HMAC-SHA256 signature verification: order_id + "|" + payment_id
     const expectedSignature = crypto
       .createHmac('sha256', key_secret)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)

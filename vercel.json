@@ -18,6 +18,18 @@
       "destination": "/api/queries/reply"
     },
     {
+      "source": "/api/knowledge/list",
+      "destination": "/api/knowledge/list"
+    },
+    {
+      "source": "/api/knowledge/import",
+      "destination": "/api/knowledge/import"
+    },
+    {
+      "source": "/api/knowledge/clear",
+      "destination": "/api/knowledge/clear"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/index"
     },

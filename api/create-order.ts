@@ -1,5 +1,3 @@
-import Razorpay from 'razorpay';
-
 export default async function handler(req: any, res: any) {
   // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -10,7 +8,6 @@ export default async function handler(req: any, res: any) {
     return res.status(200).end();
   }
 
-  // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed. Use POST.' });
   }
@@ -29,7 +26,7 @@ export default async function handler(req: any, res: any) {
 
     if (!key_id || !key_secret) {
       return res.status(401).json({
-        error: 'Razorpay credentials not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in environment variables.'
+        error: 'Razorpay credentials missing. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.'
       });
     }
 
@@ -43,39 +40,51 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    const RazorpayClass: any = (Razorpay as any)?.default || Razorpay;
-    const razorpay = new RazorpayClass({ key_id, key_secret });
+    const authHeader = 'Basic ' + Buffer.from(`${key_id}:${key_secret}`).toString('base64');
 
-    const orderOptions = {
+    const orderPayload = {
       amount: Math.round(numericAmount),
       currency: currency || 'INR',
       receipt: receipt || `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       notes: notes || {}
     };
 
-    const order = await razorpay.orders.create(orderOptions);
+    const rzpResponse = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(orderPayload)
+    });
+
+    const responseData = await rzpResponse.json();
+
+    if (!rzpResponse.ok) {
+      console.error('Razorpay API error response:', responseData);
+      if (rzpResponse.status === 401) {
+        return res.status(401).json({
+          error: 'Razorpay authentication failed. Verify Key ID and Secret.',
+          details: responseData
+        });
+      }
+      return res.status(rzpResponse.status || 500).json({
+        error: responseData.error?.description || 'Failed to create payment order with Razorpay',
+        details: responseData
+      });
+    }
 
     return res.status(200).json({
-      order_id: order.id,
-      amount: order.amount,
-      currency: order.currency,
+      order_id: responseData.id,
+      amount: responseData.amount,
+      currency: responseData.currency,
       key_id
     });
   } catch (error: any) {
-    console.error('Razorpay create-order API error:', error);
-    if (
-      error?.statusCode === 401 ||
-      error?.status === 401 ||
-      (error?.error?.code === 'BAD_REQUEST_ERROR' && error?.error?.description?.includes('auth'))
-    ) {
-      return res.status(401).json({
-        error: 'Razorpay authentication failed. Please verify your Key ID and Secret.',
-        details: error?.message || error
-      });
-    }
+    console.error('Razorpay create-order handler error:', error);
     return res.status(500).json({
-      error: error?.message || 'Failed to create payment order with Razorpay',
-      details: error?.error || error
+      error: error?.message || 'Internal server error creating payment order',
+      details: error
     });
   }
 }

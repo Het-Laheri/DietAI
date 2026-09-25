@@ -310,11 +310,7 @@ app.post(['/api/create-order', '/create-order'], async (req: express.Request, re
       return res.status(400).json({ error: 'Invalid amount. Minimum amount is 100 paise (₹1.00).' });
     }
 
-    const razorpay = getRazorpayClient();
-    if (!razorpay) {
-      return res.status(401).json({ error: 'Failed to initialize Razorpay client. Invalid credentials.' });
-    }
-
+    const authHeader = 'Basic ' + Buffer.from(`${key_id}:${key_secret}`).toString('base64');
     const orderOptions = {
       amount: Math.round(numericAmount),
       currency: currency || 'INR',
@@ -322,7 +318,29 @@ app.post(['/api/create-order', '/create-order'], async (req: express.Request, re
       notes: notes || {}
     };
 
-    const order = await razorpay.orders.create(orderOptions);
+    const rzpResponse = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(orderOptions)
+    });
+
+    const order = await rzpResponse.json();
+
+    if (!rzpResponse.ok) {
+      if (rzpResponse.status === 401) {
+        return res.status(401).json({
+          error: 'Razorpay authentication failed. Please verify your Key ID and Secret.',
+          details: order
+        });
+      }
+      return res.status(rzpResponse.status || 500).json({
+        error: order.error?.description || 'Failed to create payment order with Razorpay',
+        details: order
+      });
+    }
 
     return res.status(200).json({
       order_id: order.id,

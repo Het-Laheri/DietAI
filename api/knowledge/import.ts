@@ -2,6 +2,7 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { initializeFirestore, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import { GoogleGenAI } from '@google/genai';
 
 const firebaseConfig = {
@@ -327,7 +328,55 @@ export default async function handler(req: any, res: any) {
 
     const allRecipes: any[] = [];
 
-    if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+    if (ext === 'zip') {
+      const zip = await JSZip.loadAsync(buffer);
+      const entries = Object.keys(zip.files).filter(path => {
+        const lower = path.toLowerCase();
+        return !lower.startsWith('__macosx') && 
+               !lower.includes('/.') && 
+               !lower.includes('~$') && 
+               (lower.endsWith('.xlsx') || lower.endsWith('.xls') || lower.endsWith('.csv'));
+      });
+
+      for (const relativePath of entries) {
+        const entry = zip.files[relativePath];
+        if (entry.dir) continue;
+
+        const fileNameOnly = relativePath.split('/').pop() || relativePath;
+        try {
+          const fileBuf = await entry.async('nodebuffer');
+          let workbook: XLSX.WorkBook;
+          try {
+            workbook = XLSX.read(fileBuf, { type: 'buffer' });
+          } catch {
+            workbook = XLSX.read(fileBuf.toString('binary'), { type: 'binary' });
+          }
+
+          for (const sheetName of workbook.SheetNames) {
+            const sheet = workbook.Sheets[sheetName];
+            if (!sheet) continue;
+
+            const rawMatrix: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            const clinical = parseClinicalNutritionMatrix(rawMatrix, sheetName, fileNameOnly);
+
+            if (clinical) {
+              allRecipes.push(clinical);
+              continue;
+            }
+
+            const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+            if (!rows || rows.length === 0) continue;
+
+            rows.forEach((row, idx) => {
+              const rec = normalizeExcelRow(row, sheetName, fileNameOnly, idx);
+              if (rec.name) allRecipes.push(rec);
+            });
+          }
+        } catch (zipFileErr) {
+          console.warn(`Error reading file ${fileNameOnly} in ZIP:`, zipFileErr);
+        }
+      }
+    } else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
       let workbook: XLSX.WorkBook;
       try {
         workbook = XLSX.read(buffer, { type: 'buffer' });

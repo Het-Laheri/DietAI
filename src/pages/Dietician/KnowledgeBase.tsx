@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UploadCloud, FileSpreadsheet, Trash2, Loader2, Info, Search, Utensils, Clock, BookOpen, CheckCircle } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, Trash2, Loader2, Info, Search, Utensils, Clock, BookOpen, CheckCircle, Archive } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import { RecipeDBItem, getStoredRecipesFromDB, saveRecipesToDB, clearRecipeDB } from '../../services/db';
 
 function findRowValue(row: any, keywords: string[]): any {
@@ -288,6 +289,7 @@ export default function KnowledgeBase() {
   const [recipes, setRecipes] = useState<RecipeDBItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('');
   const [clearing, setClearing] = useState(false);
   const [search, setSearch] = useState('');
   const [filterDiet, setFilterDiet] = useState('All');
@@ -329,11 +331,89 @@ export default function KnowledgeBase() {
     if (!file) return;
 
     setUploading(true);
+    setUploadStatus('Reading uploaded file...');
+
     try {
       const ext = file.name.split('.').pop()?.toLowerCase();
 
-      // For spreadsheets (.xlsx, .xls, .csv), parse directly in browser
+      // ─── 1. FULL ZIP ARCHIVE INGESTION ─────────────────────────────────────
+      if (ext === 'zip') {
+        setUploadStatus('Opening ZIP archive...');
+        const zip = await JSZip.loadAsync(file);
+        const extracted: RecipeDBItem[] = [];
+
+        // Filter out macOS metadata, temp lock files, and keep Excel sheets
+        const entries = Object.keys(zip.files).filter(path => {
+          const lower = path.toLowerCase();
+          return !lower.startsWith('__macosx') && 
+                 !lower.includes('/.') && 
+                 !lower.includes('~$') && 
+                 (lower.endsWith('.xlsx') || lower.endsWith('.xls') || lower.endsWith('.csv'));
+        });
+
+        if (entries.length === 0) {
+          alert('No readable Excel files (.xlsx, .xls, .csv) were found inside this ZIP archive.');
+          return;
+        }
+
+        setUploadStatus(`Found ${entries.length} Excel file(s). Extracting recipes...`);
+
+        let processedCount = 0;
+        for (const relativePath of entries) {
+          processedCount++;
+          const zipEntry = zip.files[relativePath];
+          if (zipEntry.dir) continue;
+
+          const fileNameOnly = relativePath.split('/').pop() || relativePath;
+          setUploadStatus(`Processing (${processedCount}/${entries.length}): ${fileNameOnly}...`);
+
+          try {
+            const buffer = await zipEntry.async('arraybuffer');
+            const workbook = XLSX.read(buffer, { type: 'array' });
+
+            for (const sheetName of workbook.SheetNames) {
+              const sheet = workbook.Sheets[sheetName];
+              if (!sheet) continue;
+
+              // Try clinical matrix layout first (Food Details & Nutritive Value tables like Bhendi Fry)
+              const rawMatrix: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+              const clinicalRecipe = parseClinicalNutritionMatrix(rawMatrix, sheetName, fileNameOnly);
+
+              if (clinicalRecipe) {
+                extracted.push(clinicalRecipe);
+                continue;
+              }
+
+              // Fallback to row-by-row table
+              const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+              if (!rows || rows.length === 0) continue;
+
+              rows.forEach((row, idx) => {
+                const recipe = normalizeExcelRow(row, sheetName, fileNameOnly, idx);
+                if (recipe.name) {
+                  extracted.push(recipe);
+                }
+              });
+            }
+          } catch (fileErr) {
+            console.warn(`Error reading file ${fileNameOnly} in ZIP:`, fileErr);
+          }
+        }
+
+        if (extracted.length > 0) {
+          setUploadStatus(`Saving ${extracted.length} recipes to cloud database...`);
+          await saveRecipesToDB(extracted);
+          alert(`Successfully extracted and saved ${extracted.length} clinical recipe(s) from ${entries.length} Excel files in the ZIP!`);
+          await fetchRecipes();
+        } else {
+          alert('Could not find any readable recipe tables inside the spreadsheets.');
+        }
+        return;
+      }
+
+      // ─── 2. SINGLE SPREADSHEET (.xlsx, .xls, .csv) ──────────────────────────
       if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        setUploadStatus(`Reading spreadsheet ${file.name}...`);
         const data = await file.arrayBuffer();
         const workbook = XLSX.read(data, { type: 'array' });
         const extracted: RecipeDBItem[] = [];
@@ -364,6 +444,7 @@ export default function KnowledgeBase() {
         }
 
         if (extracted.length > 0) {
+          setUploadStatus(`Saving ${extracted.length} recipe(s)...`);
           await saveRecipesToDB(extracted);
           alert(`Successfully imported and saved ${extracted.length} clinical recipe(s) directly to your cloud Knowledge Base!`);
           await fetchRecipes();
@@ -371,7 +452,8 @@ export default function KnowledgeBase() {
           alert('Could not find readable recipe rows in spreadsheet. Please verify the format.');
         }
       } else {
-        // Unstructured file (PDF, Doc, ZIP) -> process via API
+        // ─── 3. UNSTRUCTURED FILE (PDF, Doc) VIA API ──────────────────────────
+        setUploadStatus(`Sending ${file.name} to AI parser...`);
         const reader = new FileReader();
         await new Promise<void>((resolve, reject) => {
           reader.onload = async (event) => {
@@ -406,6 +488,7 @@ export default function KnowledgeBase() {
       alert(`Upload error: ${error.message || 'Failed to process file'}`);
     } finally {
       setUploading(false);
+      setUploadStatus('');
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -439,33 +522,46 @@ export default function KnowledgeBase() {
     <div className="p-4 md:p-8 max-w-7xl mx-auto flex flex-col h-full overflow-y-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-serif font-bold text-stone-900">Clinical Recipe Knowledge Base DB</h1>
-        <p className="text-stone-500 text-sm mt-1">Upload your custom Excel recipe sheets to persist in Firestore Cloud DB & feed AI patient meal assignments.</p>
+        <p className="text-stone-500 text-sm mt-1">Upload your complete ZIP archive or individual Excel recipe sheets to persist in Firestore Cloud DB & feed AI patient meal assignments.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* Upload Card */}
-        <div className="bg-white rounded-none border border-stone-200 p-6 flex flex-col items-center justify-center text-center shadow-sm">
+        <div className="bg-white rounded-none border border-stone-200 p-6 flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden">
           <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center mb-3 text-emerald-700">
-            <UploadCloud className="w-7 h-7" />
+            <Archive className="w-7 h-7" />
           </div>
-          <h3 className="font-bold text-stone-900 mb-1">Upload Recipes (Excel/PDF/Word/ZIP)</h3>
-          <p className="text-xs text-stone-500 mb-5">Upload clinical recipe sheets or text documents. You can also ZIP them together!</p>
+          <div className="flex items-center gap-1.5 mb-1">
+            <h3 className="font-bold text-stone-900">Upload Recipes (.ZIP / Excel)</h3>
+            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
+              Full ZIP Batch Supported
+            </span>
+          </div>
+          <p className="text-xs text-stone-500 mb-5 max-w-md">
+            Upload a single <strong>.ZIP archive</strong> containing all your Excel sheets, or select individual <strong>.xlsx / .xls</strong> files. Each sheet with Food & Nutritive Value tables will be automatically ingested!
+          </p>
           
           <input 
             type="file" 
             ref={fileInputRef}
             onChange={handleFileChange} 
-            accept=".xlsx,.xls,.csv,.zip,.pdf,.doc,.docx" 
+            accept=".zip,.xlsx,.xls,.csv,.pdf,.doc,.docx" 
             className="hidden" 
           />
           <button 
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="px-6 py-2.5 bg-stone-900 text-white font-medium hover:bg-stone-800 transition-colors disabled:opacity-50 flex items-center gap-2 text-xs uppercase tracking-wider font-bold rounded-full"
+            className="px-6 py-2.5 bg-stone-900 text-white font-medium hover:bg-stone-800 transition-colors disabled:opacity-50 flex items-center gap-2 text-xs uppercase tracking-wider font-bold rounded-full shadow-sm"
           >
-            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 text-emerald-400" />}
-            {uploading ? 'Processing File...' : 'Select File'}
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin text-emerald-400" /> : <FileSpreadsheet className="w-4 h-4 text-emerald-400" />}
+            {uploading ? (uploadStatus || 'Processing Archive...') : 'Upload .ZIP / Excel Files'}
           </button>
+
+          {uploading && uploadStatus && (
+            <p className="mt-3 text-xs text-emerald-700 font-mono animate-pulse">
+              {uploadStatus}
+            </p>
+          )}
         </div>
 
         {/* Stats & Info Card */}

@@ -31,11 +31,11 @@
     },
     {
       "source": "/api/create-order",
-      "destination": "/api/create-order"
+      "destination": "/api/payment/create-order"
     },
     {
       "source": "/api/verify-payment",
-      "destination": "/api/verify-payment"
+      "destination": "/api/payment/verify-payment"
     },
     {
       "source": "/api/payment/create-order",
@@ -44,10 +44,6 @@
     {
       "source": "/api/payment/verify-payment",
       "destination": "/api/payment/verify-payment"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index"
     },
     {
       "source": "/(.*)",

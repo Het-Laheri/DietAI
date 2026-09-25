@@ -282,7 +282,7 @@ const getRazorpayCredentials = () => {
 };
 
 // 1. Create Order Endpoint
-app.post(['/api/create-order', '/create-order'], async (req: express.Request, res: express.Response): Promise<any> => {
+app.post(['/api/create-order', '/create-order', '/api/payment/create-order'], async (req: express.Request, res: express.Response): Promise<any> => {
   try {
     const { key_id, key_secret } = getRazorpayCredentials();
     if (!key_id || !key_secret) {
@@ -353,7 +353,7 @@ app.post(['/api/create-order', '/create-order'], async (req: express.Request, re
 });
 
 // 2. Verify Payment Signature Endpoint
-app.post(['/api/verify-payment', '/verify-payment'], async (req: express.Request, res: express.Response): Promise<any> => {
+app.post(['/api/verify-payment', '/verify-payment', '/api/payment/verify-payment'], async (req: express.Request, res: express.Response): Promise<any> => {
   try {
     const { key_secret } = getRazorpayCredentials();
     if (!key_secret) {

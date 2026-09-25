@@ -202,7 +202,7 @@ export async function initiateRazorpayPayment(params: {
     }
 
     const orderData = await res.json();
-    const keyId = orderData.key_id || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_test_TgHwgxTVyxnCry';
+    const keyId = orderData.key_id || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_live_TgJehzpfLu7yQI';
 
     if (!keyId) {
       throw new Error('Razorpay Key ID is not configured. Please check VITE_RAZORPAY_KEY_ID in .env');

@@ -76,8 +76,8 @@ export default async function handler(req: any, res: any) {
       try { body = JSON.parse(body.toString('utf-8')); } catch {}
     }
 
-    const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TgHwgxTVyxnCry';
-    const key_secret = process.env.RAZORPAY_KEY_SECRET || 'hLGoXT0tsAHstxufVieSXqCN';
+    const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || 'rzp_live_TgJehzpfLu7yQI';
+    const key_secret = process.env.RAZORPAY_KEY_SECRET || 'CeG1ExRkjbkDf7IEzovWWlhZ';
 
     if (!key_id || !key_secret) {
       return res.status(401).json({

@@ -24,7 +24,7 @@ export default async function handler(req: any, res: any) {
       try { body = JSON.parse(body.toString('utf-8')); } catch {}
     }
 
-    const key_secret = process.env.RAZORPAY_KEY_SECRET || 'hLGoXT0tsAHstxufVieSXqCN';
+    const key_secret = process.env.RAZORPAY_KEY_SECRET || 'CeG1ExRkjbkDf7IEzovWWlhZ';
 
     if (!key_secret) {
       return res.status(401).json({

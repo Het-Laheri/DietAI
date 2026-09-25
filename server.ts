@@ -276,8 +276,8 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // ─── RAZORPAY PAYMENT GATEWAY ────────────────────────────────────────────────
 const getRazorpayCredentials = () => {
-  const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TgHwgxTVyxnCry';
-  const key_secret = process.env.RAZORPAY_KEY_SECRET || 'hLGoXT0tsAHstxufVieSXqCN';
+  const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || 'rzp_live_TgJehzpfLu7yQI';
+  const key_secret = process.env.RAZORPAY_KEY_SECRET || 'CeG1ExRkjbkDf7IEzovWWlhZ';
   return { key_id, key_secret };
 };
 

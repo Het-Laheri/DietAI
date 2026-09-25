@@ -83,7 +83,7 @@ export default function RazorpayCheckoutButton({
       }
 
       const orderData = await createRes.json();
-      const keyId = orderData.key_id || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_test_TgHwgxTVyxnCry';
+      const keyId = orderData.key_id || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_live_TgJehzpfLu7yQI';
 
       if (!keyId) {
         throw new Error('Razorpay Key ID missing. Set VITE_RAZORPAY_KEY_ID in .env.');

@@ -4,9 +4,7 @@ import path from 'path';
 import http from 'http';
 import fs from 'fs';
 import crypto from 'crypto';
-import Razorpay from 'razorpay';
 import * as XLSX from 'xlsx';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { Redis } from '@upstash/redis';
 import { Ratelimit } from '@upstash/ratelimit';
@@ -281,15 +279,6 @@ const getRazorpayCredentials = () => {
   const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TgHwgxTVyxnCry';
   const key_secret = process.env.RAZORPAY_KEY_SECRET || 'hLGoXT0tsAHstxufVieSXqCN';
   return { key_id, key_secret };
-};
-
-const getRazorpayClient = () => {
-  const { key_id, key_secret } = getRazorpayCredentials();
-  if (!key_id || !key_secret) {
-    return null;
-  }
-  const RazorpayClass: any = (Razorpay as any)?.default || Razorpay;
-  return new RazorpayClass({ key_id, key_secret });
 };
 
 // 1. Create Order Endpoint

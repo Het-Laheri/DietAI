@@ -19,7 +19,8 @@ import {
   FoodLog,
   Query,
   ClinicalNote,
-  RecipeDBItem
+  RecipeDBItem,
+  buildClinicalMealPlanFromRecipes
 } from '../../services/db';
 import { 
   ChevronLeft, 
@@ -233,26 +234,51 @@ export default function PatientProfileView() {
   const handleGenerateAIPlan = async () => {
     setGeneratingPlan(true);
     try {
-      const res = await fetch('/api/ai/meal-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patientProfile: profile,
-          targets: { calories: targetCalories, protein: targetProtein, carbs: targetCarbs, fat: targetFat },
-          instructions: `Client prefers ${profile.dietaryType}. Allergies: ${profile.healthInfo?.allergies || 'None'}. Goal: ${profile.goals?.join(', ') || 'Metabolic health'}.`
-        })
-      });
-      const data = await res.json();
+      const pool = await getStoredRecipesFromDB(profile.dietaryType);
+      let planDays: any = null;
+
+      try {
+        const res = await fetch('/api/ai/meal-plan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patientProfile: profile,
+            targets: { calories: targetCalories, protein: targetProtein, carbs: targetCarbs, fat: targetFat },
+            instructions: `Client prefers ${profile.dietaryType}. Allergies: ${profile.healthInfo?.allergies || 'None'}. Goal: ${profile.goals?.join(', ') || 'Metabolic health'}.`,
+            availableRecipes: pool
+          })
+        });
+        if (res.ok) {
+          const raw = await res.json();
+          if (Array.isArray(raw) && raw.length === 7) {
+            const allValid = raw.every((d: any) =>
+              Array.isArray(d.meals) &&
+              d.meals.length > 0 &&
+              d.meals.every((m: any) => pool.some(r => r.name.toLowerCase() === m.name.toLowerCase()))
+            );
+            if (allValid) {
+              planDays = raw;
+            }
+          }
+        }
+      } catch (aiErr) {
+        console.warn('AI endpoint note; generating via clinical recipes:', aiErr);
+      }
+
+      if (!planDays) {
+        planDays = buildClinicalMealPlanFromRecipes(pool, profile, { calories: targetCalories, protein: targetProtein, carbs: targetCarbs, fat: targetFat });
+      }
+
       const newPlan: MealPlan = {
         patientId: profile.id,
         startDate: todayStr,
         endDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
         status: 'draft',
         targets: { calories: targetCalories, protein: targetProtein, carbs: targetCarbs, fat: targetFat },
-        days: data,
+        days: planDays,
         createdAt: new Date()
       };
-      await saveMealPlan(newPlan);
+      await saveMealPlan(newPlan, 'dietician');
       const updated = await getMealPlans(profile.id);
       setMealPlans(updated);
       setSelectedPlanIdx(0);
@@ -276,7 +302,7 @@ export default function PatientProfileView() {
       days: updatedDays
     };
 
-    await saveMealPlan(updatedPlan);
+    await saveMealPlan(updatedPlan, 'dietician');
     const updated = await getMealPlans(profile.id);
     setMealPlans(updated);
     setEditingMeal(null);
@@ -284,7 +310,7 @@ export default function PatientProfileView() {
 
   const handlePublishPlan = async (planToPublish: MealPlan) => {
     const published: MealPlan = { ...planToPublish, status: 'published' };
-    await saveMealPlan(published);
+    await saveMealPlan(published, 'dietician');
     const updated = await getMealPlans(profile.id);
     setMealPlans(updated);
   };

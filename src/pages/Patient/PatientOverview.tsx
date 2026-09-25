@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getMealPlans, getFoodLogs, getQueries, getPatientProfile, MealPlan, FoodLog, Query, PatientProfile } from '../../services/db';
+import { getMealPlans, getFoodLogs, getQueries, getPatientProfile, getPatientWeekPlan, MealPlan, FoodLog, Query, PatientProfile, PatientWeekPlan } from '../../services/db';
 import { isPatientSubscribed, getLocalSubscription } from '../../services/subscription';
 import { 
   Home, 
@@ -34,6 +34,7 @@ export default function PatientOverview() {
     const saved = localStorage.getItem(`nutrisnap_water_${profile?.uid}_${today}`);
     return saved ? parseInt(saved, 10) : 3;
   });
+  const [weekPlan, setWeekPlan] = useState<PatientWeekPlan | null>(null);
   const [loading, setLoading] = useState(true);
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -52,17 +53,19 @@ export default function PatientOverview() {
     async function loadDashboardData() {
       if (!profile) return;
       try {
-        const [plans, logs, queries, pData] = await Promise.all([
+        const [plans, logs, queries, pData, wp] = await Promise.all([
           getMealPlans(profile.uid),
           getFoodLogs(profile.uid, todayStr),
           getQueries(undefined, profile.uid),
-          getPatientProfile(profile.uid)
+          getPatientProfile(profile.uid),
+          getPatientWeekPlan(profile.uid)
         ]);
 
         const published = plans.find(p => p.status === 'published');
         setActivePlan(published || null);
         setTodayLogs(logs);
         setPatientData(pData);
+        setWeekPlan(wp);
 
         if (queries && queries.length > 0) {
           setRecentQuery(queries[0]);
@@ -102,7 +105,25 @@ export default function PatientOverview() {
     }
   })();
 
-  const totalAssignedMeals = activePlan?.days?.[0]?.meals?.length || 4;
+  const totalAssignedMeals = (() => {
+    const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const todayDay = DAYS_OF_WEEK[new Date().getDay()];
+    if (weekPlan && weekPlan.status === 'published' && weekPlan.entries && weekPlan.entries.length > 0) {
+      const todaysEntries = weekPlan.entries.filter(e => e.day === todayDay);
+      if (todaysEntries.length > 0) return todaysEntries.length;
+    }
+    if (activePlan && activePlan.status === 'published' && activePlan.days && activePlan.days.length > 0) {
+      let dayIndex = 0;
+      if (activePlan.startDate) {
+        const start = new Date(activePlan.startDate).getTime();
+        const now = new Date(todayStr).getTime();
+        const diffDays = Math.max(0, Math.floor((now - start) / 86400000));
+        dayIndex = Math.min(diffDays % activePlan.days.length, activePlan.days.length - 1);
+      }
+      return activePlan.days[dayIndex]?.meals?.length || activePlan.days[0]?.meals?.length || 0;
+    }
+    return 0;
+  })();
 
   const formattedDate = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -210,9 +231,15 @@ export default function PatientOverview() {
                 <Utensils className="w-5 h-5" />
               </div>
               {subscribed ? (
-                <span className="text-xs font-bold text-stone-500">
-                  {checkedItemsCount} of {totalAssignedMeals} Completed
-                </span>
+                totalAssignedMeals > 0 ? (
+                  <span className="text-xs font-bold text-stone-500">
+                    {checkedItemsCount} of {totalAssignedMeals} Completed
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                    Awaiting Plan
+                  </span>
+                )
               ) : (
                 <span className="text-xs font-bold text-amber-600 flex items-center gap-1">
                   <Lock className="w-3 h-3" /> Locked
@@ -223,25 +250,27 @@ export default function PatientOverview() {
             <h3 className="font-bold text-stone-900 text-base mb-1">Dietician's Meal Checklist</h3>
             <p className="text-xs text-stone-500 mb-4">
               {subscribed 
-                ? "Your daily meals formatted like an interactive notepad. Check off each item as you eat."
+                ? (totalAssignedMeals > 0 
+                    ? "Your daily meals formatted like an interactive notepad. Check off each item as you eat."
+                    : "Your dietician is preparing your clinical meal plan strictly from approved recipes.")
                 : "Unlock your personalized dietician meal plan, meal checklists, and clinical recipes."}
             </p>
 
             {/* Mini Progress Bar */}
             <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden mb-4">
               <div 
-                className={`h-full rounded-full transition-all duration-500 ${subscribed ? 'bg-gradient-to-r from-orange-500 to-pink-500' : 'bg-stone-300'}`}
-                style={{ width: subscribed ? `${Math.min(100, (checkedItemsCount / totalAssignedMeals) * 100)}%` : '20%' }}
+                className={`h-full rounded-full transition-all duration-500 ${subscribed ? (totalAssignedMeals > 0 ? 'bg-gradient-to-r from-orange-500 to-pink-500' : 'bg-amber-300') : 'bg-stone-300'}`}
+                style={{ width: subscribed ? (totalAssignedMeals > 0 ? `${Math.min(100, (checkedItemsCount / totalAssignedMeals) * 100)}%` : '0%') : '20%' }}
               />
             </div>
           </div>
 
           {subscribed ? (
             <Link
-              to="/patient/meals"
+              to={totalAssignedMeals > 0 ? "/patient/meals" : "/patient/inbox"}
               className="w-full py-2.5 px-4 bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors"
             >
-              Open Meal Notepad
+              {totalAssignedMeals > 0 ? "Open Meal Notepad" : "Ask Dietician for Plan"}
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           ) : (

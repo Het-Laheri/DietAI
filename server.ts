@@ -16,7 +16,8 @@ import {
   getAllFoodLogsForPatient,
   getStoredRecipesFromDB,
   saveRecipesToDB,
-  clearRecipeDB
+  clearRecipeDB,
+  buildClinicalMealPlanFromRecipes
 } from './src/services/db';
 
 // Upstash Redis Initialization
@@ -409,76 +410,123 @@ app.post(['/api/verify-payment', '/verify-payment', '/api/payment/verify-payment
 
   app.post(['/api/ai/meal-plan', '/ai/meal-plan'], aiRateLimitMiddleware, async (req: express.Request, res: express.Response): Promise<any> => {
     try {
-      const { patientProfile, instructions, targets } = req.body;
+      const { patientProfile, instructions, targets, availableRecipes } = req.body;
       
-      // Fetch knowledge base recipes from Firestore Knowledge Base (RAG)
-      let knowledgeContext = '';
-      try {
-        const stored = await getStoredRecipesFromDB(patientProfile?.dietaryType);
-        if (stored && stored.length > 0) {
-          const relevantRecipes = stored.slice(0, 15).map(r => ({
-            name: r.name,
-            dietaryType: r.dietaryType,
-            calories: r.calories,
-            macros: { protein: r.protein, carbs: r.carbs, fat: r.fat },
-            ingredients: r.ingredients,
-            recipe: r.recipe
-          }));
-          knowledgeContext = `\n\nIMPORTED CLINICAL RECIPE KNOWLEDGE BASE (STRICTLY PREFER & ADAPT THESE EXACT RECIPES AND INGREDIENTS):\n${JSON.stringify(relevantRecipes)}`;
-        }
-      } catch (ragErr) {
-        console.warn('Knowledge base RAG retrieval skipped:', ragErr);
+      let stored = Array.isArray(availableRecipes) && availableRecipes.length > 0 
+        ? availableRecipes 
+        : await getStoredRecipesFromDB(patientProfile?.dietaryType);
+
+      if (!stored || stored.length === 0) {
+        stored = await getStoredRecipesFromDB();
       }
 
-      const prompt = `You are an expert clinical dietician. Generate a 7-day meal plan for a patient with the following profile:
-Profile: ${JSON.stringify(patientProfile)}
-Calorie & Macro Targets: ${JSON.stringify(targets)}
+      const relevantRecipes = stored.map((r: any) => ({
+        name: r.name,
+        dietaryType: r.dietaryType,
+        calories: r.calories,
+        protein: r.protein,
+        carbs: r.carbs,
+        fat: r.fat,
+        ingredients: r.ingredients || [],
+        recipe: r.recipe || [],
+        clinicalFocus: r.clinicalFocus || 'Clinical Care'
+      }));
+
+      const prompt = `You are a licensed clinical dietician creating a 7-day meal plan.
+Patient: ${JSON.stringify(patientProfile || {})}
+Calorie & Macro Targets: ${JSON.stringify(targets || {})}
 Additional Instructions: ${instructions || 'None'}
-${knowledgeContext}
 
-Return ONLY a valid JSON array of 7 objects. Each meal MUST include complete ingredients list with exact measurements, step-by-step preparation recipe instructions, prepTime, and cookTime.
+CRITICAL REQUIREMENT:
+You MUST ONLY choose dishes and recipes from the following clinical pre-provided recipe catalog.
+DO NOT CREATE, INVENT, OR SUGGEST ANY DISH OR INGREDIENT OUTSIDE OF THIS LIST:
+${JSON.stringify(relevantRecipes)}
 
-JSON Schema format:
+Return ONLY a valid JSON array of 7 objects (Day 1 through Day 7). Each day must have 4 meals: Breakfast, Lunch, Evening Snack, Dinner.
+Each meal must use the exact name, ingredients, recipe, calories, and macros from the matching pre-provided recipe.
+
+JSON Array format:
 [
   {
     "dayNumber": 1,
     "meals": [
       {
         "type": "Breakfast",
-        "name": "Food Name",
-        "portion": "1 bowl",
+        "name": "Recipe Name",
+        "portion": "1 serving",
         "calories": 300,
         "protein": 15,
         "carbs": 40,
         "fat": 10,
         "prepTime": "10 mins",
         "cookTime": "15 mins",
-        "ingredients": [
-          "1 cup Oats",
-          "200ml Skimmed Milk",
-          "1 tbsp Chia Seeds",
-          "1/2 sliced Banana"
-        ],
-        "recipe": [
-          "Boil milk in a small saucepan over medium heat.",
-          "Add oats and chia seeds, stirring continuously for 5 minutes.",
-          "Pour into a bowl and top with fresh banana slices."
-        ],
-        "notes": "Rich in soluble fiber and sustained energy"
+        "ingredients": ["1 cup Oats"],
+        "recipe": ["Boil milk"],
+        "notes": "Rich in soluble fiber"
       }
     ]
   }
 ]`;
 
-      const text = await generateAIResponse({
-        systemInstruction: 'You are an expert clinical dietician. Respond with valid JSON array only.',
-        userPrompt: prompt,
-        jsonMode: true
-      });
+      let generatedPlan: any = null;
 
-      // Clean JSON formatting if model wraps in codeblocks
-      const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      res.json(JSON.parse(cleaned));
+      try {
+        const text = await generateAIResponse({
+          systemInstruction: 'You are an expert clinical dietician. Respond with valid JSON array only. Only choose from provided recipes.',
+          userPrompt: prompt,
+          jsonMode: true
+        });
+
+        const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        if (Array.isArray(parsed) && parsed.length === 7) {
+          generatedPlan = parsed.map((dayObj: any, dIdx: number) => ({
+            dayNumber: dayObj.dayNumber || dIdx + 1,
+            meals: (dayObj.meals || []).map((m: any, mIdx: number) => {
+              const match = stored.find((r: any) => r.name.toLowerCase() === (m.name || '').toLowerCase());
+              if (match) {
+                return {
+                  type: m.type || (mIdx === 0 ? 'Breakfast' : mIdx === 1 ? 'Lunch' : mIdx === 2 ? 'Evening Snack' : 'Dinner'),
+                  name: match.name,
+                  portion: m.portion || '1 serving',
+                  calories: match.calories,
+                  protein: match.protein,
+                  carbs: match.carbs,
+                  fat: match.fat,
+                  prepTime: match.prepTime || '10 mins',
+                  cookTime: match.cookTime || '15 mins',
+                  ingredients: match.ingredients || [],
+                  recipe: match.recipe || [],
+                  notes: m.notes || match.clinicalFocus
+                };
+              }
+              const fallback = stored[(dIdx + mIdx) % stored.length];
+              return {
+                type: m.type || (mIdx === 0 ? 'Breakfast' : mIdx === 1 ? 'Lunch' : mIdx === 2 ? 'Evening Snack' : 'Dinner'),
+                name: fallback.name,
+                portion: '1 serving',
+                calories: fallback.calories,
+                protein: fallback.protein,
+                carbs: fallback.carbs,
+                fat: fallback.fat,
+                prepTime: fallback.prepTime || '10 mins',
+                cookTime: fallback.cookTime || '15 mins',
+                ingredients: fallback.ingredients || [],
+                recipe: fallback.recipe || [],
+                notes: fallback.clinicalFocus
+              };
+            })
+          }));
+        }
+      } catch (aiErr) {
+        console.warn('AI meal plan error, assembling directly from recipes:', aiErr);
+      }
+
+      if (!generatedPlan) {
+        generatedPlan = buildClinicalMealPlanFromRecipes(stored, patientProfile, targets);
+      }
+
+      res.json(generatedPlan);
     } catch (error) {
       console.error('Error generating meal plan:', error);
       res.status(500).json({ error: 'Failed to generate meal plan' });

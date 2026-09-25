@@ -236,7 +236,10 @@ export interface PatientWeekPlan {
   updatedAt?: any;
 }
 
-export async function savePatientWeekPlan(plan: PatientWeekPlan): Promise<string> {
+export async function savePatientWeekPlan(plan: PatientWeekPlan, authorRole?: string): Promise<string> {
+  if (authorRole && authorRole !== 'dietician') {
+    throw new Error('Unauthorized: Only licensed dieticians can send or assign week plans.');
+  }
   if (plan.id) {
     await updateDoc(doc(db, 'patient_week_plans', plan.id), {
       ...plan,
@@ -533,13 +536,17 @@ export async function getMealPlans(patientId: string): Promise<MealPlan[]> {
   return snap.docs.map(d => ({ ...d.data(), id: d.id } as MealPlan));
 }
 
-export async function saveMealPlan(plan: MealPlan) {
+export async function saveMealPlan(plan: MealPlan, authorRole?: string) {
+  if (authorRole && authorRole !== 'dietician') {
+    throw new Error('Unauthorized: Only licensed dieticians can send or assign meal plans.');
+  }
+  const sanitized = cleanFirestoreData(plan);
   if (plan.id) {
     const ref = doc(db, 'meal_plans', plan.id);
-    await updateDoc(ref, { ...plan });
+    await updateDoc(ref, { ...sanitized });
     return plan.id;
   } else {
-    const ref = await addDoc(collection(db, 'meal_plans'), { ...plan, createdAt: serverTimestamp() });
+    const ref = await addDoc(collection(db, 'meal_plans'), { ...sanitized, createdAt: serverTimestamp() });
     return ref.id;
   }
 }
@@ -1225,4 +1232,145 @@ export async function clearRecipeDB(): Promise<boolean> {
     console.error('Error clearing recipe DB:', e);
     return false;
   }
+}
+
+export function buildClinicalMealPlanFromRecipes(
+  availableRecipes: RecipeDBItem[],
+  patientProfile?: Partial<PatientProfile> | null,
+  targets?: { calories: number; protein: number; carbs: number; fat: number }
+): { dayNumber: number; meals: Meal[] }[] {
+  let pool = availableRecipes && availableRecipes.length > 0 ? availableRecipes : DEFAULT_CLINICAL_RECIPES;
+
+  // Dietary filter
+  const patientDiet = (patientProfile?.dietaryType || '').toLowerCase();
+  if (patientDiet && patientDiet !== 'standard' && patientDiet !== 'all') {
+    const dietFiltered = pool.filter(r => {
+      const rd = (r.dietaryType || '').toLowerCase();
+      if (patientDiet === 'vegetarian') return rd === 'vegetarian' || rd === 'jain' || rd === 'vegan';
+      if (patientDiet === 'vegan') return rd === 'vegan';
+      if (patientDiet === 'jain') return rd === 'jain';
+      if (patientDiet === 'eggetarian') return rd === 'eggetarian' || rd === 'vegetarian' || rd === 'vegan';
+      if (patientDiet === 'non-vegetarian') return true;
+      return rd === patientDiet;
+    });
+    if (dietFiltered.length > 0) {
+      pool = dietFiltered;
+    }
+  }
+
+  // Filter out contraindicated recipes based on medical conditions
+  const conditions = [
+    ...(patientProfile?.clinicalConditions || []),
+    ...(patientProfile?.healthInfo?.allergies ? [patientProfile.healthInfo.allergies] : []),
+    ...(patientProfile?.goals || [])
+  ].map(c => c.toLowerCase());
+
+  const safePool = pool.filter(r => {
+    if (!r.contraindicatedFor || r.contraindicatedFor.length === 0) return true;
+    return !r.contraindicatedFor.some(tag => 
+      conditions.some(cond => cond.includes(tag.toLowerCase()) || tag.toLowerCase().includes(cond))
+    );
+  });
+
+  const finalPool = safePool.length >= 4 ? safePool : pool;
+
+  // Slot-based indexing for variety
+  const breakfasts = finalPool.filter(r => 
+    /chilla|oats|egg|bhurji|poha|upma|smoothie|idli|dosa|toast|paratha|breakfast/i.test(r.name) ||
+    /breakfast|morning/i.test(r.clinicalFocus || '') ||
+    r.calories < 400
+  );
+  const lunches = finalPool.filter(r => 
+    /thali|dal|curry|rice|paneer|chicken|fish|roti|quinoa|stir-fry|khichdi|lunch/i.test(r.name) ||
+    /lunch|satiety|main/i.test(r.clinicalFocus || '') ||
+    r.calories >= 300
+  );
+  const snacks = finalPool.filter(r => 
+    /chaat|makhana|chana|sundal|snack|tea|tikki|soup|salad|sprout|smoothie/i.test(r.name) ||
+    /snack|afternoon|recovery/i.test(r.clinicalFocus || '') ||
+    r.calories <= 280
+  );
+  const dinners = finalPool.filter(r => 
+    /soup|curry|salad|paneer|chicken|fish|tofu|stir-fry|dinner|light/i.test(r.name) ||
+    /dinner|digest|restful/i.test(r.clinicalFocus || '')
+  );
+
+  const getSlotRecipe = (slotCandidates: RecipeDBItem[], fallbackIndex: number): RecipeDBItem => {
+    if (slotCandidates.length > 0) {
+      return slotCandidates[fallbackIndex % slotCandidates.length];
+    }
+    return finalPool[fallbackIndex % finalPool.length];
+  };
+
+  const days: { dayNumber: number; meals: Meal[] }[] = [];
+
+  for (let day = 1; day <= 7; day++) {
+    const bRecipe = getSlotRecipe(breakfasts, day - 1);
+    const lRecipe = getSlotRecipe(lunches, day - 1);
+    const sRecipe = getSlotRecipe(snacks, day - 1);
+    const dRecipe = getSlotRecipe(dinners, day);
+
+    const dayMeals: Meal[] = [
+      {
+        type: 'Breakfast',
+        name: bRecipe.name,
+        portion: '1 serving',
+        calories: Number(bRecipe.calories) || 300,
+        protein: Number(bRecipe.protein) || 15,
+        carbs: Number(bRecipe.carbs) || 35,
+        fat: Number(bRecipe.fat) || 8,
+        prepTime: bRecipe.prepTime || '10 mins',
+        cookTime: bRecipe.cookTime || '10 mins',
+        ingredients: bRecipe.ingredients || [],
+        recipe: bRecipe.recipe || [],
+        notes: `Clinical Approved Recipe (${bRecipe.dietaryType}) — ${bRecipe.clinicalFocus || 'High Satiety'}`
+      },
+      {
+        type: 'Lunch',
+        name: lRecipe.name,
+        portion: '1 plate',
+        calories: Number(lRecipe.calories) || 450,
+        protein: Number(lRecipe.protein) || 25,
+        carbs: Number(lRecipe.carbs) || 55,
+        fat: Number(lRecipe.fat) || 12,
+        prepTime: lRecipe.prepTime || '15 mins',
+        cookTime: lRecipe.cookTime || '15 mins',
+        ingredients: lRecipe.ingredients || [],
+        recipe: lRecipe.recipe || [],
+        notes: `Clinical Approved Recipe (${lRecipe.dietaryType}) — ${lRecipe.clinicalFocus || 'Balanced Glycemic Index'}`
+      },
+      {
+        type: 'Evening Snack',
+        name: sRecipe.name,
+        portion: '1 portion',
+        calories: Number(sRecipe.calories) || 180,
+        protein: Number(sRecipe.protein) || 8,
+        carbs: Number(sRecipe.carbs) || 22,
+        fat: Number(sRecipe.fat) || 4,
+        prepTime: sRecipe.prepTime || '10 mins',
+        cookTime: sRecipe.cookTime || '5 mins',
+        ingredients: sRecipe.ingredients || [],
+        recipe: sRecipe.recipe || [],
+        notes: `Clinical Approved Recipe (${sRecipe.dietaryType}) — ${sRecipe.clinicalFocus || 'Afternoon Energy Stability'}`
+      },
+      {
+        type: 'Dinner',
+        name: dRecipe.name,
+        portion: '1 bowl',
+        calories: Number(dRecipe.calories) || 350,
+        protein: Number(dRecipe.protein) || 20,
+        carbs: Number(dRecipe.carbs) || 35,
+        fat: Number(dRecipe.fat) || 10,
+        prepTime: dRecipe.prepTime || '12 mins',
+        cookTime: dRecipe.cookTime || '12 mins',
+        ingredients: dRecipe.ingredients || [],
+        recipe: dRecipe.recipe || [],
+        notes: `Clinical Approved Recipe (${dRecipe.dietaryType}) — ${dRecipe.clinicalFocus || 'Gentle Night Digestion'}`
+      }
+    ];
+
+    days.push({ dayNumber: day, meals: dayMeals });
+  }
+
+  return days;
 }

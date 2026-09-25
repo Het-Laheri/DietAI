@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getMealPlans, MealPlan, Meal } from '../../services/db';
+import { getMealPlans, getPatientWeekPlan, getStoredRecipesFromDB, MealPlan, Meal, PatientWeekPlan, RecipeDBItem, WeekDay } from '../../services/db';
 import { isPatientSubscribed } from '../../services/subscription';
 import SubscriptionPaywall from '../../components/SubscriptionPaywall';
 import { 
@@ -12,13 +13,12 @@ import {
   Clock, 
   ChevronDown, 
   ChevronUp, 
-  Plus, 
-  Trash2, 
   Save, 
   ChefHat, 
   FileText,
   AlertCircle,
-  Lock
+  Lock,
+  MessageCircle
 } from 'lucide-react';
 
 interface ChecklistMealItem {
@@ -44,8 +44,6 @@ export default function MealNotepad() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [patientReflection, setPatientReflection] = useState('');
   const [notesSavedToast, setNotesSavedToast] = useState(false);
-  const [customItemText, setCustomItemText] = useState('');
-  const [showAddCustom, setShowAddCustom] = useState(false);
   const [loading, setLoading] = useState(true);
   const [subscribed, setSubscribed] = useState(() => isPatientSubscribed(profile));
 
@@ -61,7 +59,12 @@ export default function MealNotepad() {
     async function loadPlanAndChecklist() {
       if (!profile) return;
       try {
-        const plans = await getMealPlans(profile.uid);
+        const [plans, weekPlan, allDbRecipes] = await Promise.all([
+          getMealPlans(profile.uid),
+          getPatientWeekPlan(profile.uid),
+          getStoredRecipesFromDB()
+        ]);
+
         const published = plans.find(p => p.status === 'published');
         setActivePlan(published || null);
 
@@ -77,8 +80,51 @@ export default function MealNotepad() {
 
         let initialList: ChecklistMealItem[] = [];
 
-        if (published && published.days && published.days.length > 0) {
-          const dayPlan = published.days[0];
+        // 1. Check published Week Plan assigned by Dietician
+        const DAYS_OF_WEEK: WeekDay[] = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const todayDay = DAYS_OF_WEEK[new Date().getDay()];
+
+        if (weekPlan && weekPlan.status === 'published' && weekPlan.entries && weekPlan.entries.length > 0) {
+          const todaysEntries = weekPlan.entries.filter(e => e.day === todayDay);
+          const MEAL_SLOT_ORDER = ['Breakfast', 'Morning Snack', 'Lunch', 'Evening Snack', 'Dinner', 'Bedtime Snack'];
+          const sortedEntries = [...todaysEntries].sort(
+            (a, b) => MEAL_SLOT_ORDER.indexOf(a.mealSlot) - MEAL_SLOT_ORDER.indexOf(b.mealSlot)
+          );
+
+          if (sortedEntries.length > 0) {
+            initialList = sortedEntries.map((entry, idx) => {
+              const itemId = `wp_${entry.day}_${entry.mealSlot}_${idx}`;
+              const detail = allDbRecipes.find(r => r.name.toLowerCase() === entry.recipeName.toLowerCase()) ||
+                             allDbRecipes.find(r => r.id === entry.recipeId);
+              return {
+                id: itemId,
+                mealType: entry.mealSlot,
+                name: entry.recipeName,
+                portion: entry.portion || '1 serving',
+                calories: detail?.calories,
+                protein: detail?.protein,
+                carbs: detail?.carbs,
+                fat: detail?.fat,
+                notes: entry.notes || detail?.clinicalFocus,
+                recipe: detail?.recipe || [],
+                ingredients: detail?.ingredients || [],
+                completed: savedState[itemId]?.completed || false,
+                completedAt: savedState[itemId]?.completedAt
+              };
+            });
+          }
+        }
+
+        // 2. If no week entries, check published standard MealPlan assigned by Dietician
+        if (initialList.length === 0 && published && published.days && published.days.length > 0) {
+          let dayIndex = 0;
+          if (published.startDate) {
+            const start = new Date(published.startDate).getTime();
+            const now = new Date(todayStr).getTime();
+            const diffDays = Math.max(0, Math.floor((now - start) / 86400000));
+            dayIndex = Math.min(diffDays % published.days.length, published.days.length - 1);
+          }
+          const dayPlan = published.days[dayIndex] || published.days[0];
           initialList = dayPlan.meals.map((m, idx) => {
             const itemId = `plan_meal_${idx}_${m.type.toLowerCase()}`;
             return {
@@ -91,94 +137,16 @@ export default function MealNotepad() {
               carbs: m.carbs,
               fat: m.fat,
               notes: m.notes,
-              recipe: m.recipe,
-              ingredients: m.ingredients,
+              recipe: Array.isArray(m.recipe) ? m.recipe : (m.recipe ? [m.recipe] : []),
+              ingredients: Array.isArray(m.ingredients) ? m.ingredients : (m.ingredients ? [m.ingredients] : []),
               completed: savedState[itemId]?.completed || false,
               completedAt: savedState[itemId]?.completedAt
             };
           });
-        } else {
-          // Baseline structured clinical checklist if dietician hasn't generated a plan yet
-          initialList = [
-            {
-              id: 'base_1_water',
-              mealType: 'Morning Routine',
-              name: 'Warm Detox Water with Lemon & Chia Seeds',
-              portion: '500ml',
-              calories: 25,
-              protein: 1,
-              carbs: 3,
-              fat: 1,
-              notes: 'Drink slowly on an empty stomach to stimulate digestion and metabolic rate.',
-              completed: savedState['base_1_water']?.completed || false,
-              completedAt: savedState['base_1_water']?.completedAt
-            },
-            {
-              id: 'base_2_breakfast',
-              mealType: 'Breakfast',
-              name: 'High Protein Oats Bowl or 2 Egg Omelette with Greens',
-              portion: '1 medium bowl (approx. 200g)',
-              calories: 360,
-              protein: 24,
-              carbs: 42,
-              fat: 10,
-              notes: 'Focus on high protein to stabilize blood sugar and prevent mid-morning energy dips.',
-              completed: savedState['base_2_breakfast']?.completed || false,
-              completedAt: savedState['base_2_breakfast']?.completedAt
-            },
-            {
-              id: 'base_3_lunch',
-              mealType: 'Lunch',
-              name: 'Balanced Whole Grain Thali (Dal/Paneer/Chicken + Salad + 2 Rotis)',
-              portion: '1 cup dal + 1 cup sabzi + 2 phulkas',
-              calories: 480,
-              protein: 28,
-              carbs: 65,
-              fat: 12,
-              notes: 'Eat salad first, followed by protein, and finish with carbohydrates for optimal glucose control.',
-              completed: savedState['base_3_lunch']?.completed || false,
-              completedAt: savedState['base_3_lunch']?.completedAt
-            },
-            {
-              id: 'base_4_snack',
-              mealType: '4 PM Snack',
-              name: 'Roasted Makhana / Chana + Green Tea',
-              portion: '30g roasted chana + 1 cup green tea',
-              calories: 140,
-              protein: 6,
-              carbs: 22,
-              fat: 3,
-              notes: 'Avoid refined sugars; choose complex fiber to stay energized until dinner.',
-              completed: savedState['base_4_snack']?.completed || false,
-              completedAt: savedState['base_4_snack']?.completedAt
-            },
-            {
-              id: 'base_5_dinner',
-              mealType: 'Dinner',
-              name: 'Light Vegetable Clear Soup + Grilled Tofu/Fish/Stir-Fry',
-              portion: '1 bowl soup + 150g grilled protein',
-              calories: 340,
-              protein: 26,
-              carbs: 28,
-              fat: 8,
-              notes: 'Finish dinner at least 2.5 hours prior to sleeping for deep restful sleep.',
-              completed: savedState['base_5_dinner']?.completed || false,
-              completedAt: savedState['base_5_dinner']?.completedAt
-            }
-          ];
         }
 
-        // Restore custom items added by user
-        const customSaved = localStorage.getItem(`nutrisnap_custom_meals_${profile.uid}_${todayStr}`);
-        if (customSaved) {
-          try {
-            const customItems: ChecklistMealItem[] = JSON.parse(customSaved);
-            initialList = [...initialList, ...customItems];
-          } catch (e) {
-            console.warn(e);
-          }
-        }
-
+        // NOTE: No mock or random fallback meals outside of pre-provided recipes.
+        // NOTE: Patients cannot add meals; only dietician can prescribe and send meals.
         setItems(initialList);
       } catch (err) {
         console.error('Failed to load meal checklist:', err);
@@ -217,50 +185,7 @@ export default function MealNotepad() {
     localStorage.setItem(storageKey, JSON.stringify(stateMap));
   };
 
-  const handleAddCustomItem = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customItemText.trim() || !profile) return;
 
-    const newItem: ChecklistMealItem = {
-      id: `custom_${Date.now()}`,
-      mealType: 'Custom Dietary Note',
-      name: customItemText.trim(),
-      portion: 'As consumed',
-      completed: true,
-      completedAt: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-    };
-
-    const updated = [...items, newItem];
-    setItems(updated);
-
-    // Save custom items
-    const customOnly = updated.filter(i => i.id.startsWith('custom_'));
-    localStorage.setItem(`nutrisnap_custom_meals_${profile.uid}_${todayStr}`, JSON.stringify(customOnly));
-
-    const stateMap: Record<string, { completed: boolean; completedAt?: string }> = {};
-    updated.forEach(it => {
-      stateMap[it.id] = { completed: it.completed, completedAt: it.completedAt };
-    });
-    localStorage.setItem(storageKey, JSON.stringify(stateMap));
-
-    setCustomItemText('');
-    setShowAddCustom(false);
-  };
-
-  const handleRemoveCustomItem = (id: string) => {
-    if (!profile) return;
-    const updated = items.filter(it => it.id !== id);
-    setItems(updated);
-
-    const customOnly = updated.filter(i => i.id.startsWith('custom_'));
-    localStorage.setItem(`nutrisnap_custom_meals_${profile.uid}_${todayStr}`, JSON.stringify(customOnly));
-
-    const stateMap: Record<string, { completed: boolean; completedAt?: string }> = {};
-    updated.forEach(it => {
-      stateMap[it.id] = { completed: it.completed, completedAt: it.completedAt };
-    });
-    localStorage.setItem(storageKey, JSON.stringify(stateMap));
-  };
 
   const handleSaveReflection = () => {
     if (!profile) return;
@@ -378,173 +303,141 @@ export default function MealNotepad() {
         </div>
 
         {/* TO-DO CHECKLIST ITEMS (RULED NOTEPAD PAPER STYLE) */}
-        <div className="divide-y divide-stone-200/70 p-4 md:p-8">
-          {items.map((item, idx) => {
-            const isExpanded = expandedId === item.id;
-            return (
-              <div 
-                key={item.id}
-                className={`py-4 px-3 rounded-2xl transition-all ${
-                  item.completed 
-                    ? 'bg-emerald-50/40 border border-emerald-100/60 my-1' 
-                    : 'hover:bg-amber-50/30'
-                }`}
+        <div className="p-4 md:p-8">
+          {items.length === 0 ? (
+            <div className="bg-amber-50/60 rounded-3xl border-2 border-dashed border-amber-300/80 p-8 text-center max-w-lg mx-auto my-4">
+              <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3 shadow-inner">
+                <ChefHat className="w-7 h-7" />
+              </div>
+              <h3 className="font-bold text-stone-900 text-base mb-1">
+                Awaiting Dietician's Meal Plan
+              </h3>
+              <p className="text-xs text-stone-600 leading-relaxed mb-5">
+                Only your clinical dietician can assign and send your daily meal plan. Every meal is prescribed strictly from our approved clinical recipes database. Once sent, your recipes and checklist will appear here.
+              </p>
+              <Link
+                to="/patient/inbox"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-pink-500 hover:brightness-110 text-white font-bold text-xs rounded-xl shadow-sm transition-all"
               >
-                <div className="flex items-start gap-3.5">
-                  {/* Interactive Checkbox */}
-                  <button
-                    type="button"
-                    onClick={() => toggleItem(item.id)}
-                    className={`mt-0.5 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all flex-shrink-0 cursor-pointer ${
+                <MessageCircle className="w-3.5 h-3.5" />
+                Message Lead Dietician
+              </Link>
+            </div>
+          ) : (
+            <div className="divide-y divide-stone-200/70">
+              {items.map((item) => {
+                const isExpanded = expandedId === item.id;
+                return (
+                  <div 
+                    key={item.id}
+                    className={`py-4 px-3 rounded-2xl transition-all ${
                       item.completed 
-                        ? 'bg-emerald-500 border-emerald-600 text-white shadow-sm scale-105' 
-                        : 'border-stone-400 bg-white hover:border-orange-500 hover:scale-105'
+                        ? 'bg-emerald-50/40 border border-emerald-100/60 my-1' 
+                        : 'hover:bg-amber-50/30'
                     }`}
                   >
-                    {item.completed && <CheckCircle2 className="w-4 h-4 stroke-[3]" />}
-                  </button>
+                    <div className="flex items-start gap-3.5">
+                      {/* Interactive Checkbox */}
+                      <button
+                        type="button"
+                        onClick={() => toggleItem(item.id)}
+                        className={`mt-0.5 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all flex-shrink-0 cursor-pointer ${
+                          item.completed 
+                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-sm scale-105' 
+                            : 'border-stone-400 bg-white hover:border-orange-500 hover:scale-105'
+                        }`}
+                      >
+                        {item.completed && <CheckCircle2 className="w-4 h-4 stroke-[3]" />}
+                      </button>
 
-                  {/* Meal Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-                      <span className="text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-stone-100 text-stone-700">
-                        {item.mealType}
-                      </span>
-                      
-                      {item.completed && item.completedAt && (
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> Checked at {item.completedAt}
-                        </span>
-                      )}
-                    </div>
+                      {/* Meal Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                          <span className="text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-stone-100 text-stone-700">
+                            {item.mealType}
+                          </span>
+                          
+                          {item.completed && item.completedAt && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> Checked at {item.completedAt}
+                            </span>
+                          )}
+                        </div>
 
-                    <h3 className={`text-sm md:text-base font-bold transition-all ${
-                      item.completed 
-                        ? 'line-through text-stone-400 font-medium' 
-                        : 'text-stone-900 font-bold'
-                    }`}>
-                      {item.name}
-                    </h3>
+                        <h3 className={`text-sm md:text-base font-bold transition-all ${
+                          item.completed 
+                            ? 'line-through text-stone-400 font-medium' 
+                            : 'text-stone-900 font-bold'
+                        }`}>
+                          {item.name}
+                        </h3>
 
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-stone-500 mt-1">
-                      <span className="font-semibold text-stone-600">Portion: {item.portion}</span>
-                      {item.calories && (
-                        <span>• <span className="font-semibold text-orange-600">{item.calories}</span> kcal</span>
-                      )}
-                      {item.protein && (
-                        <span>• <span className="font-semibold text-stone-700">{item.protein}g</span> Protein</span>
-                      )}
-                      {item.carbs && (
-                        <span>• <span className="font-semibold text-stone-700">{item.carbs}g</span> Carbs</span>
-                      )}
-                    </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-stone-500 mt-1">
+                          <span className="font-semibold text-stone-600">Portion: {item.portion}</span>
+                          {item.calories && (
+                            <span>• <span className="font-semibold text-orange-600">{item.calories}</span> kcal</span>
+                          )}
+                          {item.protein && (
+                            <span>• <span className="font-semibold text-stone-700">{item.protein}g</span> Protein</span>
+                          )}
+                          {item.carbs && (
+                            <span>• <span className="font-semibold text-stone-700">{item.carbs}g</span> Carbs</span>
+                          )}
+                        </div>
 
-                    {/* Expandable Dietician Details / Recipe */}
-                    {(item.notes || item.ingredients || item.recipe) && (
-                      <div className="mt-2">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                          className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 transition-colors"
-                        >
-                          <ChefHat className="w-3 h-3" />
-                          {isExpanded ? 'Hide chef recipe & notes' : 'View dietician instructions & recipe'}
-                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                        </button>
+                        {/* Expandable Dietician Details / Recipe */}
+                        {(item.notes || (item.ingredients && item.ingredients.length > 0) || (item.recipe && item.recipe.length > 0)) && (
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                              className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 transition-colors"
+                            >
+                              <ChefHat className="w-3 h-3" />
+                              {isExpanded ? 'Hide chef recipe & notes' : 'View dietician instructions & recipe'}
+                              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            </button>
 
-                        {isExpanded && (
-                          <div className="mt-3 p-4 bg-white rounded-xl border border-stone-200 text-xs space-y-2.5 shadow-sm animate-in fade-in">
-                            {item.notes && (
-                              <p className="text-stone-700 font-medium leading-relaxed">
-                                <span className="font-bold text-stone-900">Dietician Instructions:</span> {item.notes}
-                              </p>
-                            )}
+                            {isExpanded && (
+                              <div className="mt-3 p-4 bg-white rounded-xl border border-stone-200 text-xs space-y-2.5 shadow-sm animate-in fade-in">
+                                {item.notes && (
+                                  <p className="text-stone-700 font-medium leading-relaxed">
+                                    <span className="font-bold text-stone-900">Dietician Instructions:</span> {item.notes}
+                                  </p>
+                                )}
 
-                            {item.ingredients && item.ingredients.length > 0 && (
-                              <div>
-                                <span className="font-bold text-stone-900">Ingredients:</span>
-                                <ul className="list-disc list-inside mt-1 text-stone-600 space-y-0.5">
-                                  {item.ingredients.map((ing, i) => (
-                                    <li key={i}>{ing}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
+                                {item.ingredients && item.ingredients.length > 0 && (
+                                  <div>
+                                    <span className="font-bold text-stone-900">Ingredients:</span>
+                                    <ul className="list-disc list-inside mt-1 text-stone-600 space-y-0.5">
+                                      {item.ingredients.map((ing, i) => (
+                                        <li key={i}>{ing}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
 
-                            {item.recipe && item.recipe.length > 0 && (
-                              <div>
-                                <span className="font-bold text-stone-900">Preparation:</span>
-                                <ol className="list-decimal list-inside mt-1 text-stone-600 space-y-0.5">
-                                  {item.recipe.map((step, i) => (
-                                    <li key={i}>{step}</li>
-                                  ))}
-                                </ol>
+                                {item.recipe && item.recipe.length > 0 && (
+                                  <div>
+                                    <span className="font-bold text-stone-900">Preparation:</span>
+                                    <ol className="list-decimal list-inside mt-1 text-stone-600 space-y-0.5">
+                                      {item.recipe.map((step, i) => (
+                                        <li key={i}>{step}</li>
+                                      ))}
+                                    </ol>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
                         )}
                       </div>
-                    )}
+                    </div>
                   </div>
-
-                  {/* Delete button if custom item */}
-                  {item.id.startsWith('custom_') && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveCustomItem(item.id)}
-                      className="text-stone-400 hover:text-red-500 p-1 transition-colors"
-                      title="Remove item"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Quick Add Custom Food Item Form */}
-          <div className="pt-4">
-            {showAddCustom ? (
-              <form onSubmit={handleAddCustomItem} className="p-4 bg-white rounded-2xl border border-stone-300 shadow-sm space-y-3">
-                <label className="block text-xs font-bold uppercase tracking-wider text-stone-600">
-                  Add Additional Food or Custom Snack:
-                </label>
-                <input
-                  type="text"
-                  value={customItemText}
-                  onChange={(e) => setCustomItemText(e.target.value)}
-                  placeholder="e.g., Handful of almonds & walnuts (30g)"
-                  className="w-full px-3 py-2 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  autoFocus
-                />
-                <div className="flex items-center gap-2 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddCustom(false)}
-                    className="px-3 py-1.5 text-xs text-stone-500 hover:text-stone-800 font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 text-xs bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl shadow-sm"
-                  >
-                    Add to Checklist
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowAddCustom(true)}
-                className="w-full py-3 border-2 border-dashed border-stone-300 hover:border-orange-400 text-stone-500 hover:text-orange-600 font-bold text-xs rounded-2xl flex items-center justify-center gap-2 transition-all hover:bg-orange-50/30 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                Add an extra meal or snack you ate today
-              </button>
-            )}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* PATIENT REFLECTION / NOTEPAD SCRATCHPAD SECTION */}

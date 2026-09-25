@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getPatients, PatientProfile, MealPlan, saveMealPlan, getStoredRecipesFromDB, RecipeDBItem,
-  savePatientWeekPlan, getAllDraftWeekPlans, PatientWeekPlan, WeekDay, MealSlot, WeekPlanEntry
+  savePatientWeekPlan, getAllDraftWeekPlans, PatientWeekPlan, WeekDay, MealSlot, WeekPlanEntry,
+  buildClinicalMealPlanFromRecipes
 } from '../../services/db';
 import { 
   Loader2, Wand2, Save, BookOpen, Utensils, RefreshCw, 
@@ -137,10 +138,54 @@ export default function MealPlanGenerator() {
         entries,
         status
       };
-      await savePatientWeekPlan(plan);
+      await savePatientWeekPlan(plan, 'dietician');
+
+      // Also synchronize published MealPlan so all patient endpoints match
+      if (status === 'published') {
+        const daysMap: Record<number, MealItem[]> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
+        const dayNames: WeekDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        dayNames.forEach((dName, dIdx) => {
+          const dayNum = dIdx + 1;
+          const daySlots = kbWeekPlan[dName] || {};
+          Object.entries(daySlots).forEach(([slot, val]) => {
+            if (val) {
+              daysMap[dayNum].push({
+                type: slot,
+                name: val.recipe.name,
+                portion: val.portion || '1 serving',
+                calories: Number(val.recipe.calories) || 300,
+                protein: Number(val.recipe.protein) || 15,
+                carbs: Number(val.recipe.carbs) || 35,
+                fat: Number(val.recipe.fat) || 8,
+                prepTime: val.recipe.prepTime || '10 mins',
+                cookTime: val.recipe.cookTime || '10 mins',
+                ingredients: val.recipe.ingredients || [],
+                recipe: val.recipe.recipe || [],
+                notes: val.notes || val.recipe.clinicalFocus
+              });
+            }
+          });
+        });
+        const syncedDays = Object.entries(daysMap).map(([dNum, mList]) => ({
+          dayNumber: parseInt(dNum, 10),
+          meals: mList
+        }));
+        const syncMealPlan: MealPlan = {
+          patientId: selectedPatientId,
+          startDate: weekStart,
+          endDate: new Date(new Date(weekStart).getTime() + 7 * 86400000).toISOString().split('T')[0],
+          status: 'published',
+          targets,
+          days: syncedDays as any,
+          createdAt: new Date()
+        };
+        await saveMealPlan(syncMealPlan, 'dietician');
+      }
+
       alert(`Week plan ${status === 'published' ? 'published to patient!' : 'saved as draft!'}`);
       if (status === 'published') navigate(`/dietician/patients/${selectedPatientId}`);
     } catch (e) {
+      console.error(e);
       alert('Failed to save week plan.');
     } finally {
       setKbSaving(false);
@@ -202,22 +247,50 @@ export default function MealPlanGenerator() {
     setGenerating(true);
     setGeneratedPlan(null);
     try {
-      const res = await fetch('/api/ai/meal-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patientProfile: selectedPatient,
-          targets,
-          instructions
-        })
-      });
-      if (!res.ok) throw new Error('Failed to generate');
-      const data = await res.json();
-      setGeneratedPlan(data);
+      // 1. Fetch pre-provided recipes database
+      const pool = dbRecipes.length > 0 ? dbRecipes : await getStoredRecipesFromDB(selectedPatient?.dietaryType);
+
+      // Attempt AI generation with strict instruction to select only from pre-provided recipes
+      let planGenerated: DayPlan[] | null = null;
+      try {
+        const res = await fetch('/api/ai/meal-plan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patientProfile: selectedPatient,
+            targets,
+            instructions,
+            availableRecipes: pool
+          })
+        });
+        if (res.ok) {
+          const raw = await res.json();
+          if (Array.isArray(raw) && raw.length === 7) {
+            // Verify every meal exists in pre-provided recipes
+            const allValid = raw.every((d: any) =>
+              Array.isArray(d.meals) &&
+              d.meals.length > 0 &&
+              d.meals.every((m: any) => pool.some(r => r.name.toLowerCase() === m.name.toLowerCase()))
+            );
+            if (allValid) {
+              planGenerated = raw;
+            }
+          }
+        }
+      } catch (aiErr) {
+        console.warn('AI endpoint note; utilizing clinical recipe matching:', aiErr);
+      }
+
+      // If AI didn't return or hallucinated items outside pre-provided recipes, assemble directly from pre-provided recipes
+      if (!planGenerated) {
+        planGenerated = buildClinicalMealPlanFromRecipes(pool, selectedPatient, targets) as DayPlan[];
+      }
+
+      setGeneratedPlan(planGenerated);
       setActiveDayTab(1);
     } catch (e) {
       console.error(e);
-      alert('Failed to generate meal plan. The AI might be overloaded or returning invalid JSON.');
+      alert('Failed to generate meal plan.');
     } finally {
       setGenerating(false);
     }
@@ -229,9 +302,8 @@ export default function MealPlanGenerator() {
     const updated = [...generatedPlan];
     const dayIdx = updated.findIndex((d) => d.dayNumber === swapTarget.dayNumber);
     if (dayIdx !== -1) {
-      const existingMeal = updated[dayIdx].meals[swapTarget.mealIndex];
-      updated[dayIdx].meals[swapTarget.mealIndex] = {
-        type: existingMeal?.type || 'Meal',
+      const newMealObj: MealItem = {
+        type: swapTarget.mealIndex >= 0 ? (updated[dayIdx].meals[swapTarget.mealIndex]?.type || 'Meal') : 'Snack',
         name: dbRecipe.name,
         portion: '1 portion',
         calories: Number(dbRecipe.calories) || 350,
@@ -242,8 +314,14 @@ export default function MealPlanGenerator() {
         cookTime: dbRecipe.cookTime || '15 mins',
         ingredients: dbRecipe.ingredients || [],
         recipe: dbRecipe.recipe || [],
-        notes: `Assigned from Clinical Recipe Database (${dbRecipe.dietaryType || 'Standard'})`
+        notes: `Clinical Approved Recipe (${dbRecipe.dietaryType || 'Standard'}) — ${dbRecipe.clinicalFocus || 'High Satiety'}`
       };
+
+      if (swapTarget.mealIndex >= 0) {
+        updated[dayIdx].meals[swapTarget.mealIndex] = newMealObj;
+      } else {
+        updated[dayIdx].meals.push(newMealObj);
+      }
       setGeneratedPlan(updated);
     }
     setSwapTarget(null);
@@ -271,24 +349,8 @@ export default function MealPlanGenerator() {
   };
 
   const handleAddMeal = (dayNumber: number) => {
-    if (!generatedPlan) return;
-    const updated = [...generatedPlan];
-    const dayIdx = updated.findIndex(d => d.dayNumber === dayNumber);
-    if (dayIdx !== -1) {
-      const newMeal: MealItem = {
-        type: 'Snack',
-        name: 'New Custom Meal',
-        portion: '1 serving',
-        calories: 200,
-        protein: 10,
-        carbs: 25,
-        fat: 6,
-        ingredients: ['Custom ingredient'],
-        recipe: ['Prepare as recommended.']
-      };
-      updated[dayIdx].meals.push(newMeal);
-      setGeneratedPlan(updated);
-    }
+    // Open recipe selector to only allow pre-provided recipes
+    setSwapTarget({ dayNumber, mealIndex: -1 });
   };
 
   const handleCloneDay = (fromDayNumber: number) => {
@@ -321,7 +383,7 @@ export default function MealPlanGenerator() {
         days: generatedPlan as any,
         createdAt: new Date()
       };
-      await saveMealPlan(newPlan);
+      await saveMealPlan(newPlan, 'dietician');
       alert(`Meal plan successfully ${assignStatus === 'published' ? 'approved & published to client!' : 'saved as draft!'}`);
       navigate(`/dietician/patients/${selectedPatientId}`);
     } catch (e) {
@@ -647,7 +709,11 @@ export default function MealPlanGenerator() {
 
               {swapTarget && (
                 <div className="mb-3 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 flex justify-between items-center">
-                  <span>Replacing <strong>Day {swapTarget.dayNumber} Meal {swapTarget.mealIndex + 1}</strong></span>
+                  <span>
+                    {swapTarget.mealIndex >= 0 
+                      ? <>Replacing <strong>Day {swapTarget.dayNumber} Meal {swapTarget.mealIndex + 1}</strong></> 
+                      : <>Adding approved recipe to <strong>Day {swapTarget.dayNumber}</strong></>}
+                  </span>
                   <button onClick={() => setSwapTarget(null)} className="font-bold underline text-amber-700">Cancel</button>
                 </div>
               )}
@@ -669,7 +735,9 @@ export default function MealPlanGenerator() {
                         className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors flex items-center justify-center gap-1 shadow-xs"
                       >
                         <Check className="w-3 h-3" />
-                        Swap Into Day {swapTarget.dayNumber} Meal {swapTarget.mealIndex + 1}
+                        {swapTarget.mealIndex >= 0 
+                          ? `Swap Into Day ${swapTarget.dayNumber} Meal ${swapTarget.mealIndex + 1}`
+                          : `Add to Day ${swapTarget.dayNumber}`}
                       </button>
                     ) : (
                       <button 
@@ -875,10 +943,10 @@ export default function MealPlanGenerator() {
                 {/* Add Meal to Day Button */}
                 <button
                   onClick={() => handleAddMeal(activeDayTab)}
-                  className="w-full py-3 border border-dashed border-stone-300 rounded-xl text-xs font-bold text-stone-600 hover:text-stone-900 hover:border-stone-400 hover:bg-stone-50 transition-all flex items-center justify-center gap-1.5"
+                  className="w-full py-3 border border-dashed border-orange-300 rounded-xl text-xs font-bold text-orange-700 hover:text-orange-900 hover:border-orange-400 hover:bg-orange-50/50 transition-all flex items-center justify-center gap-1.5"
                 >
                   <Plus className="w-4 h-4 text-orange-500" />
-                  Add Custom Meal / Snack to Day {activeDayTab}
+                  Add Approved Clinical Recipe to Day {activeDayTab}
                 </button>
               </div>
             </div>

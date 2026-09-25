@@ -6,6 +6,10 @@
       "destination": "/api/ai/scan-food"
     },
     {
+      "source": "/api/ai/meal-plan",
+      "destination": "/api/ai/meal-plan"
+    },
+    {
       "source": "/api/ai/chat",
       "destination": "/api/ai/chat"
     },

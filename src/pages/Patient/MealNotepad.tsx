@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMealPlans, MealPlan, Meal } from '../../services/db';
+import { isPatientSubscribed } from '../../services/subscription';
+import SubscriptionPaywall from '../../components/SubscriptionPaywall';
 import { 
   CheckSquare, 
   Square, 
@@ -15,7 +17,8 @@ import {
   Save, 
   ChefHat, 
   FileText,
-  AlertCircle
+  AlertCircle,
+  Lock
 } from 'lucide-react';
 
 interface ChecklistMealItem {
@@ -44,12 +47,17 @@ export default function MealNotepad() {
   const [customItemText, setCustomItemText] = useState('');
   const [showAddCustom, setShowAddCustom] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [subscribed, setSubscribed] = useState(() => isPatientSubscribed(profile));
 
   const todayStr = new Date().toISOString().split('T')[0];
   const storageKey = `nutrisnap_meals_checklist_${profile?.uid}_${todayStr}`;
   const reflectionKey = `nutrisnap_meals_reflection_${profile?.uid}_${todayStr}`;
 
   useEffect(() => {
+    setSubscribed(isPatientSubscribed(profile));
+    const handleSubChange = () => setSubscribed(isPatientSubscribed(profile));
+    window.addEventListener('nutrisnap:subscription_change', handleSubChange);
+
     async function loadPlanAndChecklist() {
       if (!profile) return;
       try {
@@ -180,6 +188,8 @@ export default function MealNotepad() {
     }
 
     loadPlanAndChecklist();
+
+    return () => window.removeEventListener('nutrisnap:subscription_change', handleSubChange);
   }, [profile, todayStr]);
 
   const toggleItem = (id: string) => {
@@ -258,6 +268,19 @@ export default function MealNotepad() {
     setNotesSavedToast(true);
     setTimeout(() => setNotesSavedToast(false), 3000);
   };
+
+  if (loading) {
+    return <div className="p-8 text-center text-stone-500 font-medium">Loading your meals...</div>;
+  }
+
+  if (!subscribed) {
+    return (
+      <SubscriptionPaywall 
+        featureName="Today's Meals & Personalized Clinical Recipes" 
+        onUnlocked={() => setSubscribed(true)} 
+      />
+    );
+  }
 
   const completedCount = items.filter(i => i.completed).length;
   const progressPercent = items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0;

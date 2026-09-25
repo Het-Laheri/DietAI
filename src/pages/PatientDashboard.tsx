@@ -1,7 +1,8 @@
+import { useEffect, useState } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
-import { Home, ClipboardList, Camera, Activity, MessageCircle, LogOut, CreditCard } from 'lucide-react';
+import { Home, ClipboardList, Camera, Activity, MessageCircle, LogOut, CreditCard, Lock } from 'lucide-react';
 import { isPatientSubscribed } from '../services/subscription';
 import PatientOverview from './Patient/PatientOverview';
 import MealNotepad from './Patient/MealNotepad';
@@ -14,6 +15,14 @@ export default function PatientDashboard() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [isSubscribed, setIsSubscribed] = useState(() => isPatientSubscribed(profile));
+
+  useEffect(() => {
+    setIsSubscribed(isPatientSubscribed(profile));
+    const handleSubChange = () => setIsSubscribed(isPatientSubscribed(profile));
+    window.addEventListener('nutrisnap:subscription_change', handleSubChange);
+    return () => window.removeEventListener('nutrisnap:subscription_change', handleSubChange);
+  }, [profile]);
 
   const handleLogout = async () => {
     await auth.signOut();
@@ -22,7 +31,7 @@ export default function PatientDashboard() {
 
   const navItems = [
     { name: 'Dashboard', path: '/patient', icon: Home },
-    { name: "Today's Meals", path: '/patient/meals', icon: ClipboardList },
+    { name: "Today's Meals", path: '/patient/meals', icon: ClipboardList, locked: !isSubscribed },
     { name: 'AI Scanner', path: '/patient/scanner', icon: Camera },
     { name: 'Progress', path: '/patient/progress', icon: Activity },
     { name: 'Ask Dietician', path: '/patient/inbox', icon: MessageCircle },
@@ -53,6 +62,9 @@ export default function PatientDashboard() {
               >
                 <Icon className={`w-5 h-5 md:w-4 md:h-4 ${active ? 'text-pink-500' : 'text-stone-400'}`} />
                 <span className="hidden md:inline">{item.name}</span>
+                {item.locked && (
+                  <Lock className="w-3 h-3 text-amber-500 ml-auto hidden md:inline" />
+                )}
               </Link>
             );
           })}
@@ -68,7 +80,7 @@ export default function PatientDashboard() {
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="text-xs text-stone-500">Patient</span>
                 <Link to="/patient/subscription" className="hover:opacity-80 transition-opacity">
-                  {isPatientSubscribed(profile) ? (
+                  {isSubscribed ? (
                     <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
                       ★ Premium
                     </span>

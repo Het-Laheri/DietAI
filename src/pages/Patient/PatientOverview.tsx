@@ -37,8 +37,16 @@ export default function PatientOverview() {
   const [loading, setLoading] = useState(true);
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const isSubscribed = isPatientSubscribed(profile);
+  const [subscribed, setSubscribed] = useState(() => isPatientSubscribed(profile));
+  const isSubscribed = subscribed;
   const activeSub = getLocalSubscription(profile?.uid);
+
+  useEffect(() => {
+    setSubscribed(isPatientSubscribed(profile));
+    const handleSubChange = () => setSubscribed(isPatientSubscribed(profile));
+    window.addEventListener('nutrisnap:subscription_change', handleSubChange);
+    return () => window.removeEventListener('nutrisnap:subscription_change', handleSubChange);
+  }, [profile]);
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -121,13 +129,23 @@ export default function PatientOverview() {
         </div>
 
         <div className="relative z-10 flex items-center gap-3">
-          <Link
-            to="/patient/meals"
-            className="px-5 py-3 bg-white text-orange-600 hover:bg-orange-50 font-black rounded-xl text-xs md:text-sm shadow-md transition-all flex items-center gap-2 whitespace-nowrap"
-          >
-            <ClipboardList className="w-4 h-4" />
-            Today's Meal Checklist
-          </Link>
+          {subscribed ? (
+            <Link
+              to="/patient/meals"
+              className="px-5 py-3 bg-white text-orange-600 hover:bg-orange-50 font-black rounded-xl text-xs md:text-sm shadow-md transition-all flex items-center gap-2 whitespace-nowrap"
+            >
+              <ClipboardList className="w-4 h-4" />
+              Today's Meal Checklist
+            </Link>
+          ) : (
+            <Link
+              to="/patient/meals"
+              className="px-5 py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-stone-950 font-black rounded-xl text-xs md:text-sm shadow-md transition-all flex items-center gap-2 whitespace-nowrap"
+            >
+              <Lock className="w-4 h-4" />
+              Unlock Today's Meals
+            </Link>
+          )}
         </div>
       </div>
 
@@ -179,38 +197,62 @@ export default function PatientOverview() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         {/* 1. Today's Meals Notepad Checklist Card */}
-        <div className="bg-white rounded-3xl border border-stone-200/80 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+        <div className="bg-white rounded-3xl border border-stone-200/80 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden">
+          {!subscribed && (
+            <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black flex items-center gap-1">
+              <Lock className="w-3 h-3 text-amber-700" />
+              PRO
+            </div>
+          )}
           <div>
             <div className="flex items-center justify-between mb-4">
               <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center shadow-inner">
                 <Utensils className="w-5 h-5" />
               </div>
-              <span className="text-xs font-bold text-stone-500">
-                {checkedItemsCount} of {totalAssignedMeals} Completed
-              </span>
+              {subscribed ? (
+                <span className="text-xs font-bold text-stone-500">
+                  {checkedItemsCount} of {totalAssignedMeals} Completed
+                </span>
+              ) : (
+                <span className="text-xs font-bold text-amber-600 flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Locked
+                </span>
+              )}
             </div>
 
             <h3 className="font-bold text-stone-900 text-base mb-1">Dietician's Meal Checklist</h3>
             <p className="text-xs text-stone-500 mb-4">
-              Your daily meals formatted like an interactive notepad. Check off each item as you eat.
+              {subscribed 
+                ? "Your daily meals formatted like an interactive notepad. Check off each item as you eat."
+                : "Unlock your personalized dietician meal plan, meal checklists, and clinical recipes."}
             </p>
 
             {/* Mini Progress Bar */}
             <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden mb-4">
               <div 
-                className="bg-gradient-to-r from-orange-500 to-pink-500 h-full rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, (checkedItemsCount / totalAssignedMeals) * 100)}%` }}
+                className={`h-full rounded-full transition-all duration-500 ${subscribed ? 'bg-gradient-to-r from-orange-500 to-pink-500' : 'bg-stone-300'}`}
+                style={{ width: subscribed ? `${Math.min(100, (checkedItemsCount / totalAssignedMeals) * 100)}%` : '20%' }}
               />
             </div>
           </div>
 
-          <Link
-            to="/patient/meals"
-            className="w-full py-2.5 px-4 bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors"
-          >
-            Open Meal Notepad
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
+          {subscribed ? (
+            <Link
+              to="/patient/meals"
+              className="w-full py-2.5 px-4 bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors"
+            >
+              Open Meal Notepad
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          ) : (
+            <Link
+              to="/patient/meals"
+              className="w-full py-2.5 px-4 bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              Unlock Today's Meals
+            </Link>
+          )}
         </div>
 
         {/* 2. Interactive Water Tracker Card */}

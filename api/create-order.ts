@@ -1,25 +1,41 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Razorpay from 'razorpay';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
+  // CORS Headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed. Use POST.' });
   }
 
   try {
+    // Parse body if received as string or Buffer
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch {}
+    } else if (Buffer.isBuffer(body)) {
+      try { body = JSON.parse(body.toString('utf-8')); } catch {}
+    }
+
     const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TgHwgxTVyxnCry';
     const key_secret = process.env.RAZORPAY_KEY_SECRET || 'hLGoXT0tsAHstxufVieSXqCN';
 
     if (!key_id || !key_secret) {
       return res.status(401).json({
-        error: 'Razorpay authentication credentials missing. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in environment variables.'
+        error: 'Razorpay credentials not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in environment variables.'
       });
     }
 
-    const { amount, currency = 'INR', receipt, notes } = req.body || {};
+    const { amount, currency = 'INR', receipt, notes } = body || {};
 
-    // Validate minimum amount: 100 paise
+    // Validate minimum amount: 100 paise (₹1.00)
     const numericAmount = Number(amount);
     if (!numericAmount || isNaN(numericAmount) || numericAmount < 100) {
       return res.status(400).json({
@@ -27,7 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const razorpay = new Razorpay({ key_id, key_secret });
+    const RazorpayClass: any = (Razorpay as any)?.default || Razorpay;
+    const razorpay = new RazorpayClass({ key_id, key_secret });
 
     const orderOptions = {
       amount: Math.round(numericAmount),
@@ -57,8 +74,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
     return res.status(500).json({
-      error: 'Failed to create payment order with Razorpay',
-      details: error?.message || error
+      error: error?.message || 'Failed to create payment order with Razorpay',
+      details: error?.error || error
     });
   }
 }

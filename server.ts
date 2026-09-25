@@ -288,7 +288,8 @@ const getRazorpayClient = () => {
   if (!key_id || !key_secret) {
     return null;
   }
-  return new Razorpay({ key_id, key_secret });
+  const RazorpayClass: any = (Razorpay as any)?.default || Razorpay;
+  return new RazorpayClass({ key_id, key_secret });
 };
 
 // 1. Create Order Endpoint

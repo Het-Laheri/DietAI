@@ -20,9 +20,23 @@ export interface PatientProfile {
   mobile: string;
   dob: string;
   gender: string;
+  age?: number;
+  lifeStage?: 'Adult' | 'Geriatric' | 'Gynaec' | 'Pediatrics' | string;
   heightCm: number;
   currentWeightKg: number;
   targetWeightKg: number;
+  idealBodyWeightKg?: number;
+  bmi?: number;
+  bmiClassification?: string;
+  weightManagement?: {
+    primaryGoal: string;
+    targetPace?: string;
+    specificFocus?: string[];
+    targetDifferenceKg?: number;
+  };
+  medicalHistory?: string[];
+  diagnosisOrProcedure?: string;
+  occupation?: string;
   activityLevel: string;
   dietaryType: string;
   goals?: string[];
@@ -39,12 +53,12 @@ export interface PatientProfile {
     medications: string;
     notes: string;
   };
+  allergies?: string[];
   status: 'active' | 'inactive';
   needsAttention: boolean;
   adherencePercentage?: number;
   lastConsultationDate?: string;
   nextFollowUpDate?: string;
-  age?: number;
   createdAt?: any;
 }
 
@@ -70,6 +84,7 @@ export interface MealPlan {
     fat: number;
   };
   status: 'draft' | 'published';
+  instructions?: string;
   days: MealPlanDay[];
   createdAt?: any;
 }
@@ -212,18 +227,43 @@ export async function createDietician(email: string, password: string, name: str
   return userCredential.user;
 }
 
+export interface PatientSurveyData {
+  mobile?: string;
+  dob?: string;
+  gender?: string;
+  age?: number;
+  lifeStage?: string;
+  heightCm?: number;
+  currentWeightKg?: number;
+  targetWeightKg?: number;
+  idealBodyWeightKg?: number;
+  bmi?: number;
+  bmiClassification?: string;
+  weightManagement?: {
+    primaryGoal: string;
+    targetPace?: string;
+    specificFocus?: string[];
+    targetDifferenceKg?: number;
+  };
+  medicalHistory?: string[];
+  diagnosisOrProcedure?: string;
+  occupation?: string;
+  dietaryType?: string;
+  activityLevel?: string;
+  goals?: string[];
+  goalDetails?: Record<string, string[]>;
+  conditions?: string;
+  allergies?: string;
+  favorites?: string;
+  dislikes?: string;
+  cuisine?: string;
+}
+
 export async function registerPatient(
   email: string, 
   password: string, 
   name: string,
-  surveyData?: {
-    goals?: string[];
-    goalDetails?: Record<string, string[]>;
-    dietaryType?: string;
-    activityLevel?: string;
-    conditions?: string;
-    allergies?: string;
-  }
+  surveyData?: PatientSurveyData
 ) {
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(userCredential.user, { displayName: name });
@@ -238,32 +278,64 @@ export async function registerPatient(
   };
   await setDoc(doc(db, 'users', uid), userDoc);
 
+  const height = Number(surveyData?.heightCm) || 165;
+  const currentWeight = Number(surveyData?.currentWeightKg) || 65;
+  const targetWeight = Number(surveyData?.targetWeightKg) || currentWeight;
+  const gender = surveyData?.gender || 'Female';
+  
+  // Broca's clinical index from assessment form: Male: Ht - 100, Female: Ht - 105
+  const idealBodyWeight = Number(surveyData?.idealBodyWeightKg) || (gender === 'Male' ? Math.max(30, height - 100) : Math.max(30, height - 105));
+  const heightM = height / 100;
+  const calculatedBmi = Number((currentWeight / (heightM * heightM)).toFixed(1));
+
+  let bmiClass = 'Normal (18.5 - 24.9)';
+  if (calculatedBmi < 18.5) bmiClass = 'Underweight (< 18.4)';
+  else if (calculatedBmi < 25) bmiClass = 'Normal (18.5 - 24.9)';
+  else if (calculatedBmi < 30) bmiClass = 'Overweight (25 - 29.9)';
+  else if (calculatedBmi < 35) bmiClass = 'Obesity Grade I (30 - 34.9)';
+  else if (calculatedBmi < 40) bmiClass = 'Obesity Grade II (35 - 39.9)';
+  else bmiClass = 'Morbid Obesity (> 40)';
+
   const profile: PatientProfile = {
     id: uid,
     dieticianId: 'default_dietician',
     email,
     name,
-    mobile: '',
-    dob: '',
-    gender: '',
-    heightCm: 170,
-    currentWeightKg: 70,
-    targetWeightKg: 70,
+    mobile: surveyData?.mobile || '',
+    dob: surveyData?.dob || '',
+    gender,
+    age: Number(surveyData?.age) || 32,
+    lifeStage: surveyData?.lifeStage || 'Adult',
+    heightCm: height,
+    currentWeightKg: currentWeight,
+    targetWeightKg: targetWeight,
+    idealBodyWeightKg: idealBodyWeight,
+    bmi: calculatedBmi,
+    bmiClassification: surveyData?.bmiClassification || bmiClass,
+    weightManagement: surveyData?.weightManagement || {
+      primaryGoal: 'Weight Loss & Fat Reduction',
+      targetPace: 'Steady & Sustainable (0.5 kg/week)',
+      specificFocus: ['Visceral & Belly Fat Reduction', 'Preventing Weight Rebound'],
+      targetDifferenceKg: Math.abs(currentWeight - targetWeight)
+    },
+    medicalHistory: surveyData?.medicalHistory || [],
+    diagnosisOrProcedure: surveyData?.diagnosisOrProcedure || '',
+    occupation: surveyData?.occupation || 'Business / Employed',
     activityLevel: surveyData?.activityLevel || 'Moderate',
     dietaryType: surveyData?.dietaryType || 'Vegetarian',
-    goals: surveyData?.goals || [],
+    goals: surveyData?.goals || ['Weight Loss & Fat Reduction', 'Metabolic Health'],
     goalDetails: surveyData?.goalDetails || {},
     preferences: {
-      favorites: '',
-      dislikes: '',
-      cuisine: '',
+      favorites: surveyData?.favorites || '',
+      dislikes: surveyData?.dislikes || '',
+      cuisine: surveyData?.cuisine || '',
       budget: ''
     },
     healthInfo: {
-      conditions: surveyData?.conditions || '',
-      allergies: surveyData?.allergies || '',
+      conditions: surveyData?.conditions || (surveyData?.medicalHistory ? surveyData.medicalHistory.join(', ') : ''),
+      allergies: surveyData?.allergies || 'None',
       medications: '',
-      notes: ''
+      notes: surveyData?.diagnosisOrProcedure ? `Diagnosis / Procedure: ${surveyData.diagnosisOrProcedure}` : ''
     },
     status: 'active',
     needsAttention: false,

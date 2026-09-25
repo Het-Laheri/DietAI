@@ -224,7 +224,7 @@ export default function MealPlanGenerator() {
         endDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
         status: assignStatus,
         targets,
-        days: generatedPlan,
+        days: generatedPlan as any,
         createdAt: new Date()
       };
       await saveMealPlan(newPlan);
@@ -308,8 +308,8 @@ export default function MealPlanGenerator() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-stone-500 text-[11px]">Conditions & Allergies:</span>
-                  <span className={`font-semibold ${selectedPatient.allergies?.length ? 'text-rose-600' : 'text-stone-700'}`}>
-                    {selectedPatient.allergies?.join(', ') || selectedPatient.healthInfo?.conditions || 'None flagged'}
+                  <span className={`font-semibold ${(selectedPatient.allergies?.length || selectedPatient.healthInfo?.allergies) ? 'text-rose-600' : 'text-stone-700'}`}>
+                    {(Array.isArray(selectedPatient.allergies) ? selectedPatient.allergies.join(', ') : selectedPatient.healthInfo?.allergies) || selectedPatient.healthInfo?.conditions || 'None flagged'}
                   </span>
                 </div>
               </div>

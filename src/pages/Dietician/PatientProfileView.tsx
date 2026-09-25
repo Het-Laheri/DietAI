@@ -51,8 +51,12 @@ import {
   RefreshCw,
   Search,
   ChevronDown,
-  ChevronUp
-, Wand2 } from 'lucide-react';
+  ChevronUp,
+  Wand2,
+  Scale,
+  Stethoscope,
+  Briefcase
+} from 'lucide-react';
 
 type ActiveTab = 'overview' | 'food_logs' | 'meal_plans' | 'progress' | 'chat' | 'notes' | 'reports';
 
@@ -165,10 +169,22 @@ export default function PatientProfileView() {
 
   const adherence = profile.adherencePercentage ?? (profile.needsAttention ? 52 : 84);
 
-  // Height & BMI
+  // Height & Clinical Anthropometrics
   const heightM = (profile.heightCm || 170) / 100;
   const currentWeight = profile.currentWeightKg || 70;
   const bmi = (currentWeight / (heightM * heightM)).toFixed(1);
+  const bmiNum = Number(bmi);
+  const idealBodyWeight = profile.idealBodyWeightKg || (profile.gender === 'Male' ? Math.max(30, (profile.heightCm || 170) - 100) : Math.max(30, (profile.heightCm || 165) - 105));
+
+  let bmiClassification = profile.bmiClassification;
+  if (!bmiClassification) {
+    if (bmiNum < 18.5) bmiClassification = 'Underweight (< 18.4)';
+    else if (bmiNum < 25) bmiClassification = 'Normal (18.5 - 24.9)';
+    else if (bmiNum < 30) bmiClassification = 'Overweight (25 - 29.9)';
+    else if (bmiNum < 35) bmiClassification = 'Obesity Grade I (30 - 34.9)';
+    else if (bmiNum < 40) bmiClassification = 'Obesity Grade II (35 - 39.9)';
+    else bmiClassification = 'Morbid Obesity (> 40)';
+  }
 
   // Handlers
   const handleAddNote = async (e: React.FormEvent) => {
@@ -314,23 +330,24 @@ export default function PatientProfileView() {
               </div>
 
               <p className="text-xs text-stone-500 mt-1">
-                {profile.email} • {profile.mobile || 'No phone recorded'} • Gender: {profile.gender || 'Not specified'}
+                {profile.email} • {profile.mobile || 'No phone recorded'} • {profile.age ? `${profile.age} yrs • ` : ''}Gender: {profile.gender || 'Not specified'} • Life Stage: <span className="font-bold text-stone-800">{profile.lifeStage || 'Adult'}</span> • Occupation: {profile.occupation || 'Employed'}
               </p>
 
               {/* Clinical Snapshot Tags */}
               <div className="flex flex-wrap items-center gap-4 text-xs text-stone-600 mt-3 pt-3 border-t border-stone-100">
                 <div>
                   <span className="text-stone-400 font-medium">Primary Goal: </span>
-                  <span className="font-bold text-stone-900">{profile.goals?.[0] || 'Metabolic Optimization'}</span>
+                  <span className="font-bold text-stone-900">{profile.weightManagement?.primaryGoal || profile.goals?.[0] || 'Metabolic Optimization'}</span>
                 </div>
                 <div>
                   <span className="text-stone-400 font-medium">Current: </span>
                   <span className="font-bold text-stone-900">{currentWeight} kg</span>
-                  <span className="text-stone-400"> (BMI {bmi})</span>
+                  <span className="text-stone-400 font-medium"> (BMI {bmi} • {bmiClassification.split(' ')[0]})</span>
                 </div>
                 <div>
                   <span className="text-stone-400 font-medium">Target: </span>
                   <span className="font-bold text-orange-600">{profile.targetWeightKg || currentWeight} kg</span>
+                  <span className="text-stone-400"> (Broca IBW: ~{idealBodyWeight} kg)</span>
                 </div>
                 <div>
                   <span className="text-stone-400 font-medium">Adherence: </span>
@@ -409,37 +426,112 @@ export default function PatientProfileView() {
       {/* 1. OVERVIEW TAB */}
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Clinical Dossier */}
+          {/* 1. Anthropometric & Weight Management Strategy (Hospital Form Standards) */}
           <div className="bg-white rounded-3xl border border-stone-200/80 p-6 shadow-sm space-y-4">
-            <h3 className="font-serif font-bold text-stone-900 text-base flex items-center gap-2">
-              <User className="w-4 h-4 text-orange-500" />
-              Patient Dossier & Health Info
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif font-bold text-stone-900 text-base flex items-center gap-2">
+                <Scale className="w-4 h-4 text-orange-500" />
+                Anthropometrics & Weight Plan
+              </h3>
+              <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">
+                Broca Protocol
+              </span>
+            </div>
+
+            <div className="space-y-3 text-xs divide-y divide-stone-100">
+              <div className="pt-2 first:pt-0 flex justify-between items-center">
+                <span className="text-stone-500">Height & Weight:</span>
+                <span className="font-bold text-stone-900">{profile.heightCm} cm • {currentWeight} kg</span>
+              </div>
+              <div className="pt-2 flex justify-between items-center">
+                <span className="text-stone-500">Clinical BMI:</span>
+                <div className="text-right">
+                  <span className="font-black text-stone-900">{bmi} kg/m²</span>
+                  <span className="text-[10px] font-bold text-stone-600 block">
+                    {bmiClassification}
+                  </span>
+                </div>
+              </div>
+              <div className="pt-2 flex justify-between items-center">
+                <span className="text-stone-500">Broca's Ideal Weight (IBW):</span>
+                <span className="font-black text-emerald-700">~{idealBodyWeight} kg</span>
+              </div>
+              <div className="pt-2 flex justify-between items-center">
+                <span className="text-stone-500">Target Goal Weight:</span>
+                <div className="text-right">
+                  <span className="font-black text-orange-600">{profile.targetWeightKg || currentWeight} kg</span>
+                  <span className="text-[10px] text-stone-500 block">
+                    {currentWeight !== (profile.targetWeightKg || currentWeight) 
+                      ? `${Math.abs(Number((currentWeight - (profile.targetWeightKg || currentWeight)).toFixed(1)))} kg ${currentWeight > (profile.targetWeightKg || currentWeight) ? 'to lose' : 'to gain'}`
+                      : 'Maintain current weight'}
+                  </span>
+                </div>
+              </div>
+              <div className="pt-2 flex justify-between items-center">
+                <span className="text-stone-500">Target Pace:</span>
+                <span className="font-bold text-stone-800">{profile.weightManagement?.targetPace || 'Steady (0.5 kg / week)'}</span>
+              </div>
+              {profile.weightManagement?.specificFocus && profile.weightManagement.specificFocus.length > 0 && (
+                <div className="pt-2">
+                  <span className="text-stone-500 block mb-1.5 font-medium">Specific Focus Areas:</span>
+                  <div className="flex flex-wrap gap-1">
+                    {profile.weightManagement.specificFocus.map((f, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded-md bg-orange-50 border border-orange-200 text-orange-800 text-[10px] font-bold">
+                        {f}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Clinical Screening & Medical History (From Sheet) */}
+          <div className="bg-white rounded-3xl border border-stone-200/80 p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif font-bold text-stone-900 text-base flex items-center gap-2">
+                <Stethoscope className="w-4 h-4 text-orange-500" />
+                Medical Screening & History
+              </h3>
+              <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-stone-100 text-stone-700">
+                {profile.lifeStage || 'Adult'}
+              </span>
+            </div>
 
             <div className="space-y-3 text-xs divide-y divide-stone-100">
               <div className="pt-2 first:pt-0 flex justify-between">
-                <span className="text-stone-500">Height:</span>
-                <span className="font-bold text-stone-900">{profile.heightCm} cm</span>
+                <span className="text-stone-500">Demographics:</span>
+                <span className="font-bold text-stone-900">
+                  {profile.age ? `${profile.age} yrs • ` : ''}{profile.gender || 'Not stated'}
+                </span>
               </div>
               <div className="pt-2 flex justify-between">
-                <span className="text-stone-500">Activity Level:</span>
-                <span className="font-bold text-stone-900">{profile.activityLevel || 'Moderate'}</span>
+                <span className="text-stone-500">Occupation:</span>
+                <span className="font-bold text-stone-900 text-right">{profile.occupation || 'Business / Employed'}</span>
               </div>
               <div className="pt-2 flex justify-between">
-                <span className="text-stone-500">Conditions:</span>
-                <span className="font-bold text-stone-900 text-right">{profile.healthInfo?.conditions || 'None reported'}</span>
+                <span className="text-stone-500">Diagnosis / Procedure:</span>
+                <span className="font-bold text-stone-900 text-right">{profile.diagnosisOrProcedure || 'None noted'}</span>
+              </div>
+              <div className="pt-2">
+                <span className="text-stone-500 block mb-1 font-medium">Pre-existing Conditions:</span>
+                <div className="flex flex-wrap gap-1">
+                  {(profile.medicalHistory?.length ? profile.medicalHistory : [profile.healthInfo?.conditions || 'None reported']).map((cond, i) => (
+                    <span key={i} className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-800 text-[10px] font-semibold">
+                      {cond}
+                    </span>
+                  ))}
+                </div>
               </div>
               <div className="pt-2 flex justify-between">
-                <span className="text-stone-500">Allergies:</span>
-                <span className="font-bold text-red-600 text-right">{profile.healthInfo?.allergies || 'None reported'}</span>
+                <span className="text-stone-500">Food Allergies:</span>
+                <span className={`font-bold text-right ${(profile.healthInfo?.allergies && profile.healthInfo?.allergies !== 'None') ? 'text-rose-600' : 'text-stone-700'}`}>
+                  {profile.healthInfo?.allergies || 'None reported'}
+                </span>
               </div>
               <div className="pt-2 flex justify-between">
-                <span className="text-stone-500">Dislikes & Exclusions:</span>
-                <span className="font-bold text-stone-900 text-right">{profile.preferences?.dislikes || 'None'}</span>
-              </div>
-              <div className="pt-2 flex justify-between">
-                <span className="text-stone-500">Favorite Foods:</span>
-                <span className="font-bold text-stone-900 text-right">{profile.preferences?.favorites || 'None recorded'}</span>
+                <span className="text-stone-500">Diet & Activity:</span>
+                <span className="font-bold text-stone-900">{profile.dietaryType} • {profile.activityLevel || 'Moderate'}</span>
               </div>
             </div>
           </div>

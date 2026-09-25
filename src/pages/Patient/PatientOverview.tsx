@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getMealPlans, getFoodLogs, getQueries, MealPlan, FoodLog, Query } from '../../services/db';
+import { getMealPlans, getFoodLogs, getQueries, getPatientProfile, MealPlan, FoodLog, Query, PatientProfile } from '../../services/db';
 import { isPatientSubscribed, getLocalSubscription } from '../../services/subscription';
 import { 
   Home, 
@@ -16,14 +16,16 @@ import {
   ArrowRight, 
   Lock, 
   Flame, 
-  Clock, 
   ChevronRight,
-  ClipboardList
+  ClipboardList,
+  Target,
+  Scale
 } from 'lucide-react';
 
 export default function PatientOverview() {
   const { profile } = useAuth();
   const [activePlan, setActivePlan] = useState<MealPlan | null>(null);
+  const [patientData, setPatientData] = useState<PatientProfile | null>(null);
   const [todayLogs, setTodayLogs] = useState<FoodLog[]>([]);
   const [recentQuery, setRecentQuery] = useState<Query | null>(null);
   const [waterGlasses, setWaterGlasses] = useState<number>(() => {
@@ -42,15 +44,17 @@ export default function PatientOverview() {
     async function loadDashboardData() {
       if (!profile) return;
       try {
-        const [plans, logs, queries] = await Promise.all([
+        const [plans, logs, queries, pData] = await Promise.all([
           getMealPlans(profile.uid),
           getFoodLogs(profile.uid, todayStr),
-          getQueries(undefined, profile.uid)
+          getQueries(undefined, profile.uid),
+          getPatientProfile(profile.uid)
         ]);
 
         const published = plans.find(p => p.status === 'published');
         setActivePlan(published || null);
         setTodayLogs(logs);
+        setPatientData(pData);
 
         if (queries && queries.length > 0) {
           setRecentQuery(queries[0]);
@@ -126,6 +130,50 @@ export default function PatientOverview() {
           </Link>
         </div>
       </div>
+
+      {/* Clinical Assessment & Weight Management Bar */}
+      {patientData && (
+        <div className="bg-white rounded-3xl border border-stone-200/80 p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+              <Scale className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wider font-extrabold text-stone-400">
+                  Clinical Weight Management Plan
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">
+                  {patientData.weightManagement?.primaryGoal || patientData.goals?.[0] || 'Active Program'}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-stone-600 mt-1">
+                <span>Current: <strong className="text-stone-900">{patientData.currentWeightKg || 68} kg</strong> (BMI {patientData.bmi || ((patientData.currentWeightKg || 68) / Math.pow((patientData.heightCm || 165)/100, 2)).toFixed(1)})</span>
+                <span>•</span>
+                <span>Target: <strong className="text-orange-600">{patientData.targetWeightKg || 60} kg</strong></span>
+                <span>•</span>
+                <span>Broca IBW: <strong className="text-emerald-700">~{patientData.idealBodyWeightKg || (patientData.gender === 'Male' ? (patientData.heightCm || 170) - 100 : (patientData.heightCm || 165) - 105)} kg</strong></span>
+                {patientData.weightManagement?.targetPace && (
+                  <>
+                    <span>•</span>
+                    <span className="text-stone-500 font-medium">Pace: {patientData.weightManagement.targetPace}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {patientData.weightManagement?.specificFocus && patientData.weightManagement.specificFocus.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 self-center">
+              {patientData.weightManagement.specificFocus.slice(0, 3).map((f, i) => (
+                <span key={i} className="px-2.5 py-1 rounded-full bg-stone-100 text-stone-700 text-[10px] font-bold">
+                  {f}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Grid of Key Actions & Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -6,115 +6,185 @@ import { registerPatient } from '../services/db';
 import { 
   Heart, 
   Dumbbell, 
-  Zap, 
   Sparkles, 
   Activity, 
   Leaf, 
   ShieldAlert, 
-  Baby, 
-  Apple, 
   ArrowRight, 
   ArrowLeft, 
-  Check,
-  ListFilter,
-  Eye,
-  EyeOff,
-  UserCheck,
-  ShieldCheck
+  Check, 
+  Eye, 
+  EyeOff, 
+  ShieldCheck,
+  Scale,
+  Target,
+  Stethoscope,
+  Briefcase,
+  AlertTriangle,
+  User,
+  Clock,
+  ChevronRight,
+  Flame,
+  Info
 } from 'lucide-react';
 
-const GOAL_OPTIONS = [
-  { id: 'diabetes', label: 'Diabetes & Blood Sugar Control', icon: Activity, desc: 'Manage glucose levels & insulin sensitivity' },
-  { id: 'pcos', label: 'PCOS & Hormonal Balance', icon: Sparkles, desc: 'Support endocrine & reproductive health' },
-  { id: 'heart', label: 'Heart & Cholesterol Care', icon: Heart, desc: 'Optimize blood pressure & lipid levels' },
-  { id: 'gut', label: 'Gut Health & Digestion', icon: Apple, desc: 'Relieve IBS, bloating & gut inflammation' },
-  { id: 'muscle', label: 'Muscle Gain & Athletic Performance', icon: Dumbbell, desc: 'Build lean mass & sports conditioning' },
-  { id: 'energy', label: 'Energy, Focus & Vitality', icon: Zap, desc: 'Beat fatigue & sustain daily vigor' },
-  { id: 'plant', label: 'Plant-Based & Vegan Living', icon: Leaf, desc: 'Balanced plant-centric nutrition' },
-  { id: 'allergies', label: 'Food Allergies & Sensitivities', icon: ShieldAlert, desc: 'Navigate intolerances safely' },
-  { id: 'postpartum', label: 'Pregnancy & Postpartum Care', icon: Baby, desc: 'Maternal recovery & lactation support' },
-  { id: 'wellness', label: 'Overall Wellness & Longevity', icon: Heart, desc: 'Build sustainable long-term healthy habits' },
+const LIFE_STAGES = [
+  { id: 'Adult', label: 'Adult', desc: 'Ages 18–60, general wellness & metabolic balance' },
+  { id: 'Geriatric', label: 'Geriatric', desc: 'Ages 60+, bone density, vitality & gentle senior care' },
+  { id: 'Gynaec', label: 'Gynaec', desc: 'PCOS, hormonal regulation, prenatal & maternal health' },
+  { id: 'Pediatrics', label: 'Pediatrics', desc: 'Ages under 18, growth & adolescent nutrition' },
 ];
 
-const GOAL_SPECIFICS: Record<string, { title: string; options: string[] }> = {
-  'Diabetes & Blood Sugar Control': {
-    title: 'Diabetes & Glucose Specifics',
-    options: ['Type 2 Diabetes', 'Type 1 Diabetes', 'Pre-Diabetes / Borderline', 'Gestational Diabetes', 'HbA1c Target Reduction', 'Reactive Hypoglycemia']
-  },
-  'PCOS & Hormonal Balance': {
-    title: 'PCOS & Endocrine Specifics',
-    options: ['Insulin Resistance Management', 'Irregular Menstrual Cycles', 'Hormonal Acne / Hair Loss', 'TTC & Fertility Support', 'Weight Management with PCOS']
-  },
-  'Heart & Cholesterol Care': {
-    title: 'Cardiovascular Specifics',
-    options: ['High LDL Cholesterol', 'Hypertension (High BP)', 'High Triglycerides', 'Post-Cardiac Event Recovery', 'Arterial Health & Lipid Balance']
-  },
-  'Gut Health & Digestion': {
-    title: 'Gastrointestinal & Gut Specifics',
-    options: ['Bloating & Abdominal Distension', 'Acid Reflux / GERD', 'IBS-C (Constipation Predominant)', 'IBS-D (Diarrhea Predominant)', 'Leaky Gut & Microbiome Repair', 'SIBO Support']
-  },
-  'Muscle Gain & Athletic Performance': {
-    title: 'Muscle & Performance Specifics',
-    options: ['Hypertrophy / Lean Mass Gain', 'Heavy Strength Training', 'Endurance & Distance Sports', 'Post-Workout Muscle Recovery', 'Protein Timing & Supplementation']
-  },
-  'Energy, Focus & Vitality': {
-    title: 'Energy & Focus Specifics',
-    options: ['Afternoon Energy Slumps', 'Chronic Fatigue Syndrome', 'Brain Fog & Concentration', 'Sleep Quality & Circadian Rhythm', 'Burnout Recovery']
-  },
-  'Plant-Based & Vegan Living': {
-    title: 'Plant-Based Nutrition Specifics',
-    options: ['Transitioning to Full Vegan', 'Whole-Food Plant-Based (WFPB)', 'Ensuring Complete Proteins, B12 & Iron', 'Flexitarian Balance']
-  },
-  'Food Allergies & Sensitivities': {
-    title: 'Allergies & Intolerance Specifics',
-    options: ['Celiac Disease / Gluten Sensitivity', 'Lactose Intolerance', 'Nut / Peanut Allergy', 'FODMAP Sensitivity', 'Histamine Intolerance']
-  },
-  'Pregnancy & Postpartum Care': {
-    title: 'Maternal Care Specifics',
-    options: ['First Trimester & Nausea Support', 'Second/Third Trimester Growth', 'Postpartum Nutrient Replenishment', 'Lactation & Milk Supply Boost']
-  },
-  'Overall Wellness & Longevity': {
-    title: 'Wellness & Longevity Specifics',
-    options: ['Anti-Inflammatory Eating', 'Metabolic Health Maintenance', 'Immune System Support', 'Sustainable Lifestyle Habits']
-  }
-};
+const WEIGHT_PRIMARY_GOALS = [
+  { id: 'Weight Loss & Fat Reduction', label: 'Weight Loss & Fat Reduction', icon: Flame, desc: 'Healthy caloric deficit, visceral fat loss, preserving lean muscle' },
+  { id: 'Weight Maintenance & Metabolic Balance', label: 'Weight Maintenance & Metabolic Balance', icon: Heart, desc: 'Lock in current weight, stabilize blood sugar & prevent rebound' },
+  { id: 'Lean Muscle Mass & Healthy Gain', label: 'Lean Muscle Mass & Healthy Gain', icon: Dumbbell, desc: 'Clean caloric surplus, hypertrophy & athletic body tone' },
+  { id: 'Clinical / Medical Weight Regulation', label: 'Clinical / Medical Weight Regulation', icon: Stethoscope, desc: 'Doctor-directed, post-op, cardiac care or fatty liver management' },
+];
+
+const WEIGHT_FOCUS_AREAS = [
+  'Visceral & Belly Fat Reduction',
+  'Preventing Weight Rebound (Anti-Yo-Yo)',
+  'Breaking Through a Weight Plateau',
+  'Postpartum Weight Reset',
+  'Curbing Late-Night & Emotional Snacking',
+  'Doctor-Prescribed Weight Reduction',
+  'Lean Body Recomposition & Toning',
+  'Portion Satiety & Cravings Management',
+  'Insulin Resistance & Metabolic Boost'
+];
+
+const WEIGHT_PACES = [
+  { id: 'Steady & Sustainable (0.5 kg / week)', label: 'Steady & Sustainable (0.5 kg / week)', badge: 'Recommended', desc: 'Clinically proven to protect metabolic rate and prevent weight rebound.' },
+  { id: 'Active Progression (0.75 - 1.0 kg / week)', label: 'Active Progression (0.75 - 1.0 kg / week)', badge: 'Accelerated', desc: 'Strict deficit with higher protein intake and focused compliance.' },
+  { id: 'Habit-First / Gentle Adjustment', label: 'Habit-First / Gentle Adjustment', badge: 'Mindful', desc: 'Prioritize food quality and eating habits before aggressive deficit.' }
+];
+
+const MEDICAL_CONDITIONS = [
+  'Obstetrical / Gynaec (PCOS/PCOD)',
+  'Diabetes (Type 1 or Type 2)',
+  'Hypertension (High BP)',
+  'Cardiac / Heart Condition',
+  'Renal (Kidney) Disease',
+  'Hepatic (Fatty Liver / Liver Care)',
+  'Obesity / Metabolic Syndrome',
+  'Thyroid Disorder (Hypo / Hyper)',
+  'Neurological Condition',
+  'Cancer / Oncology Recovery',
+  'None / Healthy'
+];
+
+const ALLERGEN_OPTIONS = [
+  'Dairy / Lactose',
+  'Gluten / Wheat (Celiac)',
+  'Peanuts & Tree Nuts',
+  'Shellfish & Seafood',
+  'Soy & Soy Products',
+  'Eggs',
+  'Sulfites / Preservatives'
+];
+
+const FOOD_PREFERENCES = [
+  { id: 'Vegetarian', label: 'Vegetarian', desc: 'Plant-based with dairy, no meat or seafood' },
+  { id: 'Non-Vegetarian', label: 'Non-Vegetarian', desc: 'Includes poultry, meat, seafood and eggs' },
+  { id: 'Jain', label: 'Jain', desc: 'Strict vegetarian without root veggies, onions, or garlic' },
+  { id: 'Vegan', label: 'Vegan', desc: '100% plant-based, no animal products or dairy' },
+  { id: 'Eggetarian', label: 'Eggetarian', desc: 'Vegetarian diet including eggs' }
+];
+
+const OCCUPATIONS = [
+  { id: 'Business / Employed', label: 'Business / Employed', desc: 'Desk job, corporate, IT, office work' },
+  { id: 'Homemaker / Housewife', label: 'Homemaker / Housewife', desc: 'Managing household & family nutrition' },
+  { id: 'Student', label: 'Student', desc: 'College/University, study schedule' },
+  { id: 'Retired / Unemployed', label: 'Retired / Unemployed', desc: 'Flexible daily schedule' },
+  { id: 'Fieldwork', label: 'Fieldwork / Physically Demanding', desc: 'Active shifts, travel, heavy movement' }
+];
 
 export default function Login() {
   const [isSignUp, setIsSignUp] = useState(false);
-  const [signUpStep, setSignUpStep] = useState(1); // 1: Acc Info, 2: Primary Goals, 3: Goal Details, 4: Diet & Health
+  const [signUpStep, setSignUpStep] = useState(1); // 1 to 5
 
-  // Form State
+  // Step 1: Account & Core Identity
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
-  const [selectedGoalDetails, setSelectedGoalDetails] = useState<Record<string, string[]>>({});
+  const [gender, setGender] = useState<'Female' | 'Male' | 'Other'>('Female');
+  const [age, setAge] = useState<string>('28');
+  const [lifeStage, setLifeStage] = useState('Adult');
+  const [mobile, setMobile] = useState('');
+
+  // Step 2: Anthropometrics & Clinical BMI Gauge
+  const [heightCm, setHeightCm] = useState<number>(165);
+  const [currentWeightKg, setCurrentWeightKg] = useState<number>(68);
+
+  // Step 3: Specific Weight Management Goals
+  const [weightPrimaryGoal, setWeightPrimaryGoal] = useState<string>('Weight Loss & Fat Reduction');
+  const [targetWeightKg, setTargetWeightKg] = useState<number>(60);
+  const [weightPace, setWeightPace] = useState<string>('Steady & Sustainable (0.5 kg / week)');
+  const [selectedFocusAreas, setSelectedFocusAreas] = useState<string[]>([
+    'Visceral & Belly Fat Reduction',
+    'Preventing Weight Rebound (Anti-Yo-Yo)'
+  ]);
+
+  // Step 4: Clinical Screening & Medical History
+  const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
+  const [diagnosisOrProcedure, setDiagnosisOrProcedure] = useState('');
+  const [hasAllergies, setHasAllergies] = useState<boolean>(false);
+  const [selectedAllergies, setSelectedAllergies] = useState<string[]>([]);
+  const [customAllergy, setCustomAllergy] = useState('');
+
+  // Step 5: Dietary Preferences & Lifestyle
   const [dietaryType, setDietaryType] = useState('Vegetarian');
+  const [occupation, setOccupation] = useState('Business / Employed');
   const [activityLevel, setActivityLevel] = useState('Moderate');
-  const [conditions, setConditions] = useState('');
-  const [allergies, setAllergies] = useState('');
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const toggleGoal = (goalLabel: string) => {
-    setSelectedGoals(prev => 
-      prev.includes(goalLabel) 
-        ? prev.filter(g => g !== goalLabel) 
-        : [...prev, goalLabel]
+  // Dynamic Anthropometric Calculations (from sheet)
+  const heightM = heightCm > 0 ? heightCm / 100 : 1.65;
+  const liveBmi = Number((currentWeightKg / (heightM * heightM)).toFixed(1));
+
+  // Broca's Index: Male: Ht - 100, Female: Ht - 105
+  const liveIBW = gender === 'Male' ? Math.max(35, heightCm - 100) : Math.max(35, heightCm - 105);
+
+  const getBmiDetails = (bmi: number) => {
+    if (bmi < 18.5) return { label: 'Underweight (< 18.4)', color: 'text-amber-800 bg-amber-50 border-amber-300', dot: 'bg-amber-500' };
+    if (bmi < 25) return { label: 'Normal (18.5 – 24.9)', color: 'text-emerald-800 bg-emerald-50 border-emerald-300', dot: 'bg-emerald-500' };
+    if (bmi < 30) return { label: 'Overweight (25 – 29.9)', color: 'text-orange-800 bg-orange-50 border-orange-300', dot: 'bg-orange-500' };
+    if (bmi < 35) return { label: 'Obesity Grade I (30 – 34.9)', color: 'text-rose-800 bg-rose-50 border-rose-300', dot: 'bg-rose-500' };
+    if (bmi < 40) return { label: 'Obesity Grade II (35 – 39.9)', color: 'text-red-800 bg-red-50 border-red-300', dot: 'bg-red-500' };
+    return { label: 'Morbid Obesity (> 40)', color: 'text-purple-800 bg-purple-50 border-purple-300', dot: 'bg-purple-500' };
+  };
+
+  const bmiDetails = getBmiDetails(liveBmi);
+
+  // Target delta
+  const weightDiff = Number((currentWeightKg - targetWeightKg).toFixed(1));
+
+  const toggleFocusArea = (area: string) => {
+    setSelectedFocusAreas(prev => 
+      prev.includes(area) ? prev.filter(a => a !== area) : [...prev, area]
     );
   };
 
-  const toggleGoalDetail = (goalLabel: string, detailOption: string) => {
-    setSelectedGoalDetails(prev => {
-      const currentArr = prev[goalLabel] || [];
-      const updated = currentArr.includes(detailOption)
-        ? currentArr.filter(o => o !== detailOption)
-        : [...currentArr, detailOption];
-      return { ...prev, [goalLabel]: updated };
+  const toggleCondition = (cond: string) => {
+    if (cond === 'None / Healthy') {
+      setSelectedConditions(['None / Healthy']);
+      return;
+    }
+    setSelectedConditions(prev => {
+      const filtered = prev.filter(c => c !== 'None / Healthy');
+      return filtered.includes(cond) ? filtered.filter(c => c !== cond) : [...filtered, cond];
     });
+  };
+
+  const toggleAllergy = (allergy: string) => {
+    setSelectedAllergies(prev => 
+      prev.includes(allergy) ? prev.filter(a => a !== allergy) : [...prev, allergy]
+    );
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -136,12 +206,11 @@ export default function Login() {
           navigate('/dietician');
         } catch (authError: any) {
           if (authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential') {
-            // Dietician account doesn't exist yet, create it on the fly
             const { createDietician } = await import('../services/db');
             await createDietician(email, password, 'Lead Dietician');
             navigate('/dietician');
           } else {
-            throw authError; // rethrow other errors
+            throw authError;
           }
         }
       } else if (email.toLowerCase() === TEST_PATIENT_EMAIL && password === TEST_PATIENT_PASS) {
@@ -162,11 +231,24 @@ export default function Login() {
             const { registerPatient } = await import('../services/db');
             const { saveLocalSubscription } = await import('../services/subscription');
             const user = await registerPatient(email, password, 'Demo VIP Patient', {
-              goals: ['Overall Wellness & Longevity', 'Energy, Focus & Vitality', 'Muscle Gain & Athletic Performance'],
+              gender: 'Female',
+              age: 29,
+              lifeStage: 'Adult',
+              heightCm: 165,
+              currentWeightKg: 68,
+              targetWeightKg: 60,
+              idealBodyWeightKg: 60,
+              bmi: 25.0,
+              bmiClassification: 'Overweight (25 - 29.9)',
+              weightManagement: {
+                primaryGoal: 'Weight Loss & Fat Reduction',
+                targetPace: 'Steady & Sustainable (0.5 kg / week)',
+                specificFocus: ['Visceral & Belly Fat Reduction', 'Preventing Weight Rebound (Anti-Yo-Yo)'],
+                targetDifferenceKg: 8
+              },
+              medicalHistory: ['None / Healthy'],
               dietaryType: 'Vegetarian',
-              activityLevel: 'Moderate',
-              conditions: 'None',
-              allergies: 'None'
+              activityLevel: 'Moderate'
             });
 
             const vipSub = {
@@ -199,7 +281,6 @@ export default function Login() {
     } catch (e: any) {
       console.error('Sign in error:', e);
       if (e.code === 'auth/invalid-credential' || e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
-        // If they were trying to log in as admin, let them know if they got the password wrong
         const metaEnv = (import.meta as any).env || {};
         const SPECIAL_ID = (metaEnv.VITE_DIETICIAN_EMAIL || 'admin@aidiet.com').toLowerCase();
         if (email.toLowerCase() === SPECIAL_ID) {
@@ -215,6 +296,7 @@ export default function Login() {
     }
   };
 
+  // Step Validation Handlers
   const handleStep1Next = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -229,22 +311,47 @@ export default function Login() {
       setError('Password must be at least 6 characters');
       return;
     }
+    if (!age || Number(age) < 10 || Number(age) > 120) {
+      setError('Please enter a valid age');
+      return;
+    }
     setError('');
     setSignUpStep(2);
   };
 
   const handleStep2Next = () => {
-    if (selectedGoals.length === 0) {
-      setError('Please select at least one primary health goal');
+    if (!heightCm || heightCm < 100 || heightCm > 250) {
+      setError('Please enter a valid height in cm (100 - 250 cm)');
       return;
+    }
+    if (!currentWeightKg || currentWeightKg < 30 || currentWeightKg > 300) {
+      setError('Please enter a valid weight in kg (30 - 300 kg)');
+      return;
+    }
+    // Default target weight to Broca's IBW if unset
+    if (!targetWeightKg) {
+      setTargetWeightKg(liveIBW);
     }
     setError('');
     setSignUpStep(3);
   };
 
   const handleStep3Next = () => {
+    if (!targetWeightKg || targetWeightKg < 30 || targetWeightKg > 300) {
+      setError('Please specify a realistic target weight in kg');
+      return;
+    }
+    if (selectedFocusAreas.length === 0) {
+      setError('Please pick at least one specific weight management focus area');
+      return;
+    }
     setError('');
     setSignUpStep(4);
+  };
+
+  const handleStep4Next = () => {
+    setError('');
+    setSignUpStep(5);
   };
 
   const handleFinalSubmit = async (e: React.FormEvent) => {
@@ -252,23 +359,50 @@ export default function Login() {
     try {
       setLoading(true);
       setError('');
+
+      const allergySummary = hasAllergies 
+        ? (selectedAllergies.length > 0 
+            ? selectedAllergies.join(', ') + (customAllergy ? `, ${customAllergy}` : '') 
+            : customAllergy || 'Yes') 
+        : 'None';
+
       const userCred = await registerPatient(email, password, name, {
-        goals: selectedGoals,
-        goalDetails: selectedGoalDetails,
-        dietaryType,
+        mobile,
+        gender,
+        age: Number(age) || 28,
+        lifeStage,
+        heightCm,
+        currentWeightKg,
+        targetWeightKg,
+        idealBodyWeightKg: liveIBW,
+        bmi: liveBmi,
+        bmiClassification: bmiDetails.label,
+        weightManagement: {
+          primaryGoal: weightPrimaryGoal,
+          targetPace: weightPace,
+          specificFocus: selectedFocusAreas,
+          targetDifferenceKg: Math.abs(weightDiff)
+        },
+        medicalHistory: selectedConditions.length > 0 ? selectedConditions : ['None / Healthy'],
+        diagnosisOrProcedure,
+        occupation,
         activityLevel,
-        conditions,
-        allergies
+        dietaryType,
+        goals: [weightPrimaryGoal, ...selectedFocusAreas.slice(0, 2)],
+        allergies: allergySummary,
+        conditions: selectedConditions.join(', ') + (diagnosisOrProcedure ? ` | Note: ${diagnosisOrProcedure}` : '')
       });
-      
+
       const { createNotification } = await import('../services/db');
       await createNotification({
         type: 'NEW_PATIENT',
         patientId: userCred.uid,
         patientName: name,
-        message: `${name} just registered as a new patient!`,
+        message: `${name} completed intake! Goal: ${weightPrimaryGoal} (BMI: ${liveBmi})`,
         read: false
       }).catch(e => console.error('Failed to notify registration:', e));
+
+      navigate('/patient');
     } catch (e: any) {
       if (e.code === 'auth/email-already-in-use') {
         setError('An account with this email already exists.');
@@ -281,87 +415,107 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFCFB] flex flex-col items-center justify-center p-4 md:p-8">
-      <div className="bg-white p-6 md:p-12 w-full max-w-2xl border border-stone-200 shadow-sm transition-all duration-300">
+    <div className="min-h-screen bg-[#FAF9F6] flex flex-col items-center justify-center p-4 md:p-8 font-sans selection:bg-orange-100 selection:text-orange-900">
+      <div className="bg-white p-6 md:p-10 w-full max-w-2xl border border-stone-200/90 rounded-3xl shadow-xl shadow-stone-200/40 transition-all duration-300">
         
         {/* Header */}
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-serif font-bold text-stone-900 mb-2 tracking-tight">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-50 border border-orange-200/60 mb-2">
+            <Sparkles className="w-3.5 h-3.5 text-orange-600" />
+            <span className="text-[11px] font-bold text-orange-900 uppercase tracking-widest">
+              Clinical Nutrition Portal
+            </span>
+          </div>
+          <h2 className="text-3xl font-serif font-black text-stone-900 tracking-tight">
             NutriSnap
           </h2>
-          <p className="text-stone-500 text-sm md:text-base">
+          <p className="text-stone-500 text-xs md:text-sm mt-1">
             {isSignUp 
-              ? `Clinical Onboarding Survey (Step ${signUpStep} of 4)`
-              : 'Sign in to your clinical portal'
+              ? `Clinical Nutrition Assessment & Intake (Step ${signUpStep} of 5)`
+              : 'Sign in to access your personalized nutrition workspace'
             }
           </p>
           
-          {/* Progress bar for 4-step onboarding */}
+          {/* Progress bar for 5-step onboarding */}
           {isSignUp && (
-            <div className="w-full bg-stone-100 h-1.5 mt-6 rounded-full overflow-hidden">
-              <div 
-                className="bg-brand-600 h-full transition-all duration-500 ease-out" 
-                style={{ width: `${(signUpStep / 4) * 100}%` }} 
-              />
+            <div className="mt-5 space-y-2">
+              <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
+                <div 
+                  className="bg-gradient-to-r from-orange-500 via-orange-600 to-pink-500 h-full transition-all duration-500 ease-out rounded-full" 
+                  style={{ width: `${(signUpStep / 5) * 100}%` }} 
+                />
+              </div>
+              <div className="flex justify-between text-[10px] font-bold text-stone-400 uppercase tracking-wider px-1">
+                <span className={signUpStep >= 1 ? 'text-orange-600' : ''}>1. Identity</span>
+                <span className={signUpStep >= 2 ? 'text-orange-600' : ''}>2. Anthropometrics</span>
+                <span className={signUpStep >= 3 ? 'text-orange-600' : ''}>3. Weight Goals</span>
+                <span className={signUpStep >= 4 ? 'text-orange-600' : ''}>4. Clinical</span>
+                <span className={signUpStep >= 5 ? 'text-orange-600' : ''}>5. Lifestyle</span>
+              </div>
             </div>
           )}
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 text-red-900 border border-red-100 text-sm font-medium">
-            {error}
+          <div className="mb-6 p-4 bg-rose-50 text-rose-900 border border-rose-200 rounded-2xl text-xs font-semibold flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{error}</span>
           </div>
         )}
 
-        {/* SIGN IN FORM */}
+        {/* ─── SIGN IN VIEW ────────────────────────────────────────────── */}
         {!isSignUp && (
-          <form onSubmit={handleSignIn} className="space-y-6 max-w-md mx-auto">
+          <form onSubmit={handleSignIn} className="space-y-5 max-w-md mx-auto">
             <div>
-              <label className="block text-xs uppercase tracking-widest font-bold text-stone-500 mb-2">Email Address</label>
+              <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
+                Email Address
+              </label>
               <input 
                 type="email" 
                 required
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full px-0 py-3 border-b border-stone-300 bg-transparent focus:ring-0 focus:border-stone-900 outline-none transition-colors"
+                className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all text-sm"
                 placeholder="patient@example.com"
               />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest font-bold text-stone-500 mb-2">Password</label>
+              <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
+                Password
+              </label>
               <div className="relative">
                 <input 
                   type={showPassword ? "text" : "password"} 
                   required
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full px-0 py-3 pr-10 border-b border-stone-300 bg-transparent focus:ring-0 focus:border-stone-900 outline-none transition-colors"
+                  className="w-full px-4 py-3 pr-11 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all text-sm"
                   placeholder="••••••••"
                 />
                 <button 
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 focus:outline-none"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 focus:outline-none"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
             <button 
               type="submit" 
               disabled={loading}
-              className="w-full py-4 mt-4 bg-stone-900 text-stone-50 font-sans tracking-widest text-sm uppercase font-bold rounded-full hover:bg-stone-800 transition-colors disabled:opacity-50"
+              className="w-full py-3.5 mt-2 bg-stone-900 hover:bg-black text-white text-xs uppercase tracking-widest font-black rounded-xl shadow-md shadow-stone-900/10 transition-all disabled:opacity-50"
             >
-              {loading ? 'Signing In...' : 'Sign In'}
+              {loading ? 'Signing In...' : 'Sign In to Portal'}
             </button>
 
             {/* Quick Demo Access Box */}
             <div className="mt-8 pt-6 border-t border-stone-200">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] uppercase tracking-wider font-bold text-stone-500">
+                <span className="text-[11px] uppercase tracking-wider font-extrabold text-stone-500">
                   Quick Demo Testing Accounts
                 </span>
-                <span className="text-[10px] text-orange-600 font-semibold">1-Click Auto Fill</span>
+                <span className="text-[10px] text-orange-600 font-bold">1-Click Auto Fill</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
@@ -382,9 +536,9 @@ export default function Login() {
                     </span>
                   </div>
                   <span className="text-[11px] font-mono font-medium text-stone-700 truncate">testpatient@nutrisnap.com</span>
-                  <span className="text-[10px] text-stone-500 mt-1">Pass: Patient123!</span>
+                  <span className="text-[10px] text-stone-500 mt-0.5">Pass: Patient123!</span>
                   <span className="text-[10px] font-bold text-orange-600 mt-2 group-hover:underline">
-                    Click to Auto-Fill & Test →
+                    Auto-Fill & Sign In →
                   </span>
                 </button>
 
@@ -406,9 +560,9 @@ export default function Login() {
                     </span>
                   </div>
                   <span className="text-[11px] font-mono font-medium text-stone-700 truncate">admin@aidiet.com</span>
-                  <span className="text-[10px] text-stone-500 mt-1">Pass: Admin123!</span>
+                  <span className="text-[10px] text-stone-500 mt-0.5">Pass: Admin123!</span>
                   <span className="text-[10px] font-bold text-stone-700 mt-2 group-hover:underline">
-                    Click to Auto-Fill & Test →
+                    Auto-Fill & Sign In →
                   </span>
                 </button>
               </div>
@@ -416,266 +570,752 @@ export default function Login() {
           </form>
         )}
 
-        {/* SIGN UP STEP 1: Account Information */}
+        {/* ─── ONBOARDING STEP 1: Core Identity & Life Stage ───────────── */}
         {isSignUp && signUpStep === 1 && (
-          <form onSubmit={handleStep1Next} className="space-y-6 max-w-md mx-auto">
-            <div>
-              <label className="block text-xs uppercase tracking-widest font-bold text-stone-500 mb-2">Full Name</label>
-              <input 
-                type="text" 
-                required
-                value={name}
-                onChange={e => setName(e.target.value)}
-                className="w-full px-0 py-3 border-b border-stone-300 bg-transparent focus:ring-0 focus:border-stone-900 outline-none transition-colors"
-                placeholder="Jane Doe"
-              />
-            </div>
-            <div>
-              <label className="block text-xs uppercase tracking-widest font-bold text-stone-500 mb-2">Email Address</label>
-              <input 
-                type="email" 
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full px-0 py-3 border-b border-stone-300 bg-transparent focus:ring-0 focus:border-stone-900 outline-none transition-colors"
-                placeholder="you@example.com"
-              />
-            </div>
-            <div>
-              <label className="block text-xs uppercase tracking-widest font-bold text-stone-500 mb-2">Password</label>
-              <div className="relative">
+          <form onSubmit={handleStep1Next} className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
+                  Full Name *
+                </label>
                 <input 
-                  type={showPassword ? "text" : "password"} 
+                  type="text" 
                   required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full px-0 py-3 pr-10 border-b border-stone-300 bg-transparent focus:ring-0 focus:border-stone-900 outline-none transition-colors"
-                  placeholder="At least 6 characters"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none text-sm"
+                  placeholder="e.g. Priya Sharma"
                 />
-                <button 
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 focus:outline-none"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
+                  Mobile Number (Optional)
+                </label>
+                <input 
+                  type="tel" 
+                  value={mobile}
+                  onChange={e => setMobile(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none text-sm"
+                  placeholder="+91 98765 43210"
+                />
               </div>
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
+                  Email Address *
+                </label>
+                <input 
+                  type="email" 
+                  required
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none text-sm"
+                  placeholder="priya@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
+                  Password *
+                </label>
+                <div className="relative">
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    required
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    className="w-full px-4 py-3 pr-11 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none text-sm"
+                    placeholder="Min 6 characters"
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Biological Gender & Age */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+              <div>
+                <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
+                  Biological Sex (Clinical Formula) *
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['Female', 'Male', 'Other'] as const).map(g => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setGender(g)}
+                      className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                        gender === g 
+                          ? 'bg-stone-900 text-white border-stone-900 shadow-xs' 
+                          : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
+                  Age (Years) *
+                </label>
+                <input 
+                  type="number" 
+                  min="10"
+                  max="115"
+                  required
+                  value={age}
+                  onChange={e => setAge(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none text-sm"
+                  placeholder="28"
+                />
+              </div>
+            </div>
+
+            {/* Life Stage Selection (From Assessment Sheet) */}
+            <div>
+              <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
+                Life Stage & Clinical Category (From Hospital Assessment Sheet)
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {LIFE_STAGES.map(stage => {
+                  const isSelected = lifeStage === stage.id;
+                  return (
+                    <button
+                      key={stage.id}
+                      type="button"
+                      onClick={() => setLifeStage(stage.id)}
+                      className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+                        isSelected 
+                          ? 'border-orange-500 bg-orange-50/60 ring-2 ring-orange-400/40 shadow-xs' 
+                          : 'border-stone-200 hover:border-stone-300 bg-stone-50/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-xs text-stone-900">{stage.label}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-orange-600" />}
+                      </div>
+                      <p className="text-[10px] text-stone-500 leading-tight">{stage.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <button 
               type="submit" 
-              className="w-full py-4 mt-6 bg-stone-900 text-stone-50 font-sans tracking-widest text-sm uppercase font-bold rounded-full hover:bg-stone-800 transition-colors flex items-center justify-center gap-2"
+              className="w-full py-4 mt-4 bg-stone-900 hover:bg-black text-white text-xs uppercase tracking-widest font-black rounded-xl transition-all flex items-center justify-center gap-2 shadow-md shadow-stone-900/10"
             >
-              Continue to Goals <ArrowRight className="w-4 h-4" />
+              Continue to Anthropometrics <ArrowRight className="w-4 h-4" />
             </button>
           </form>
         )}
 
-        {/* SIGN UP STEP 2: High-Level Primary Clinical Goals */}
+        {/* ─── ONBOARDING STEP 2: Anthropometrics & Clinical BMI Gauge ─── */}
         {isSignUp && signUpStep === 2 && (
           <div className="space-y-6">
-            <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-stone-900 mb-1">What brings you to a dietician?</h3>
-              <p className="text-xs text-stone-500">Select all clinical and health goals that apply to you</p>
+            <div className="text-center mb-4">
+              <h3 className="text-xl font-bold text-stone-900 flex items-center justify-center gap-2">
+                <Scale className="w-5 h-5 text-orange-600" />
+                Anthropometric Assessment
+              </h3>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Based on the clinical body composition screening standards
+              </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
-              {GOAL_OPTIONS.map(goal => {
-                const isSelected = selectedGoals.includes(goal.label);
-                const IconComponent = goal.icon;
-                return (
+            {/* Height & Weight Inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-stone-50/70 p-4 rounded-2xl border border-stone-200/80">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs uppercase tracking-wider font-extrabold text-stone-700">
+                    Height (cm)
+                  </label>
+                  <span className="text-sm font-black font-mono text-stone-900">{heightCm} cm</span>
+                </div>
+                <input 
+                  type="range"
+                  min="120"
+                  max="220"
+                  value={heightCm}
+                  onChange={e => setHeightCm(Number(e.target.value))}
+                  className="w-full accent-orange-600 cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-stone-400 mt-1 font-mono">
+                  <span>120 cm (3'11")</span>
+                  <span>170 cm (5'7")</span>
+                  <span>220 cm (7'2")</span>
+                </div>
+              </div>
+
+              <div className="bg-stone-50/70 p-4 rounded-2xl border border-stone-200/80">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs uppercase tracking-wider font-extrabold text-stone-700">
+                    Current Weight (kg)
+                  </label>
+                  <span className="text-sm font-black font-mono text-stone-900">{currentWeightKg} kg</span>
+                </div>
+                <input 
+                  type="range"
+                  min="35"
+                  max="180"
+                  value={currentWeightKg}
+                  onChange={e => setCurrentWeightKg(Number(e.target.value))}
+                  className="w-full accent-orange-600 cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-stone-400 mt-1 font-mono">
+                  <span>35 kg</span>
+                  <span>70 kg</span>
+                  <span>180 kg</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Real-Time Clinical BMI Dashboard Card */}
+            <div className="p-5 rounded-3xl border border-stone-200/90 bg-stone-50/50 shadow-inner space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase tracking-wider font-extrabold text-stone-500">
+                      Calculated Clinical BMI
+                    </span>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black border ${bmiDetails.color}`}>
+                      <span className={`w-2 h-2 rounded-full ${bmiDetails.dot}`} />
+                      {bmiDetails.label}
+                    </span>
+                  </div>
+                  <div className="text-3xl font-serif font-black text-stone-900 mt-1">
+                    {liveBmi} <span className="text-xs font-sans font-normal text-stone-500">kg/m²</span>
+                  </div>
+                </div>
+
+                {/* Broca's Ideal Body Weight Badge */}
+                <div className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+                  <div className="text-[10px] uppercase tracking-wider font-extrabold text-stone-400 flex items-center gap-1">
+                    <Info className="w-3 h-3 text-orange-500" /> Broca's Ideal Weight (IBW)
+                  </div>
+                  <div className="text-lg font-black text-stone-900 mt-0.5">
+                    ~{liveIBW} kg
+                    <span className="text-[10px] text-stone-400 font-normal ml-1">
+                      ({gender === 'Male' ? 'Ht - 100' : 'Ht - 105'})
+                    </span>
+                  </div>
                   <button
-                    key={goal.id}
                     type="button"
-                    onClick={() => toggleGoal(goal.label)}
-                    className={`p-4 border text-left flex items-start gap-3 transition-all ${
-                      isSelected 
-                        ? 'border-brand-700 bg-brand-50/50 ring-1 ring-brand-700' 
-                        : 'border-stone-200 hover:border-stone-400 bg-white'
-                    }`}
+                    onClick={() => setTargetWeightKg(liveIBW)}
+                    className="text-[10px] font-bold text-orange-600 hover:text-orange-700 mt-1.5 text-left underline"
                   >
-                    <div className={`p-2 rounded-full shrink-0 ${isSelected ? 'bg-brand-700 text-white' : 'bg-stone-100 text-stone-600'}`}>
-                      <IconComponent className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-sm text-stone-900">{goal.label}</span>
-                        {isSelected && <Check className="w-4 h-4 text-brand-700 shrink-0" />}
-                      </div>
-                      <p className="text-xs text-stone-500 mt-1 leading-snug">{goal.desc}</p>
-                    </div>
+                    Set as my target weight →
                   </button>
-                );
-              })}
+                </div>
+              </div>
+
+              {/* BMI Tier Standards Legend (Directly from Image 2) */}
+              <div className="pt-3 border-t border-stone-200/80">
+                <span className="text-[10px] uppercase tracking-wider font-bold text-stone-400 block mb-2">
+                  Clinical Classification Standards:
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[11px]">
+                  <div className="flex items-center gap-1 text-stone-600">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                    <span>Underweight: <strong>&lt; 18.4</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1 text-stone-600">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                    <span>Normal: <strong>18.5 – 24.9</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1 text-stone-600">
+                    <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" />
+                    <span>Overweight: <strong>25.0 – 29.9</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1 text-stone-600">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                    <span>Obesity I: <strong>30.0 – 34.9</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1 text-stone-600">
+                    <span className="w-2 h-2 rounded-full bg-red-600 shrink-0" />
+                    <span>Obesity II: <strong>35.0 – 39.9</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1 text-stone-600">
+                    <span className="w-2 h-2 rounded-full bg-purple-600 shrink-0" />
+                    <span>Morbid Obesity: <strong>&gt; 40.0</strong></span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="flex gap-4 pt-4 border-t border-stone-100">
+            <div className="flex gap-3 pt-3 border-t border-stone-100">
               <button 
                 type="button"
                 onClick={() => setSignUpStep(1)}
-                className="w-1/3 py-4 border border-stone-300 text-stone-700 font-sans tracking-widest text-xs uppercase font-bold hover:bg-stone-50 transition-colors flex items-center justify-center gap-1"
+                className="w-1/3 py-3.5 border border-stone-300 text-stone-700 text-xs font-bold rounded-xl hover:bg-stone-50 transition-colors flex items-center justify-center gap-1"
               >
                 <ArrowLeft className="w-4 h-4" /> Back
               </button>
               <button 
                 type="button"
                 onClick={handleStep2Next}
-                className="w-2/3 py-4 bg-stone-900 text-stone-50 font-sans tracking-widest text-xs uppercase font-bold hover:bg-stone-800 transition-colors flex items-center justify-center gap-2"
+                className="w-2/3 py-3.5 bg-stone-900 hover:bg-black text-white text-xs uppercase tracking-widest font-black rounded-xl transition-all flex items-center justify-center gap-2 shadow-md shadow-stone-900/10"
               >
-                Next: Goal Specifics <ArrowRight className="w-4 h-4" />
+                Continue to Weight Goals <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
 
-        {/* SIGN UP STEP 3: Goal-Specific Clarifying Questions */}
+        {/* ─── ONBOARDING STEP 3: Specific Weight Management Goals ─────── */}
         {isSignUp && signUpStep === 3 && (
           <div className="space-y-6">
-            <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-stone-900 mb-1 flex items-center justify-center gap-2">
-                <ListFilter className="w-5 h-5 text-brand-700" />
-                Specify Your Health Objectives
+            <div className="text-center mb-2">
+              <h3 className="text-xl font-bold text-stone-900 flex items-center justify-center gap-2">
+                <Target className="w-5 h-5 text-orange-600" />
+                Weight Management Strategy
               </h3>
-              <p className="text-xs text-stone-500">Tap specific details for each selected care goal</p>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Define your primary goal, target numbers, and specific focus areas
+              </p>
             </div>
 
-            <div className="space-y-6 max-h-96 overflow-y-auto pr-1">
-              {selectedGoals.map(goalLabel => {
-                const specificObj = GOAL_SPECIFICS[goalLabel];
-                if (!specificObj) return null;
-                const activeDetails = selectedGoalDetails[goalLabel] || [];
-
-                return (
-                  <div key={goalLabel} className="p-4 border border-stone-200 bg-stone-50/50">
-                    <h4 className="font-bold text-sm text-stone-900 mb-1">{specificObj.title}</h4>
-                    <p className="text-xs text-stone-500 mb-3">Goal: <span className="font-semibold text-brand-800">{goalLabel}</span></p>
-                    <div className="flex flex-wrap gap-2">
-                      {specificObj.options.map(opt => {
-                        const isOptSelected = activeDetails.includes(opt);
-                        return (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => toggleGoalDetail(goalLabel, opt)}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all flex items-center gap-1.5 ${
-                              isOptSelected 
-                                ? 'bg-stone-900 text-white border-stone-900' 
-                                : 'bg-white text-stone-700 border-stone-300 hover:border-stone-500'
-                            }`}
-                          >
-                            {isOptSelected && <Check className="w-3 h-3 text-white" />}
-                            {opt}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+            {/* Primary Direction Selector */}
+            <div>
+              <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-2">
+                1. Primary Weight Direction *
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {WEIGHT_PRIMARY_GOALS.map(item => {
+                  const isSelected = weightPrimaryGoal === item.id;
+                  const IconComp = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setWeightPrimaryGoal(item.id)}
+                      className={`p-3.5 rounded-2xl border text-left transition-all flex items-start gap-3 ${
+                        isSelected 
+                          ? 'border-orange-500 bg-orange-50/70 ring-2 ring-orange-400/40 shadow-xs' 
+                          : 'border-stone-200 hover:border-stone-300 bg-stone-50/50'
+                      }`}
+                    >
+                      <div className={`p-2 rounded-xl shrink-0 ${isSelected ? 'bg-orange-500 text-white' : 'bg-stone-100 text-stone-600'}`}>
+                        <IconComp className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-stone-900">{item.label}</span>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-orange-600 shrink-0" />}
+                        </div>
+                        <p className="text-[11px] text-stone-500 mt-0.5 leading-snug">{item.desc}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="flex gap-4 pt-4 border-t border-stone-100">
+            {/* Target Weight & Live Delta Indicator */}
+            <div className="bg-stone-50/70 p-4 rounded-2xl border border-stone-200/80">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs uppercase tracking-wider font-extrabold text-stone-700">
+                  2. Target Goal Weight (kg) *
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-black font-mono text-stone-900">{targetWeightKg} kg</span>
+                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                    weightDiff > 0 ? 'text-orange-700 bg-orange-50 border-orange-200' :
+                    weightDiff < 0 ? 'text-blue-700 bg-blue-50 border-blue-200' :
+                    'text-stone-700 bg-stone-100 border-stone-200'
+                  }`}>
+                    {weightDiff > 0 ? `-${weightDiff} kg to lose` :
+                     weightDiff < 0 ? `+${Math.abs(weightDiff)} kg to gain` :
+                     'Maintain current weight'}
+                  </span>
+                </div>
+              </div>
+              <input 
+                type="range"
+                min="35"
+                max="150"
+                value={targetWeightKg}
+                onChange={e => setTargetWeightKg(Number(e.target.value))}
+                className="w-full accent-orange-600 cursor-pointer"
+              />
+              <div className="flex justify-between text-[10px] text-stone-400 mt-1">
+                <span>Current: {currentWeightKg} kg</span>
+                <span>Broca's IBW: ~{liveIBW} kg</span>
+                <span>Max Target: 150 kg</span>
+              </div>
+            </div>
+
+            {/* Target Pace */}
+            <div>
+              <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-2">
+                3. Desired Target Pace *
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {WEIGHT_PACES.map(p => {
+                  const isSelected = weightPace === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setWeightPace(p.id)}
+                      className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+                        isSelected 
+                          ? 'border-stone-900 bg-stone-900 text-white shadow-xs' 
+                          : 'border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                          isSelected ? 'bg-orange-500 text-white' : 'bg-stone-200 text-stone-700'
+                        }`}>
+                          {p.badge}
+                        </span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-orange-400" />}
+                      </div>
+                      <span className="font-bold text-xs mt-1 leading-snug">{p.label}</span>
+                      <p className={`text-[10px] mt-1 leading-tight ${isSelected ? 'text-stone-300' : 'text-stone-500'}`}>
+                        {p.desc}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Specific Focus Chips (Crucial for weight management) */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs uppercase tracking-wider font-extrabold text-stone-600">
+                  4. Specific Weight Management Focus Areas (Pick All That Apply) *
+                </label>
+                <span className="text-[10px] text-stone-400">Multi-select</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {WEIGHT_FOCUS_AREAS.map(area => {
+                  const isSelected = selectedFocusAreas.includes(area);
+                  return (
+                    <button
+                      key={area}
+                      type="button"
+                      onClick={() => toggleFocusArea(area)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
+                        isSelected 
+                          ? 'bg-orange-500 text-white border-orange-500 shadow-xs' 
+                          : 'bg-white text-stone-700 border-stone-200 hover:border-stone-400'
+                      }`}
+                    >
+                      {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                      {area}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-3 border-t border-stone-100">
               <button 
                 type="button"
                 onClick={() => setSignUpStep(2)}
-                className="w-1/3 py-4 border border-stone-300 text-stone-700 font-sans tracking-widest text-xs uppercase font-bold hover:bg-stone-50 transition-colors flex items-center justify-center gap-1"
+                className="w-1/3 py-3.5 border border-stone-300 text-stone-700 text-xs font-bold rounded-xl hover:bg-stone-50 transition-colors flex items-center justify-center gap-1"
               >
                 <ArrowLeft className="w-4 h-4" /> Back
               </button>
               <button 
                 type="button"
                 onClick={handleStep3Next}
-                className="w-2/3 py-4 bg-stone-900 text-stone-50 font-sans tracking-widest text-xs uppercase font-bold hover:bg-stone-800 transition-colors flex items-center justify-center gap-2"
+                className="w-2/3 py-3.5 bg-stone-900 hover:bg-black text-white text-xs uppercase tracking-widest font-black rounded-xl transition-all flex items-center justify-center gap-2 shadow-md shadow-stone-900/10"
               >
-                Next: Dietary Profile <ArrowRight className="w-4 h-4" />
+                Continue to Clinical Screening <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
 
-        {/* SIGN UP STEP 4: Dietary Preferences & Health Info */}
+        {/* ─── ONBOARDING STEP 4: Clinical Screening & Medical History ─── */}
         {isSignUp && signUpStep === 4 && (
-          <form onSubmit={handleFinalSubmit} className="space-y-6">
-            <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-stone-900 mb-1">Your Dietary Profile</h3>
-              <p className="text-xs text-stone-500">Finalize your profile for your dietician</p>
+          <div className="space-y-6">
+            <div className="text-center mb-2">
+              <h3 className="text-xl font-bold text-stone-900 flex items-center justify-center gap-2">
+                <Stethoscope className="w-5 h-5 text-orange-600" />
+                Medical Screening & History
+              </h3>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Exact clinical categories from the hospital assessment protocol
+              </p>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs uppercase tracking-widest font-bold text-stone-500 mb-2">Dietary Preference</label>
-                <select 
-                  value={dietaryType}
-                  onChange={e => setDietaryType(e.target.value)}
-                  className="w-full p-3 border border-stone-200 bg-stone-50 focus:bg-white focus:border-stone-900 outline-none font-sans text-sm"
-                >
-                  <option value="Vegetarian">Vegetarian</option>
-                  <option value="Non-Vegetarian">Non-Vegetarian</option>
-                  <option value="Vegan">Vegan</option>
-                  <option value="Eggetarian">Eggetarian</option>
-                  <option value="Jain">Jain</option>
-                </select>
+            {/* Medical History Checklist from Image 1 */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs uppercase tracking-wider font-extrabold text-stone-600">
+                  Pre-existing Conditions & Medical History (From Sheet)
+                </label>
+                <span className="text-[10px] text-stone-400">Select any that apply</span>
               </div>
-
-              <div>
-                <label className="block text-xs uppercase tracking-widest font-bold text-stone-500 mb-2">Daily Activity Level</label>
-                <select 
-                  value={activityLevel}
-                  onChange={e => setActivityLevel(e.target.value)}
-                  className="w-full p-3 border border-stone-200 bg-stone-50 focus:bg-white focus:border-stone-900 outline-none font-sans text-sm"
-                >
-                  <option value="Sedentary">Sedentary (Desk Job, Minimal Movement)</option>
-                  <option value="Light">Lightly Active (1-3 days exercise/week)</option>
-                  <option value="Moderate">Moderately Active (3-5 days exercise/week)</option>
-                  <option value="High">Very Active (Heavy Exercise / Physical Job)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs uppercase tracking-widest font-bold text-stone-500 mb-2">Medical Conditions or Diagnosis (Optional)</label>
-                <input 
-                  type="text" 
-                  value={conditions}
-                  onChange={e => setConditions(e.target.value)}
-                  className="w-full p-3 border border-stone-200 bg-stone-50 focus:bg-white focus:border-stone-900 outline-none font-sans text-sm"
-                  placeholder="e.g. Type 2 Diabetes, High BP, Hypothyroidism"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs uppercase tracking-widest font-bold text-stone-500 mb-2">Food Allergies or Intolerances (Optional)</label>
-                <input 
-                  type="text" 
-                  value={allergies}
-                  onChange={e => setAllergies(e.target.value)}
-                  className="w-full p-3 border border-stone-200 bg-stone-50 focus:bg-white focus:border-stone-900 outline-none font-sans text-sm"
-                  placeholder="e.g. Lactose, Gluten, Peanuts, Shellfish"
-                />
+              <div className="flex flex-wrap gap-2">
+                {MEDICAL_CONDITIONS.map(cond => {
+                  const isSelected = selectedConditions.includes(cond);
+                  return (
+                    <button
+                      key={cond}
+                      type="button"
+                      onClick={() => toggleCondition(cond)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
+                        isSelected 
+                          ? 'bg-stone-900 text-white border-stone-900 shadow-xs' 
+                          : 'bg-white text-stone-700 border-stone-200 hover:border-stone-400'
+                      }`}
+                    >
+                      {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                      {cond}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="flex gap-4 pt-4 border-t border-stone-100">
+            {/* Diagnosis / Recent Procedures (From Sheet e.g. Post CABG, Surgery) */}
+            <div>
+              <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
+                Diagnosis or Past Surgical Procedure (Optional)
+              </label>
+              <input 
+                type="text" 
+                value={diagnosisOrProcedure}
+                onChange={e => setDiagnosisOrProcedure(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none text-sm"
+                placeholder="e.g. Post-CABG, TURP, Gallbladder removal, Thyroidectomy"
+              />
+              <span className="text-[10px] text-stone-400 mt-1 block">
+                Helps your dietician prescribe safe post-surgical sodium, fiber, and protein adjustments.
+              </span>
+            </div>
+
+            {/* Food Allergy Screening (From Sheet: No vs Yes) */}
+            <div className="bg-stone-50/70 p-4 rounded-2xl border border-stone-200/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs uppercase tracking-wider font-extrabold text-stone-700 block">
+                    Food Allergy Screening
+                  </span>
+                  <span className="text-[11px] text-stone-500">
+                    Do you experience any food allergies, celiac disease, or intolerances?
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHasAllergies(false);
+                      setSelectedAllergies([]);
+                      setCustomAllergy('');
+                    }}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                      !hasAllergies 
+                        ? 'bg-emerald-600 text-white border-emerald-600' 
+                        : 'bg-white text-stone-600 border-stone-200'
+                    }`}
+                  >
+                    No Allergies
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHasAllergies(true)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                      hasAllergies 
+                        ? 'bg-rose-600 text-white border-rose-600' 
+                        : 'bg-white text-stone-600 border-stone-200'
+                    }`}
+                  >
+                    Yes, Specify
+                  </button>
+                </div>
+              </div>
+
+              {hasAllergies && (
+                <div className="pt-3 border-t border-stone-200/80 space-y-2.5">
+                  <span className="text-[11px] font-bold text-stone-700 block">
+                    Select Allergen Categories:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ALLERGEN_OPTIONS.map(alg => {
+                      const isSel = selectedAllergies.includes(alg);
+                      return (
+                        <button
+                          key={alg}
+                          type="button"
+                          onClick={() => toggleAllergy(alg)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all flex items-center gap-1 ${
+                            isSel 
+                              ? 'bg-rose-50 border-rose-400 text-rose-800' 
+                              : 'bg-white border-stone-200 text-stone-600 hover:border-stone-300'
+                          }`}
+                        >
+                          {isSel && <Check className="w-3 h-3 text-rose-600" />}
+                          {alg}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <input 
+                    type="text" 
+                    value={customAllergy}
+                    onChange={e => setCustomAllergy(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-stone-200 bg-white text-xs outline-none focus:border-rose-500"
+                    placeholder="Other specific allergies (e.g. Mushrooms, Sesame, Mustard)"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-3 border-t border-stone-100">
               <button 
                 type="button"
                 onClick={() => setSignUpStep(3)}
-                className="w-1/3 py-4 border border-stone-300 text-stone-700 font-sans tracking-widest text-xs uppercase font-bold hover:bg-stone-50 transition-colors flex items-center justify-center gap-1"
+                className="w-1/3 py-3.5 border border-stone-300 text-stone-700 text-xs font-bold rounded-xl hover:bg-stone-50 transition-colors flex items-center justify-center gap-1"
+              >
+                <ArrowLeft className="w-4 h-4" /> Back
+              </button>
+              <button 
+                type="button"
+                onClick={handleStep4Next}
+                className="w-2/3 py-3.5 bg-stone-900 hover:bg-black text-white text-xs uppercase tracking-widest font-black rounded-xl transition-all flex items-center justify-center gap-2 shadow-md shadow-stone-900/10"
+              >
+                Continue to Lifestyle & Preferences <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ─── ONBOARDING STEP 5: Dietary Preferences & Occupation ─────── */}
+        {isSignUp && signUpStep === 5 && (
+          <form onSubmit={handleFinalSubmit} className="space-y-6">
+            <div className="text-center mb-2">
+              <h3 className="text-xl font-bold text-stone-900 flex items-center justify-center gap-2">
+                <Leaf className="w-5 h-5 text-orange-600" />
+                Dietary Pattern & Daily Routine
+              </h3>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Finalizing your profile to design your meal plan and caloric baseline
+              </p>
+            </div>
+
+            {/* Food Preference (from Sheet) */}
+            <div>
+              <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-2">
+                Food Preference (From Sheet) *
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {FOOD_PREFERENCES.map(pref => {
+                  const isSelected = dietaryType === pref.id;
+                  return (
+                    <button
+                      key={pref.id}
+                      type="button"
+                      onClick={() => setDietaryType(pref.id)}
+                      className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-2.5 ${
+                        isSelected 
+                          ? 'border-orange-500 bg-orange-50/70 ring-2 ring-orange-400/40' 
+                          : 'border-stone-200 bg-stone-50/50 hover:bg-stone-100'
+                      }`}
+                    >
+                      <div className={`w-3.5 h-3.5 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
+                        isSelected ? 'border-orange-600 bg-orange-600' : 'border-stone-300'
+                      }`}>
+                        {isSelected && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
+                      </div>
+                      <div>
+                        <span className="font-bold text-xs text-stone-900 block">{pref.label}</span>
+                        <span className="text-[10px] text-stone-500 leading-tight block">{pref.desc}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Occupation (from Sheet) */}
+            <div>
+              <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-2">
+                Occupation (From Sheet) *
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {OCCUPATIONS.map(occ => {
+                  const isSelected = occupation === occ.id;
+                  return (
+                    <button
+                      key={occ.id}
+                      type="button"
+                      onClick={() => setOccupation(occ.id)}
+                      className={`p-3 rounded-2xl border text-left transition-all ${
+                        isSelected 
+                          ? 'border-stone-900 bg-stone-900 text-white' 
+                          : 'border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-800'
+                      }`}
+                    >
+                      <span className="font-bold text-xs block mb-0.5">{occ.label}</span>
+                      <span className={`text-[10px] block leading-tight ${isSelected ? 'text-stone-300' : 'text-stone-500'}`}>
+                        {occ.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Daily Activity Level */}
+            <div>
+              <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-2">
+                Daily Physical Activity Level *
+              </label>
+              <select 
+                value={activityLevel}
+                onChange={e => setActivityLevel(e.target.value)}
+                className="w-full p-3 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none text-xs font-semibold"
+              >
+                <option value="Sedentary">Sedentary (Desk Job, minimal daily movement, &lt; 3000 steps)</option>
+                <option value="Light">Lightly Active (1–3 days light exercise/walks per week)</option>
+                <option value="Moderate">Moderately Active (3–5 days workout/sports per week)</option>
+                <option value="High">Very Active (Heavy training 6+ days or physically demanding labor)</option>
+              </select>
+            </div>
+
+            <div className="flex gap-3 pt-3 border-t border-stone-100">
+              <button 
+                type="button"
+                onClick={() => setSignUpStep(4)}
+                className="w-1/3 py-3.5 border border-stone-300 text-stone-700 text-xs font-bold rounded-xl hover:bg-stone-50 transition-colors flex items-center justify-center gap-1"
               >
                 <ArrowLeft className="w-4 h-4" /> Back
               </button>
               <button 
                 type="submit" 
                 disabled={loading}
-                className="w-2/3 py-4 bg-brand-700 text-stone-50 font-sans tracking-widest text-xs uppercase font-bold hover:bg-brand-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-2/3 py-4 bg-gradient-to-r from-orange-500 via-orange-600 to-pink-600 hover:brightness-105 text-white text-xs uppercase tracking-widest font-black rounded-xl shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                {loading ? 'Completing Registration...' : 'Complete & Sign Up'}
+                {loading ? 'Creating Dossier...' : 'Complete Intake & Launch Portal'}
+                <Sparkles className="w-4 h-4" />
               </button>
             </div>
           </form>
         )}
 
-        {/* TOGGLE BETWEEN LOGIN & SIGN UP */}
-        <div className="mt-8 pt-8 border-t border-stone-100 text-center">
-          <p className="text-sm text-stone-500 mb-2">
-            {isSignUp ? 'Already registered?' : 'New Patient?'}
+        {/* ─── TOGGLE BETWEEN LOGIN & SIGN UP ─────────────────────────── */}
+        <div className="mt-6 pt-6 border-t border-stone-100 text-center">
+          <p className="text-xs text-stone-500 mb-1.5">
+            {isSignUp ? 'Already registered with a clinical file?' : 'Need to register as a new patient?'}
           </p>
           <button 
             type="button"
@@ -684,9 +1324,9 @@ export default function Login() {
               setSignUpStep(1);
               setError('');
             }} 
-            className="text-xs uppercase tracking-widest text-brand-700 font-bold hover:text-brand-900 transition-colors"
+            className="text-xs uppercase tracking-widest text-orange-600 hover:text-orange-700 font-extrabold transition-colors underline"
           >
-            {isSignUp ? 'Sign in to existing account' : 'Start Patient Onboarding Survey'}
+            {isSignUp ? 'Sign In to Existing Account' : 'Start Clinical Intake Survey'}
           </button>
         </div>
 

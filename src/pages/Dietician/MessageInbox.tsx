@@ -439,10 +439,10 @@ export default function MessageInbox() {
                       <div>
                         <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Conditions / Allergies</span>
                         <div className="truncate">
-                          {patient.allergies && patient.allergies.length > 0 ? (
+                          {(patient.allergies && patient.allergies.length > 0) || (patient.healthInfo?.allergies && patient.healthInfo?.allergies !== 'None') ? (
                             <span className="inline-flex items-center gap-1 font-bold text-rose-700">
                               <AlertTriangle className="w-3 h-3 text-rose-600" />
-                              {patient.allergies.join(', ')}
+                              {Array.isArray(patient.allergies) ? patient.allergies.join(', ') : patient.healthInfo?.allergies}
                             </span>
                           ) : (
                             <span className="text-stone-600 font-medium">None noted</span>

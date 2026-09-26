@@ -1,0 +1,20 @@
+<html><head><style>
+BODY{MARGIN-TOP: 0px; MARGIN-LEFT: 0px; MARGIN-RIGHT: 0px; margin-botom: 0px }
+.clTableHeader {BORDER-RIGHT: black 1px solid; BORDER-TOP: black 1px solid; FONT-SIZE: 16pt; BORDER-LEFT: black 1px solid; BORDER-BOTTOM: black 1px solid; FONT-FAMILY: arial; }
+.clTableBody {	BORDER-RIGHT: black 1px solid; BORDER-TOP: black 1px solid; FONT-SIZE: 9pt; BORDER-LEFT: black 1px solid; BORDER-BOTTOM: black 1px solid; FONT-FAMILY: arial; }
+.clReportBody {BORDER-RIGHT: black 1px solid; BORDER-TOP: black 1px solid; FONT-SIZE: 8pt; BORDER-LEFT: black 1px solid; BORDER-BOTTOM: black 1px solid; FONT-FAMILY: arial; }
+</style></head><body>
+<table cellpadding=3 cellspacing=0 width=100% align=center style='border-collapse:collapse;'>
+<tr><td align=middle class=clTableHeader colspan=8><b>Food Details</b></td></tr></table><table cellpadding=3 cellspacing=0 width=100% align=center style='border-collapse:collapse;'>
+<tr><td class=clReportBody align=center><b>S.No.</b></td><td class=clReportBody align=left><b>Food Item Name</b></td><td class=clReportBody align=left><b>Food Code</b></td><td class=clReportBody align=left><b>Food Group</b></td><td class=clReportBody align=left><b>Measure Type</b></td><td class=clReportBody align=left><b>Measure Detail</b></td><td class=clReportBody align=left><b>Net Grams of Edible Portion</b></td></tr>
+<tr><td class=clReportBody align=center>1.</td><td class=clReportBody align=left>Lentil, dhal</td><td class=clReportBody align=left>38A</td><td class=clReportBody align=left>Pulses and legumes</td><td class=clReportBody align=left>EDIBLE PORTION WEIGHT</td><td class=clReportBody align=left>Weight of Edible Portion = 16.0000 grams</td><td class=clReportBody align=left>16.0000 grams</td></tr>
+<tr><td class=clReportBody align=center>2.</td><td class=clReportBody align=left>Cooking oil (groundnut, gingelly, palmolein, mustard, coconut, etc)</td><td class=clReportBody align=left>438</td><td class=clReportBody align=left>Fats and Edible Oils</td><td class=clReportBody align=left>EDIBLE PORTION WEIGHT</td><td class=clReportBody align=left>Weight of Edible Portion = 1.0000 grams</td><td class=clReportBody align=left>1.0000 grams</td></tr>
+</table>
+<br><table cellpadding=3 cellspacing=0 width=100% align=center style='border-collapse:collapse;'>
+<tr><td align=middle class=clTableHeader colspan=7><b>Nutritive Value Details</b></td></tr></table><table cellpadding=3 cellspacing=0 width=100% align=center style='border-collapse:collapse;'>
+<tr><td class=clReportBody align=center><b>S.No.</b></td><td class=clReportBody align=left><b>Food Item</b></td><td class=clReportBody align=left><b>Measure Detail</b></td><td class=clReportBody align=left><b>Energy [Kcal]</b></td><td class=clReportBody align=left><b>Carbohydrates [gms]</b></td><td class=clReportBody align=left><b>Protein [gms]</b></td><td class=clReportBody align=left><b>Fat [gms]</b></td></tr>
+<tr><td class=clReportBody align=center>1.</td><td class=clReportBody align=left>Lentil, dhal (38A)</td><td class=clReportBody align=left>Weight of Edible Portion = 16.0000 grams</td><td class=clReportBody align=left>54.8800</td><td class=clReportBody align=left>9.4400</td><td class=clReportBody align=left>4.0160</td><td class=clReportBody align=left>0.1120</td></tr>
+<tr><td class=clReportBody align=center>2.</td><td class=clReportBody align=left>Cooking oil (groundnut, gingelly, palmolein, mustard, coconut, etc) (438)</td><td class=clReportBody align=left>Weight of Edible Portion = 1.0000 grams</td><td class=clReportBody align=left>9.0000</td><td class=clReportBody align=left>0.0000</td><td class=clReportBody align=left>0.0000</td><td class=clReportBody align=left>1.0000</td></tr>
+<tr><td class=clReportBody align=center></td><td class=clReportBody align=left>Total:</td><td class=clReportBody align=left></td><td class=clReportBody align=left>63.8800</td><td class=clReportBody align=left>9.4400</td><td class=clReportBody align=left>4.0160</td><td class=clReportBody align=left>1.1120</td></tr>
+</table>
+</body></html>

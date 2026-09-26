@@ -1,0 +1,20 @@
+<html><head><style>
+BODY{MARGIN-TOP: 0px; MARGIN-LEFT: 0px; MARGIN-RIGHT: 0px; margin-botom: 0px }
+.clTableHeader {BORDER-RIGHT: black 1px solid; BORDER-TOP: black 1px solid; FONT-SIZE: 16pt; BORDER-LEFT: black 1px solid; BORDER-BOTTOM: black 1px solid; FONT-FAMILY: arial; }
+.clTableBody {	BORDER-RIGHT: black 1px solid; BORDER-TOP: black 1px solid; FONT-SIZE: 9pt; BORDER-LEFT: black 1px solid; BORDER-BOTTOM: black 1px solid; FONT-FAMILY: arial; }
+.clReportBody {BORDER-RIGHT: black 1px solid; BORDER-TOP: black 1px solid; FONT-SIZE: 8pt; BORDER-LEFT: black 1px solid; BORDER-BOTTOM: black 1px solid; FONT-FAMILY: arial; }
+</style></head><body>
+<table cellpadding=3 cellspacing=0 width=100% align=center style='border-collapse:collapse;'>
+<tr><td align=middle class=clTableHeader colspan=8><b>Food Details</b></td></tr></table><table cellpadding=3 cellspacing=0 width=100% align=center style='border-collapse:collapse;'>
+<tr><td class=clReportBody align=center><b>S.No.</b></td><td class=clReportBody align=left><b>Food Item Name</b></td><td class=clReportBody align=left><b>Food Code</b></td><td class=clReportBody align=left><b>Food Group</b></td><td class=clReportBody align=left><b>Measure Type</b></td><td class=clReportBody align=left><b>Measure Detail</b></td><td class=clReportBody align=left><b>Net Grams of Edible Portion</b></td></tr>
+<tr><td class=clReportBody align=center>1.</td><td class=clReportBody align=left>Onion stalks</td><td class=clReportBody align=left>171</td><td class=clReportBody align=left>Other Vegetables</td><td class=clReportBody align=left>EDIBLE PORTION WEIGHT</td><td class=clReportBody align=left>Weight of Edible Portion = 3.0000 grams</td><td class=clReportBody align=left>3.0000 grams</td></tr>
+<tr><td class=clReportBody align=center>2.</td><td class=clReportBody align=left>Maize,dry</td><td class=clReportBody align=left>5</td><td class=clReportBody align=left>Cereal grains and products</td><td class=clReportBody align=left>EDIBLE PORTION WEIGHT</td><td class=clReportBody align=left>Weight of Edible Portion = 1.0000 grams</td><td class=clReportBody align=left>1.0000 grams</td></tr>
+</table>
+<br><table cellpadding=3 cellspacing=0 width=100% align=center style='border-collapse:collapse;'>
+<tr><td align=middle class=clTableHeader colspan=7><b>Nutritive Value Details</b></td></tr></table><table cellpadding=3 cellspacing=0 width=100% align=center style='border-collapse:collapse;'>
+<tr><td class=clReportBody align=center><b>S.No.</b></td><td class=clReportBody align=left><b>Food Item</b></td><td class=clReportBody align=left><b>Measure Detail</b></td><td class=clReportBody align=left><b>Energy [Kcal]</b></td><td class=clReportBody align=left><b>Carbohydrates [gms]</b></td><td class=clReportBody align=left><b>Protein [gms]</b></td><td class=clReportBody align=left><b>Fat [gms]</b></td></tr>
+<tr><td class=clReportBody align=center>1.</td><td class=clReportBody align=left>Onion stalks (171)</td><td class=clReportBody align=left>Weight of Edible Portion = 3.0000 grams</td><td class=clReportBody align=left>1.2300</td><td class=clReportBody align=left>0.2670</td><td class=clReportBody align=left>0.0270</td><td class=clReportBody align=left>0.0060</td></tr>
+<tr><td class=clReportBody align=center>2.</td><td class=clReportBody align=left>Maize,dry (5)</td><td class=clReportBody align=left>Weight of Edible Portion = 1.0000 grams</td><td class=clReportBody align=left>3.4200</td><td class=clReportBody align=left>0.6620</td><td class=clReportBody align=left>0.1110</td><td class=clReportBody align=left>0.0360</td></tr>
+<tr><td class=clReportBody align=center></td><td class=clReportBody align=left>Total:</td><td class=clReportBody align=left></td><td class=clReportBody align=left>4.6500</td><td class=clReportBody align=left>0.9290</td><td class=clReportBody align=left>0.1380</td><td class=clReportBody align=left>0.0420</td></tr>
+</table>
+</body></html>

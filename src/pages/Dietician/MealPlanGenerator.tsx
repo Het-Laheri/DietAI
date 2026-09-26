@@ -38,6 +38,7 @@ export default function MealPlanGenerator() {
   const [dbRecipes, setDbRecipes] = useState<RecipeDBItem[]>([]);
   const [loadingRecipes, setLoadingRecipes] = useState(false);
   const [recipeSearch, setRecipeSearch] = useState('');
+  const [recipeDietFilter, setRecipeDietFilter] = useState<string>('All');
   
   const [targets, setTargets] = useState({ calories: 2000, protein: 120, carbs: 200, fat: 60 });
   const [instructions, setInstructions] = useState('');
@@ -397,10 +398,12 @@ export default function MealPlanGenerator() {
     }
   };
 
-  const filteredDbRecipes = dbRecipes.filter(r => 
-    r.name.toLowerCase().includes(recipeSearch.toLowerCase()) || 
-    (r.ingredients || []).join(' ').toLowerCase().includes(recipeSearch.toLowerCase())
-  );
+  const filteredDbRecipes = dbRecipes.filter(r => {
+    const matchesSearch = r.name.toLowerCase().includes(recipeSearch.toLowerCase()) || 
+      (r.ingredients || []).join(' ').toLowerCase().includes(recipeSearch.toLowerCase());
+    const matchesDiet = recipeDietFilter === 'All' || (r.dietaryType || '').toLowerCase() === recipeDietFilter.toLowerCase();
+    return matchesSearch && matchesDiet;
+  });
 
   // Compute daily macro totals for active day
   const currentDay = generatedPlan?.find(d => d.dayNumber === activeDayTab);
@@ -474,11 +477,26 @@ export default function MealPlanGenerator() {
                 </h3>
                 <button onClick={() => setKbAssigning(null)} className="text-amber-700 text-xs font-semibold underline">Cancel</button>
               </div>
-              <div className="relative mb-3">
+              <div className="relative mb-2">
                 <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input type="text" placeholder="Search practice recipes..." value={recipeSearch} onChange={e => setRecipeSearch(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 border border-amber-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
                 />
+              </div>
+              <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1 text-[10px]">
+                {['All', 'Non-Vegetarian', 'Vegetarian', 'Jain', 'Eggetarian', 'Vegan'].map(diet => (
+                  <button
+                    key={diet}
+                    onClick={() => setRecipeDietFilter(diet)}
+                    className={`px-2 py-0.5 rounded-md font-semibold whitespace-nowrap transition-colors ${
+                      recipeDietFilter === diet
+                        ? 'bg-amber-900 text-white'
+                        : 'bg-white border border-amber-200 text-stone-600 hover:bg-amber-100/50'
+                    }`}
+                  >
+                    {diet}
+                  </button>
+                ))}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-80 overflow-y-auto">
                 {filteredDbRecipes.map((r, i) => (
@@ -699,7 +717,7 @@ export default function MealPlanGenerator() {
                 {loadingRecipes && <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-500" />}
               </div>
 
-              <div className="mb-3 relative">
+              <div className="mb-2 relative">
                 <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input 
                   type="text"
@@ -708,6 +726,22 @@ export default function MealPlanGenerator() {
                   onChange={e => setRecipeSearch(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 border border-stone-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-500"
                 />
+              </div>
+
+              <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1 text-[10px]">
+                {['All', 'Non-Vegetarian', 'Vegetarian', 'Jain', 'Eggetarian', 'Vegan'].map(diet => (
+                  <button
+                    key={diet}
+                    onClick={() => setRecipeDietFilter(diet)}
+                    className={`px-2 py-0.5 rounded-md font-semibold whitespace-nowrap transition-colors ${
+                      recipeDietFilter === diet
+                        ? 'bg-stone-900 text-white'
+                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                    }`}
+                  >
+                    {diet}
+                  </button>
+                ))}
               </div>
 
               {swapTarget && (

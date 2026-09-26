@@ -991,7 +991,75 @@ export async function saveRecipesToDB(recipes: RecipeDBItem[]): Promise<number> 
   }
 }
 
-export async function getStoredRecipesFromDB(dietaryType?: string, clinicalFocus?: string): Promise<RecipeDBItem[]> {
+/**
+ * Clinical Dietary Hierarchy Compatibility Engine
+ *
+ * Higher dietary tiers can consume items from compatible lower / more restrictive tiers:
+ * - Non-Vegetarian: Can eat Non-Vegetarian, Eggetarian, Vegetarian, Jain, and Vegan (all foods).
+ * - Eggetarian: Can eat Eggetarian, Vegetarian, Jain, and Vegan (strictly NO poultry, meat, or fish).
+ * - Vegetarian: Can eat Vegetarian, Jain, and Vegan (dairy allowed; strictly NO eggs or meat).
+ * - Jain: Strictly Jain recipes (no meat, eggs, or underground root vegetables: onion, garlic, potatoes, carrots, etc.).
+ * - Vegan: Strictly 100% plant-based recipes (no dairy/paneer/ghee/butter/curd, no eggs, no honey, no meat).
+ */
+export function isRecipeDietaryCompatible(recipeDiet?: string, patientDiet?: string): boolean {
+  if (!patientDiet || !patientDiet.trim()) return true;
+
+  const pd = patientDiet.trim().toLowerCase();
+  const rd = (recipeDiet || 'vegetarian').trim().toLowerCase();
+
+  // Non-Vegetarian, Standard, All, or Omnivore can consume all recipes
+  if (
+    pd === 'all' ||
+    pd === 'standard' ||
+    pd === 'non-vegetarian' ||
+    pd === 'non veg' ||
+    pd === 'nonveg' ||
+    pd === 'omnivore'
+  ) {
+    return true;
+  }
+
+  // Eggetarian: Eggetarian, Vegetarian, Jain, Vegan
+  if (pd === 'eggetarian' || pd === 'eggitarian') {
+    return (
+      rd === 'eggetarian' ||
+      rd === 'eggitarian' ||
+      rd === 'vegetarian' ||
+      rd === 'veg' ||
+      rd === 'jain' ||
+      rd === 'vegan'
+    );
+  }
+
+  // Vegetarian: Vegetarian, Jain, Vegan
+  if (pd === 'vegetarian' || pd === 'veg' || pd === 'lacto-vegetarian' || pd === 'lacto vegetarian') {
+    return (
+      rd === 'vegetarian' ||
+      rd === 'veg' ||
+      rd === 'jain' ||
+      rd === 'vegan'
+    );
+  }
+
+  // Jain: Strictly Jain
+  if (pd === 'jain') {
+    return rd === 'jain';
+  }
+
+  // Vegan: Strictly Vegan
+  if (pd === 'vegan') {
+    return rd === 'vegan';
+  }
+
+  // Direct match fallback
+  return rd === pd;
+}
+
+export async function getStoredRecipesFromDB(
+  dietaryType?: string,
+  clinicalFocus?: string,
+  exactMatch = false
+): Promise<RecipeDBItem[]> {
   try {
     const snap = await getDoc(doc(db, 'dietician_notes', 'clinical_knowledge_base'));
     let recipes: RecipeDBItem[] = [];
@@ -1006,7 +1074,11 @@ export async function getStoredRecipesFromDB(dietaryType?: string, clinicalFocus
     }
 
     if (dietaryType && dietaryType !== 'All') {
-      recipes = recipes.filter(r => r.dietaryType.toLowerCase() === dietaryType.toLowerCase());
+      if (exactMatch) {
+        recipes = recipes.filter(r => (r.dietaryType || '').toLowerCase() === dietaryType.toLowerCase());
+      } else {
+        recipes = recipes.filter(r => isRecipeDietaryCompatible(r.dietaryType, dietaryType));
+      }
     }
     if (clinicalFocus && clinicalFocus !== 'All') {
       recipes = recipes.filter(r => (r.clinicalFocus || '').toLowerCase().includes(clinicalFocus.toLowerCase()));
@@ -1039,18 +1111,10 @@ export function buildClinicalMealPlanFromRecipes(
 ): { dayNumber: number; meals: Meal[] }[] {
   let pool = availableRecipes && availableRecipes.length > 0 ? availableRecipes : DEFAULT_CLINICAL_RECIPES;
 
-  // Dietary filter
-  const patientDiet = (patientProfile?.dietaryType || '').toLowerCase();
-  if (patientDiet && patientDiet !== 'standard' && patientDiet !== 'all') {
-    const dietFiltered = pool.filter(r => {
-      const rd = (r.dietaryType || '').toLowerCase();
-      if (patientDiet === 'vegetarian') return rd === 'vegetarian' || rd === 'jain' || rd === 'vegan';
-      if (patientDiet === 'vegan') return rd === 'vegan';
-      if (patientDiet === 'jain') return rd === 'jain';
-      if (patientDiet === 'eggetarian') return rd === 'eggetarian' || rd === 'vegetarian' || rd === 'vegan';
-      if (patientDiet === 'non-vegetarian') return true;
-      return rd === patientDiet;
-    });
+  // Dietary filter via clinical hierarchy
+  const patientDiet = patientProfile?.dietaryType || '';
+  if (patientDiet && patientDiet.toLowerCase() !== 'standard' && patientDiet.toLowerCase() !== 'all') {
+    const dietFiltered = pool.filter(r => isRecipeDietaryCompatible(r.dietaryType, patientDiet));
     if (dietFiltered.length > 0) {
       pool = dietFiltered;
     }

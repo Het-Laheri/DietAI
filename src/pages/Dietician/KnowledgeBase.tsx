@@ -9,7 +9,8 @@ import JSZip from 'jszip';
 import {
   RecipeDBItem, getStoredRecipesFromDB, saveRecipesToDB, clearRecipeDB,
   updateRecipeTags, savePatientWeekPlan, getPatients, PatientProfile,
-  WeekDay, MealSlot, WeekPlanEntry, PatientWeekPlan, getAllDraftWeekPlans
+  WeekDay, MealSlot, WeekPlanEntry, PatientWeekPlan, getAllDraftWeekPlans,
+  isRecipeDietaryCompatible
 } from '../../services/db';
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
@@ -881,6 +882,20 @@ export default function KnowledgeBase() {
                       <option key={p.id} value={p.id}>{p.name} ({p.dietaryType || 'Standard'})</option>
                     ))}
                   </select>
+                  {assignPatientId && (() => {
+                    const selPatient = patients.find(p => p.id === assignPatientId);
+                    const patientDiet = selPatient?.dietaryType || 'Standard';
+                    const compatible = isRecipeDietaryCompatible(assignModal.recipe.dietaryType, patientDiet);
+                    return compatible ? (
+                      <p className="mt-1 text-[11px] text-emerald-700 flex items-center gap-1 font-medium">
+                        ✓ Diet Compatible: {patientDiet} client can consume this {assignModal.recipe.dietaryType} dish.
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 p-2 rounded border border-amber-200 flex items-center gap-1 font-medium">
+                        ⚠️ Dietary Conflict: Client is registered as {patientDiet}, but recipe is {assignModal.recipe.dietaryType}.
+                      </p>
+                    );
+                  })()}
                 </div>
 
                 {/* Day + Slot */}

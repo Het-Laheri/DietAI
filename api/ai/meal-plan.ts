@@ -156,17 +156,32 @@ export default async function handler(req: any, res: any) {
       ? availableRecipes
       : DEFAULT_RECIPES;
 
-    // Filter recipes compatible with patient dietary preference
+    // Filter recipes compatible with patient dietary preference via clinical hierarchy
     const pDiet = (patientProfile?.dietaryType || '').toLowerCase();
     let eligibleRecipes = recipePool;
     if (pDiet && pDiet !== 'standard' && pDiet !== 'all') {
       const filtered = recipePool.filter((r: any) => {
-        const rd = (r.dietaryType || '').toLowerCase();
-        if (pDiet === 'vegetarian') return rd === 'vegetarian' || rd === 'jain' || rd === 'vegan';
-        if (pDiet === 'vegan') return rd === 'vegan';
-        if (pDiet === 'jain') return rd === 'jain';
-        if (pDiet === 'eggetarian') return rd === 'eggetarian' || rd === 'vegetarian' || rd === 'vegan';
-        if (pDiet === 'non-vegetarian') return true;
+        const rd = (r.dietaryType || 'vegetarian').toLowerCase();
+        // Non-Vegetarian: Can consume all clinical recipes (Non-Veg, Eggetarian, Vegetarian, Jain, Vegan)
+        if (pDiet === 'non-vegetarian' || pDiet === 'non veg' || pDiet === 'nonveg' || pDiet === 'omnivore') {
+          return true;
+        }
+        // Eggetarian: Eggetarian, Vegetarian, Jain, Vegan
+        if (pDiet === 'eggetarian' || pDiet === 'eggitarian') {
+          return rd === 'eggetarian' || rd === 'eggitarian' || rd === 'vegetarian' || rd === 'veg' || rd === 'jain' || rd === 'vegan';
+        }
+        // Vegetarian: Vegetarian, Jain, Vegan (dairy OK, no eggs/meat)
+        if (pDiet === 'vegetarian' || pDiet === 'veg' || pDiet === 'lacto-vegetarian') {
+          return rd === 'vegetarian' || rd === 'veg' || rd === 'jain' || rd === 'vegan';
+        }
+        // Jain: strictly Jain
+        if (pDiet === 'jain') {
+          return rd === 'jain';
+        }
+        // Vegan: strictly Vegan
+        if (pDiet === 'vegan') {
+          return rd === 'vegan';
+        }
         return rd === pDiet;
       });
       if (filtered.length >= 3) {
@@ -196,6 +211,13 @@ export default async function handler(req: any, res: any) {
 Patient: ${JSON.stringify(patientProfile || {})}
 Macro Targets: ${JSON.stringify(targets || { calories: 2000, protein: 120, carbs: 200, fat: 60 })}
 Dietary Notes: ${instructions || 'None'}
+
+CLINICAL DIETARY HIERARCHY LOGIC:
+- Non-Vegetarian: Can and should consume dishes across all categories (Non-Vegetarian, Eggetarian, Vegetarian, Jain, Vegan). Provide a realistic, well-rounded clinical Indian diet including healthy vegetarian dals, rotis, sabzis, and salads alongside lean non-veg dishes.
+- Eggetarian: Can consume Eggetarian, Vegetarian, Jain, and Vegan recipes (strictly NO meat, poultry, or fish).
+- Vegetarian: Can consume Vegetarian, Jain, and Vegan recipes (dairy allowed; strictly NO eggs, poultry, meat, or fish).
+- Jain: STRICTLY Jain recipes only (no onion, garlic, potatoes, tubers, meat, or eggs).
+- Vegan: STRICTLY 100% plant-based recipes only (no dairy, paneer, curd, ghee, butter, eggs, honey, or meat).
 
 CRITICAL REQUIREMENT:
 You MUST ONLY select dishes and meals from the following pre-provided clinical recipe list.

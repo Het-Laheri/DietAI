@@ -234,67 +234,67 @@ export default function MessageInbox() {
         </div>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      {/* Stat Cards - Unified Metric Strip */}
+      <div className="bg-white rounded-xl border border-stone-200/90 shadow-xs divide-y sm:divide-y-0 sm:divide-x divide-stone-100 grid grid-cols-1 sm:grid-cols-3 mb-6 overflow-hidden">
         <div 
           onClick={() => setFilter('pending')}
-          className={`cursor-pointer p-5 rounded-2xl border transition-all ${
+          className={`cursor-pointer p-4 md:p-5 transition-colors ${
             filter === 'pending' 
-              ? 'bg-orange-50/70 border-orange-300 ring-2 ring-orange-400/20 shadow-xs' 
-              : 'bg-white border-stone-200 hover:border-stone-300'
+              ? 'bg-orange-50/60' 
+              : 'hover:bg-stone-50/60'
           }`}
         >
           <div className="flex items-center justify-between text-orange-700 mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider">Awaiting Your Approval</span>
-            <Clock className="w-4 h-4" />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Awaiting Review</span>
+            <Clock className="w-3.5 h-3.5" />
           </div>
-          <div className="text-3xl font-serif font-bold text-stone-900">{pendingCount}</div>
-          <p className="text-xs text-stone-500 mt-1">Pending clinical review</p>
+          <div className="text-2xl md:text-3xl font-serif font-bold text-stone-900">{pendingCount}</div>
+          <p className="text-[11px] text-stone-500 mt-0.5">Pending clinical sign-off</p>
         </div>
 
         <div 
           onClick={() => setFilter('answered')}
-          className={`cursor-pointer p-5 rounded-2xl border transition-all ${
+          className={`cursor-pointer p-4 md:p-5 transition-colors ${
             filter === 'answered' 
-              ? 'bg-emerald-50/70 border-emerald-300 ring-2 ring-emerald-400/20 shadow-xs' 
-              : 'bg-white border-stone-200 hover:border-stone-300'
+              ? 'bg-emerald-50/60' 
+              : 'hover:bg-stone-50/60'
           }`}
         >
           <div className="flex items-center justify-between text-emerald-700 mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider">Approved & Sent</span>
-            <CheckCircle2 className="w-4 h-4" />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Approved & Sent</span>
+            <CheckCircle2 className="w-3.5 h-3.5" />
           </div>
-          <div className="text-3xl font-serif font-bold text-stone-900">{answeredCount}</div>
-          <p className="text-xs text-stone-500 mt-1">Delivered to patient screens</p>
+          <div className="text-2xl md:text-3xl font-serif font-bold text-stone-900">{answeredCount}</div>
+          <p className="text-[11px] text-stone-500 mt-0.5">Delivered to patient app</p>
         </div>
 
         <div 
           onClick={() => setFilter('all')}
-          className={`cursor-pointer p-5 rounded-2xl border transition-all ${
+          className={`cursor-pointer p-4 md:p-5 transition-colors ${
             filter === 'all' 
-              ? 'bg-stone-100 border-stone-300 ring-2 ring-stone-400/20 shadow-xs' 
-              : 'bg-white border-stone-200 hover:border-stone-300'
+              ? 'bg-stone-100/70' 
+              : 'hover:bg-stone-50/60'
           }`}
         >
           <div className="flex items-center justify-between text-stone-600 mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider">All History</span>
-            <Bot className="w-4 h-4" />
+            <span className="text-[10px] font-bold uppercase tracking-wider">All History</span>
+            <Bot className="w-3.5 h-3.5" />
           </div>
-          <div className="text-3xl font-serif font-bold text-stone-900">{queries.length}</div>
-          <p className="text-xs text-stone-500 mt-1">Total patient inquiries</p>
+          <div className="text-2xl md:text-3xl font-serif font-bold text-stone-900">{queries.length}</div>
+          <p className="text-[11px] text-stone-500 mt-0.5">Total patient questions</p>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-6">
-        <div className="flex items-center gap-1 bg-stone-100 p-1.5 rounded-xl">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-lg">
           {(['pending', 'answered', 'all'] as FilterTab[]).map(tab => (
             <button
               key={tab}
               onClick={() => setFilter(tab)}
-              className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+              className={`px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider rounded-md transition-all ${
                 filter === tab 
-                  ? 'bg-white text-stone-900 shadow-sm' 
+                  ? 'bg-white text-stone-900 shadow-2xs font-bold' 
                   : 'text-stone-500 hover:text-stone-800'
               }`}
             >
@@ -304,13 +304,13 @@ export default function MessageInbox() {
         </div>
 
         <div className="relative flex-1 sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search patient or question..."
-            className="w-full pl-9 pr-4 py-2 bg-white border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+            placeholder="Search patient or query..."
+            className="w-full pl-8 pr-3 py-1.5 bg-white border border-stone-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-500"
           />
         </div>
       </div>
@@ -318,15 +318,15 @@ export default function MessageInbox() {
       {/* Query Cards */}
       {loading ? (
         <div className="flex-1 flex flex-col items-center justify-center py-20 text-stone-400">
-          <RefreshCw className="w-8 h-8 animate-spin mb-3 text-orange-500" />
-          <p className="text-sm font-medium">Connecting to live query feed...</p>
+          <RefreshCw className="w-6 h-6 animate-spin mb-3 text-orange-500" />
+          <p className="text-xs font-medium">Connecting to live query feed...</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center py-20 text-center bg-white border border-dashed border-stone-200 rounded-2xl p-8">
-          <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-400 mb-3">
-            <CheckCircle2 className="w-6 h-6" />
+        <div className="flex-1 flex flex-col items-center justify-center py-16 text-center bg-white border border-dashed border-stone-200 rounded-xl p-8">
+          <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center mb-2.5">
+            <CheckCircle2 className="w-5 h-5" />
           </div>
-          <h3 className="text-base font-bold text-stone-800">
+          <h3 className="text-sm font-bold text-stone-800">
             {filter === 'pending' ? 'All caught up! No queries awaiting approval.' : 'No queries found.'}
           </h3>
           <p className="text-xs text-stone-500 max-w-sm mt-1">
@@ -336,7 +336,7 @@ export default function MessageInbox() {
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {filtered.map(q => {
             const patient = patients.find(p => p.id === q.patientId);
             const isPending = q.status === 'pending';
@@ -346,18 +346,18 @@ export default function MessageInbox() {
             return (
               <div 
                 key={q.id}
-                className={`bg-white border rounded-2xl overflow-hidden shadow-xs transition-all ${
+                className={`bg-white border rounded-xl overflow-hidden shadow-xs transition-all ${
                   isPending 
-                    ? 'border-orange-300 ring-1 ring-orange-300/40' 
+                    ? 'border-orange-200/90' 
                     : 'border-stone-200'
                 }`}
               >
                 {/* Header */}
-                <div className={`px-6 py-4 flex flex-wrap items-center justify-between gap-3 border-b ${
-                  isPending ? 'bg-orange-50/40 border-orange-100' : 'bg-stone-50/70 border-stone-100'
+                <div className={`px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 border-b ${
+                  isPending ? 'bg-orange-50/30 border-orange-100' : 'bg-stone-50/60 border-stone-100'
                 }`}>
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm">
+                    <div className="w-8 h-8 rounded-lg bg-stone-900 text-white flex items-center justify-center font-bold text-xs uppercase shadow-xs">
                       {q.patientName ? q.patientName.charAt(0) : 'P'}
                     </div>
                     <div>
@@ -366,13 +366,13 @@ export default function MessageInbox() {
                         {patient && (
                           <Link 
                             to={`/dietician/patients/${patient.id}`}
-                            className="text-[11px] text-orange-600 hover:text-orange-800 flex items-center gap-1 font-bold underline"
+                            className="text-[11px] text-orange-600 hover:text-orange-800 flex items-center gap-0.5 font-semibold underline"
                           >
-                            Profile <ExternalLink className="w-3 h-3" />
+                            Profile <ExternalLink className="w-2.5 h-2.5" />
                           </Link>
                         )}
                       </div>
-                      <span className="text-[11px] text-stone-400">
+                      <span className="text-[10px] text-stone-400">
                         Submitted {q.date}
                       </span>
                     </div>
@@ -383,7 +383,7 @@ export default function MessageInbox() {
                     {patient && (
                       <div className="hidden md:flex items-center gap-1.5 mr-2">
                         {patient.dietaryType && (
-                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-stone-100 text-stone-600 border border-stone-200">
+                          <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-stone-100 text-stone-600 border border-stone-200">
                             {patient.dietaryType}
                           </span>
                         )}
@@ -395,10 +395,10 @@ export default function MessageInbox() {
                       </div>
                     )}
 
-                    <span className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full border ${
+                    <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md border ${
                       isPending 
-                        ? 'bg-amber-100 text-amber-800 border-amber-300' 
-                        : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                        : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                     }`}>
                       {isPending ? 'Awaiting Approval' : 'Delivered'}
                     </span>
@@ -406,31 +406,31 @@ export default function MessageInbox() {
                     <button
                       onClick={() => q.id && handleDelete(q.id, q.patientName)}
                       title="Delete query"
-                      className="p-1.5 text-stone-400 hover:text-rose-600 rounded-lg transition-colors ml-1"
+                      className="p-1 text-stone-400 hover:text-rose-600 rounded transition-colors ml-1"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
 
                 {/* Content */}
-                <div className="p-6 space-y-5">
+                <div className="p-5 space-y-4">
                   {/* Patient Clinical Context Card */}
                   {patient && (
-                    <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="p-3.5 bg-stone-50 border border-stone-200/70 rounded-lg grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                       <div>
                         <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Dietary Profile</span>
-                        <span className="font-bold text-stone-900">{patient.dietaryType || 'Standard Balanced'}</span>
+                        <span className="font-semibold text-stone-900">{patient.dietaryType || 'Standard Balanced'}</span>
                       </div>
                       <div>
                         <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Current / Target Wt</span>
-                        <span className="font-bold text-stone-900">
+                        <span className="font-semibold text-stone-900">
                           {patient.currentWeightKg ? `${patient.currentWeightKg}kg` : '--'} → {patient.targetWeightKg ? `${patient.targetWeightKg}kg` : '--'}
                         </span>
                       </div>
                       <div>
                         <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Adherence Rate</span>
-                        <span className={`font-bold ${
+                        <span className={`font-semibold ${
                           (patient.adherencePercentage ?? 75) >= 70 ? 'text-emerald-700' : 'text-amber-700'
                         }`}>
                           {patient.adherencePercentage ?? 75}%
@@ -440,7 +440,7 @@ export default function MessageInbox() {
                         <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Conditions / Allergies</span>
                         <div className="truncate">
                           {(patient.allergies && patient.allergies.length > 0) || (patient.healthInfo?.allergies && patient.healthInfo?.allergies !== 'None') ? (
-                            <span className="inline-flex items-center gap-1 font-bold text-rose-700">
+                            <span className="inline-flex items-center gap-1 font-semibold text-rose-700">
                               <AlertTriangle className="w-3 h-3 text-rose-600" />
                               {Array.isArray(patient.allergies) ? patient.allergies.join(', ') : patient.healthInfo?.allergies}
                             </span>
@@ -457,7 +457,7 @@ export default function MessageInbox() {
                     <span className="text-[10px] uppercase font-bold tracking-widest text-stone-400 block mb-1">
                       Patient Query
                     </span>
-                    <div className="p-4 bg-orange-50/30 border border-orange-200/60 rounded-xl text-sm text-stone-900 leading-relaxed font-sans font-medium">
+                    <div className="p-3.5 bg-orange-50/30 border border-orange-200/50 rounded-lg text-xs md:text-sm text-stone-900 leading-relaxed font-sans font-medium">
                       "{q.question}"
                     </div>
                   </div>
@@ -476,7 +476,7 @@ export default function MessageInbox() {
                             type="button"
                             onClick={() => generateDraftForQuery(q)}
                             disabled={isGenerating}
-                            className="text-[11px] text-orange-600 hover:text-orange-800 underline font-bold flex items-center gap-1 disabled:opacity-50"
+                            className="text-[11px] text-orange-600 hover:text-orange-800 underline font-semibold flex items-center gap-1 disabled:opacity-50"
                           >
                             <RefreshCw className={`w-3 h-3 ${isGenerating ? 'animate-spin' : ''}`} />
                             Regenerate AI Draft
@@ -500,13 +500,13 @@ export default function MessageInbox() {
                           value={editReplies[q.id!] ?? aiDrafts[q.id!] ?? ''}
                           onChange={e => q.id && setEditReplies(p => ({ ...p, [q.id!]: e.target.value }))}
                           placeholder="Type or modify the clinical answer that will be sent to the patient..."
-                          className="w-full p-4 bg-white border border-stone-300 rounded-xl text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent font-sans leading-relaxed resize-y shadow-inner"
+                          className="w-full p-3.5 bg-white border border-stone-300 rounded-lg text-xs md:text-sm text-stone-900 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-transparent font-sans leading-relaxed resize-y shadow-2xs"
                         />
                       </div>
                     ) : (
-                      <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-xl text-sm text-stone-800 leading-relaxed font-sans">
+                      <div className="p-3.5 bg-emerald-50/50 border border-emerald-200/70 rounded-lg text-xs md:text-sm text-stone-800 leading-relaxed font-sans">
                         <p className="whitespace-pre-wrap">{q.reply}</p>
-                        <div className="mt-3 flex items-center gap-1.5 text-[11px] text-emerald-700 font-bold uppercase tracking-wider">
+                        <div className="mt-2.5 flex items-center gap-1.5 text-[10px] text-emerald-800 font-bold uppercase tracking-wider">
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           Authorized by Lead Dietician • Visible on Patient's Screen
                         </div>
@@ -517,18 +517,18 @@ export default function MessageInbox() {
 
                 {/* Actions Footer for Pending */}
                 {isPending && (
-                  <div className="px-6 py-4 bg-stone-50 border-t border-stone-200 flex flex-wrap items-center justify-between gap-3">
+                  <div className="px-5 py-3.5 bg-stone-50/70 border-t border-stone-200/80 flex flex-wrap items-center justify-between gap-3">
                     <span className="text-xs text-stone-500 italic">
-                      You can edit the AI answer above or type your own before clicking approve.
+                      Review or edit the response before sending to client.
                     </span>
 
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => handleApproveAndSend(q)}
                         disabled={isProcessing}
-                        className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-md disabled:opacity-50"
+                        className="px-4 py-2 bg-stone-900 hover:bg-black text-white rounded-lg text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
                       >
-                        <Check className="w-4 h-4" />
+                        <Check className="w-3.5 h-3.5 text-orange-400" />
                         {isProcessing ? 'Authorizing...' : 'Approve & Send to User'}
                       </button>
                     </div>

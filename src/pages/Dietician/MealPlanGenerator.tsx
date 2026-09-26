@@ -418,8 +418,8 @@ export default function MealPlanGenerator() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-serif font-bold text-stone-900">Meal Plan Studio</h1>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-800 border border-orange-200">
+            <h1 className="text-xl md:text-2xl font-serif font-bold text-stone-900">Meal Plan Studio</h1>
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-orange-800 border border-orange-200/60">
               Clinical Builder
             </span>
           </div>
@@ -430,16 +430,16 @@ export default function MealPlanGenerator() {
       </div>
 
       {/* Mode Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-stone-200">
+      <div className="flex items-center gap-1.5 mb-6 border-b border-stone-200">
         <button
           onClick={() => setStudioTab('ai')}
-          className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px flex items-center gap-2 ${studioTab === 'ai' ? 'border-orange-500 text-orange-700' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
+          className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${studioTab === 'ai' ? 'border-orange-500 text-orange-700 font-bold' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
         >
           <Sparkles className="w-3.5 h-3.5" /> AI Generator
         </button>
         <button
           onClick={() => setStudioTab('kb')}
-          className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px flex items-center gap-2 ${studioTab === 'kb' ? 'border-orange-500 text-orange-700' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
+          className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${studioTab === 'kb' ? 'border-orange-500 text-orange-700 font-bold' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
         >
           <BookOpen className="w-3.5 h-3.5" /> Build from Knowledge Base
         </button>
@@ -447,15 +447,15 @@ export default function MealPlanGenerator() {
 
       {/* ═════════════ KB WEEK PLANNER TAB ════════════════════════════════════ */}
       {studioTab === 'kb' && (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {/* Patient selector */}
-          <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs">
-            <h3 className="font-bold text-stone-900 text-sm mb-3 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs font-bold">1</span>
+          <div className="bg-white border border-stone-200/90 rounded-xl p-5 shadow-xs">
+            <h3 className="font-serif font-bold text-stone-900 text-sm mb-3 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-stone-900 text-white flex items-center justify-center text-[10px] font-bold">1</span>
               Select Patient
             </h3>
             <select value={selectedPatientId} onChange={e => setSelectedPatientId(e.target.value)}
-              className="w-full border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs font-medium outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+              className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs font-medium outline-none focus:ring-1 focus:ring-orange-500 bg-white"
             >
               <option value="">Select patient profile...</option>
               {patients.map(p => (
@@ -466,29 +466,29 @@ export default function MealPlanGenerator() {
 
           {/* KB Recipe Picker */}
           {kbAssigning && (
-            <div className="bg-amber-50 border border-amber-300 rounded-2xl p-5 shadow-xs">
+            <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-5 shadow-xs">
               <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-amber-900 text-sm flex items-center gap-2">
-                  <BookOpen className="w-4 h-4" />
+                <h3 className="font-bold text-amber-900 text-xs flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-amber-700" />
                   Choose a recipe for <strong>{kbAssigning.day} — {kbAssigning.slot}</strong>
                 </h3>
-                <button onClick={() => setKbAssigning(null)} className="text-amber-700 text-xs font-bold underline">Cancel</button>
+                <button onClick={() => setKbAssigning(null)} className="text-amber-700 text-xs font-semibold underline">Cancel</button>
               </div>
               <div className="relative mb-3">
                 <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input type="text" placeholder="Search recipes..." value={recipeSearch} onChange={e => setRecipeSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 border border-amber-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                <input type="text" placeholder="Search practice recipes..." value={recipeSearch} onChange={e => setRecipeSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 border border-amber-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
                 />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-80 overflow-y-auto">
                 {filteredDbRecipes.map((r, i) => (
                   <button key={r.id || i} onClick={() => assignKbRecipe(r)}
-                    className="p-3 border border-amber-200 bg-white hover:bg-emerald-50 hover:border-emerald-400 text-left rounded-xl transition-colors"
+                    className="p-3 border border-stone-200 bg-white hover:bg-emerald-50/50 hover:border-emerald-300 text-left rounded-lg transition-colors shadow-2xs"
                   >
-                    <p className="font-bold text-stone-900 text-xs">{r.name}</p>
-                    <p className="text-[10px] text-stone-500 mt-0.5">{r.calories} kcal · {r.dietaryType}</p>
+                    <p className="font-bold text-stone-900 text-xs leading-tight">{r.name}</p>
+                    <p className="text-[10px] text-stone-500 mt-1">{r.calories} kcal · {r.dietaryType}</p>
                     <p className="text-[10px] text-stone-400">P:{r.protein}g C:{r.carbs}g F:{r.fat}g</p>
-                    <p className="text-[10px] text-emerald-700 font-bold mt-1">→ Assign to {kbAssigning.slot}</p>
+                    <p className="text-[10px] text-emerald-700 font-semibold mt-1">→ Assign to {kbAssigning.slot}</p>
                   </button>
                 ))}
                 {filteredDbRecipes.length === 0 && <p className="text-xs text-stone-400 py-4 col-span-3 text-center">No recipes found.</p>}
@@ -497,10 +497,10 @@ export default function MealPlanGenerator() {
           )}
 
           {/* Week Grid */}
-          <div className="bg-white border border-stone-200 rounded-2xl shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-stone-200 bg-stone-50 flex justify-between items-center">
-              <h3 className="font-bold text-stone-900 text-sm flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-orange-500" /> Weekly Meal Assignment Grid
+          <div className="bg-white border border-stone-200/90 rounded-xl shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-stone-100 bg-stone-50/70 flex justify-between items-center">
+              <h3 className="font-serif font-bold text-stone-900 text-sm flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-orange-600" /> Weekly Meal Assignment Grid
               </h3>
               {loadingRecipes && <Loader2 className="w-4 h-4 animate-spin text-orange-500" />}
             </div>
@@ -508,17 +508,17 @@ export default function MealPlanGenerator() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse">
                 <thead>
-                  <tr className="bg-stone-50 border-b border-stone-200">
-                    <th className="p-3 text-left font-bold text-stone-600 uppercase tracking-wider w-32">Meal Slot</th>
+                  <tr className="bg-stone-50 border-b border-stone-200 text-stone-600">
+                    <th className="p-3 text-left font-bold uppercase tracking-wider w-32">Meal Slot</th>
                     {WEEK_DAYS.map(day => (
-                      <th key={day} className="p-3 text-center font-bold text-stone-600 uppercase tracking-wider min-w-[120px]">{day.slice(0, 3)}</th>
+                      <th key={day} className="p-3 text-center font-bold uppercase tracking-wider min-w-[120px]">{day.slice(0, 3)}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {MEAL_SLOTS.map(slot => (
                     <tr key={slot} className="border-b border-stone-100 hover:bg-stone-50/40">
-                      <td className="p-3 font-bold text-stone-700 bg-stone-50 border-r border-stone-200">
+                      <td className="p-3 font-semibold text-stone-700 bg-stone-50/60 border-r border-stone-200">
                         {slot}
                       </td>
                       {WEEK_DAYS.map(day => {
@@ -526,20 +526,20 @@ export default function MealPlanGenerator() {
                         return (
                           <td key={day} className="p-2 border-r border-stone-100 align-top">
                             {cell ? (
-                              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 relative">
+                              <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-lg p-2 relative shadow-2xs">
                                 <button onClick={() => removeKbEntry(day, slot)}
                                   className="absolute top-1 right-1 text-stone-400 hover:text-rose-600"
                                   title="Remove"
                                 >×</button>
-                                <p className="font-bold text-emerald-900 pr-3 leading-tight">{cell.recipe.name}</p>
-                                <p className="text-emerald-700 text-[10px]">{cell.recipe.calories} kcal</p>
+                                <p className="font-bold text-emerald-950 pr-3 leading-tight">{cell.recipe.name}</p>
+                                <p className="text-emerald-700 text-[10px] mt-0.5">{cell.recipe.calories} kcal</p>
                               </div>
                             ) : (
                               <button
                                 onClick={() => { if (!selectedPatientId) { alert('Select a patient first'); return; } setKbAssigning({ day, slot }); }}
-                                className="w-full h-14 border border-dashed border-stone-200 rounded-lg text-stone-400 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/30 transition-all flex items-center justify-center"
+                                className="w-full h-12 border border-dashed border-stone-200 rounded-lg text-stone-400 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/30 transition-all flex items-center justify-center"
                               >
-                                <Plus className="w-4 h-4" />
+                                <Plus className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </td>
@@ -552,17 +552,17 @@ export default function MealPlanGenerator() {
             </div>
 
             {/* Save buttons */}
-            <div className="p-4 border-t border-stone-200 bg-stone-50 flex justify-end gap-3">
+            <div className="p-4 border-t border-stone-100 bg-stone-50/70 flex justify-end gap-2.5">
               <button onClick={() => saveKbWeekPlan('draft')} disabled={kbSaving || !selectedPatientId}
-                className="px-5 py-2.5 border border-stone-300 rounded-xl text-xs font-bold text-stone-700 hover:bg-stone-100 disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 border border-stone-200 rounded-lg text-xs font-semibold text-stone-700 bg-white hover:bg-stone-50 disabled:opacity-50 flex items-center gap-1.5 shadow-xs"
               >
-                {kbSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {kbSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5 text-stone-500" />}
                 Save Draft
               </button>
               <button onClick={() => saveKbWeekPlan('published')} disabled={kbSaving || !selectedPatientId}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-50 flex items-center gap-2 shadow-sm"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold uppercase tracking-wider disabled:opacity-50 flex items-center gap-1.5 shadow-xs"
               >
-                {kbSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                {kbSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                 Publish to Patient
               </button>
             </div>
@@ -574,18 +574,18 @@ export default function MealPlanGenerator() {
       {studioTab === 'ai' && (<>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Client Dossier & Targets (4 cols) */}
-        <div className="lg:col-span-4 space-y-6">
+        <div className="lg:col-span-4 space-y-5">
 
           {/* Step 1: Patient Select */}
-          <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs">
-            <h3 className="font-bold text-stone-900 text-sm mb-3 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs font-bold">1</span>
+          <div className="bg-white border border-stone-200/90 rounded-xl p-5 shadow-xs">
+            <h3 className="font-serif font-bold text-stone-900 text-sm mb-3 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-stone-900 text-white flex items-center justify-center text-[10px] font-bold">1</span>
               Select Client
             </h3>
             <select 
               value={selectedPatientId} 
               onChange={e => setSelectedPatientId(e.target.value)}
-              className="w-full border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs font-medium outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+              className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs font-medium outline-none focus:ring-1 focus:ring-orange-500 bg-white"
             >
               <option value="">Select client profile...</option>
               {patients.map(p => (
@@ -596,22 +596,22 @@ export default function MealPlanGenerator() {
             </select>
 
             {selectedPatient && (
-              <div className="mt-4 p-3.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-700 space-y-1.5">
+              <div className="mt-3.5 p-3 bg-stone-50 border border-stone-200/80 rounded-lg text-xs text-stone-700 space-y-1.5">
                 <div className="flex justify-between items-center">
                   <span className="text-stone-500 text-[11px]">Dietary Profile:</span>
-                  <span className="font-bold px-2 py-0.5 rounded bg-orange-100 text-orange-900 text-[10px] uppercase">
+                  <span className="font-semibold px-2 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200/60 text-[10px] uppercase">
                     {selectedPatient.dietaryType || 'Standard'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-stone-500 text-[11px]">Primary Goals:</span>
-                  <span className="font-semibold truncate max-w-[180px] text-right">
+                  <span className="font-medium truncate max-w-[180px] text-right">
                     {selectedPatient.goals?.join(', ') || 'Metabolic Wellness'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-stone-500 text-[11px]">Conditions & Allergies:</span>
-                  <span className={`font-semibold ${(selectedPatient.allergies?.length || selectedPatient.healthInfo?.allergies) ? 'text-rose-600' : 'text-stone-700'}`}>
+                  <span className={`font-medium ${(selectedPatient.allergies?.length || selectedPatient.healthInfo?.allergies) ? 'text-rose-600' : 'text-stone-700'}`}>
                     {(Array.isArray(selectedPatient.allergies) ? selectedPatient.allergies.join(', ') : selectedPatient.healthInfo?.allergies) || selectedPatient.healthInfo?.conditions || 'None flagged'}
                   </span>
                 </div>
@@ -620,18 +620,18 @@ export default function MealPlanGenerator() {
           </div>
 
           {/* Step 2: Macros & Clinical Targets */}
-          <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-4 shadow-xs">
-            <h3 className="font-bold text-stone-900 text-sm flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs font-bold">2</span>
+          <div className="bg-white border border-stone-200/90 rounded-xl p-5 space-y-4 shadow-xs">
+            <h3 className="font-serif font-bold text-stone-900 text-sm flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-stone-900 text-white flex items-center justify-center text-[10px] font-bold">2</span>
               Daily Nutrition Targets
             </h3>
             <div>
-              <label className="block text-[11px] uppercase font-bold text-stone-500 mb-1">Total Caloric Ceiling (kcal)</label>
+              <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Total Caloric Ceiling (kcal)</label>
               <input 
                 type="number" 
                 value={targets.calories} 
                 onChange={e => setTargets({...targets, calories: Number(e.target.value)})} 
-                className="w-full border border-stone-300 rounded-xl px-3.5 py-2 text-xs font-bold text-stone-900 outline-none focus:ring-2 focus:ring-orange-400" 
+                className="w-full border border-stone-300 rounded-lg px-3 py-1.5 text-xs font-bold text-stone-900 outline-none focus:ring-1 focus:ring-orange-500" 
               />
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -641,7 +641,7 @@ export default function MealPlanGenerator() {
                   type="number" 
                   value={targets.protein} 
                   onChange={e => setTargets({...targets, protein: Number(e.target.value)})} 
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-orange-400" 
+                  className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-1 focus:ring-orange-500" 
                 />
               </div>
               <div>
@@ -650,7 +650,7 @@ export default function MealPlanGenerator() {
                   type="number" 
                   value={targets.carbs} 
                   onChange={e => setTargets({...targets, carbs: Number(e.target.value)})} 
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-orange-400" 
+                  className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-1 focus:ring-orange-500" 
                 />
               </div>
               <div>
@@ -659,41 +659,41 @@ export default function MealPlanGenerator() {
                   type="number" 
                   value={targets.fat} 
                   onChange={e => setTargets({...targets, fat: Number(e.target.value)})} 
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-orange-400" 
+                  className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-1 focus:ring-orange-500" 
                 />
               </div>
             </div>
           </div>
 
           {/* Step 3: Instructions & AI Generation */}
-          <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-3">
-            <h3 className="font-bold text-stone-900 text-sm flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs font-bold">3</span>
+          <div className="bg-white border border-stone-200/90 rounded-xl p-5 shadow-xs space-y-3">
+            <h3 className="font-serif font-bold text-stone-900 text-sm flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-stone-900 text-white flex items-center justify-center text-[10px] font-bold">3</span>
               Clinical Prompt Directives
             </h3>
             <textarea 
               value={instructions}
               onChange={e => setInstructions(e.target.value)}
               placeholder="E.g., High fiber focus, easy morning prep, vegetarian protein options, avoid refined sugars..."
-              className="w-full border border-stone-300 rounded-xl p-3 text-xs outline-none focus:ring-2 focus:ring-orange-400 h-20 resize-none font-sans"
+              className="w-full border border-stone-200 rounded-lg p-3 text-xs outline-none focus:ring-1 focus:ring-orange-500 h-20 resize-none font-sans"
             />
 
             <button 
               onClick={handleGenerate}
               disabled={generating || !selectedPatientId}
-              className="w-full py-3 bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white font-bold tracking-wider uppercase text-xs rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+              className="w-full py-2.5 bg-stone-900 hover:bg-black text-white font-semibold tracking-wider uppercase text-xs rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-xs"
             >
-              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+              {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5 text-orange-400" />}
               {generating ? 'Formulating Plan with Clinical DB...' : 'Synthesize Plan via AI Co-Pilot'}
             </button>
           </div>
 
           {/* Knowledge Base Recipe Swapper */}
           {selectedPatientId && (
-            <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs">
+            <div className="bg-white border border-stone-200/90 rounded-xl p-5 shadow-xs">
               <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-stone-900 text-xs flex items-center gap-1.5 uppercase tracking-wider">
-                  <BookOpen className="w-4 h-4 text-orange-500" />
+                <h3 className="font-serif font-bold text-stone-900 text-xs flex items-center gap-1.5 uppercase tracking-wider">
+                  <BookOpen className="w-4 h-4 text-orange-600" />
                   Recipe Knowledge Base ({filteredDbRecipes.length})
                 </h3>
                 {loadingRecipes && <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-500" />}
@@ -706,7 +706,7 @@ export default function MealPlanGenerator() {
                   placeholder="Filter practice recipes..."
                   value={recipeSearch}
                   onChange={e => setRecipeSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 border border-stone-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-400"
+                  className="w-full pl-8 pr-3 py-1.5 border border-stone-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-500"
                 />
               </div>
 
@@ -723,7 +723,7 @@ export default function MealPlanGenerator() {
 
               <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
                 {filteredDbRecipes.map((r, i) => (
-                  <div key={r.id || i} className="p-3 border border-stone-200 bg-stone-50 hover:bg-orange-50/40 transition-colors text-xs rounded-xl">
+                  <div key={r.id || i} className="p-3 border border-stone-200/80 bg-stone-50/70 hover:bg-orange-50/30 transition-colors text-xs rounded-lg">
                     <div className="flex justify-between items-start mb-1">
                       <span className="font-bold text-stone-900">{r.name}</span>
                       <span className="text-orange-600 font-bold text-[11px]">{r.calories} kcal</span>
@@ -734,7 +734,7 @@ export default function MealPlanGenerator() {
                     {r.tags && r.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-2">
                         {r.tags.slice(0, 3).map((t, tIdx) => (
-                          <span key={tIdx} className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-bold border border-blue-200">
+                          <span key={tIdx} className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold border border-blue-200/60">
                             {t}
                           </span>
                         ))}
@@ -754,7 +754,7 @@ export default function MealPlanGenerator() {
                     ) : (
                       <button 
                         onClick={() => setSwapTarget({ dayNumber: activeDayTab, mealIndex: 0 })}
-                        className="w-full py-1 bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold text-[10px] uppercase tracking-wider rounded transition-colors"
+                        className="w-full py-1 bg-stone-200/80 hover:bg-stone-300 text-stone-800 font-semibold text-[10px] uppercase tracking-wider rounded transition-colors"
                       >
                         Select as Swap Candidate
                       </button>
@@ -772,17 +772,17 @@ export default function MealPlanGenerator() {
         {/* Right Column: Interactive Day-by-Day Workspace (8 cols) */}
         <div className="lg:col-span-8">
           {generating && (
-            <div className="h-96 border border-dashed border-stone-300 rounded-2xl flex items-center justify-center text-stone-500 flex-col gap-3 bg-white p-8">
-              <Loader2 className="w-10 h-10 animate-spin text-orange-500" />
+            <div className="h-96 border border-dashed border-stone-200 rounded-xl flex items-center justify-center text-stone-500 flex-col gap-3 bg-white p-8 shadow-xs">
+              <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
               <p className="text-sm font-semibold text-stone-800">Reviewing clinical targets and assembling recipes...</p>
               <p className="text-xs text-stone-400">Verifying macro balance against {targets.calories} kcal ceiling</p>
             </div>
           )}
 
           {!generating && !generatedPlan && (
-            <div className="h-96 border border-dashed border-stone-300 rounded-2xl flex items-center justify-center text-stone-400 bg-white p-8 text-center flex-col gap-2">
-              <Utensils className="w-10 h-10 text-stone-300 stroke-1" />
-              <h3 className="font-bold text-stone-700 text-sm">Meal Plan Studio Ready</h3>
+            <div className="h-96 border border-dashed border-stone-200 rounded-xl flex items-center justify-center text-stone-400 bg-white p-8 text-center flex-col gap-2 shadow-xs">
+              <Utensils className="w-8 h-8 text-stone-300 stroke-1" />
+              <h3 className="font-serif font-bold text-stone-800 text-sm">Meal Plan Studio Ready</h3>
               <p className="text-xs text-stone-400 max-w-md">
                 Select a client on the left and click "Synthesize Plan via AI Co-Pilot" to generate an initial 7-day protocol, or configure meals manually.
               </p>
@@ -790,22 +790,22 @@ export default function MealPlanGenerator() {
           )}
 
           {!generating && generatedPlan && (
-            <div className="bg-white border border-stone-200 rounded-2xl shadow-xs overflow-hidden flex flex-col">
+            <div className="bg-white border border-stone-200/90 rounded-xl shadow-xs overflow-hidden flex flex-col">
               {/* Studio Header Toolbar */}
               <div className="p-4 sm:p-5 border-b border-stone-200 bg-stone-50/70 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-stone-900 text-base">Plan for {selectedPatient?.name}</h3>
-                    <span className="text-[11px] font-bold text-stone-400">• 7-Day Protocol</span>
+                    <h3 className="font-serif font-bold text-stone-900 text-base">Plan for {selectedPatient?.name}</h3>
+                    <span className="text-[11px] font-semibold text-stone-400">• 7-Day Protocol</span>
                   </div>
                   <p className="text-xs text-stone-500">Fine-tune portion sizes, swap recipes with knowledge base, and verify daily macros.</p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5">
                   <select 
                     value={assignStatus} 
                     onChange={e => setAssignStatus(e.target.value as any)}
-                    className="border border-stone-300 px-3 py-2 text-xs font-bold uppercase tracking-wider outline-none rounded-xl bg-white focus:ring-2 focus:ring-orange-400"
+                    className="border border-stone-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider outline-none rounded-lg bg-white focus:ring-1 focus:ring-orange-500"
                   >
                     <option value="published">Approve & Publish to Patient</option>
                     <option value="draft">Save as Clinical Draft</option>
@@ -814,9 +814,9 @@ export default function MealPlanGenerator() {
                   <button 
                     onClick={handleSave}
                     disabled={saving}
-                    className="px-5 py-2.5 bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center gap-2 rounded-xl shadow-xs"
+                    className="px-4 py-2 bg-stone-900 hover:bg-black text-white font-semibold text-xs uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center gap-1.5 rounded-lg shadow-xs"
                   >
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-orange-400" />}
+                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5 text-orange-400" />}
                     {assignStatus === 'published' ? 'Publish Plan' : 'Save Draft'}
                   </button>
                 </div>
@@ -829,9 +829,9 @@ export default function MealPlanGenerator() {
                     <button
                       key={d.dayNumber}
                       onClick={() => setActiveDayTab(d.dayNumber)}
-                      className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-all ${
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
                         activeDayTab === d.dayNumber
-                          ? 'bg-orange-500 text-white shadow-xs'
+                          ? 'bg-stone-900 text-white shadow-2xs'
                           : 'text-stone-600 hover:bg-stone-100'
                       }`}
                     >
@@ -843,7 +843,7 @@ export default function MealPlanGenerator() {
                 <button
                   onClick={() => handleCloneDay(activeDayTab)}
                   title="Copy this day's meals across all other days"
-                  className="text-stone-500 hover:text-stone-900 text-xs font-bold flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-stone-200 hover:bg-stone-50 transition-colors shrink-0"
+                  className="text-stone-500 hover:text-stone-900 text-xs font-semibold flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-stone-200 hover:bg-stone-50 transition-colors shrink-0"
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Clone Day {activeDayTab} to All</span>
@@ -851,9 +851,9 @@ export default function MealPlanGenerator() {
               </div>
 
               {/* Day Macro Diagnostic Bar */}
-              <div className="px-6 py-3 bg-stone-50 border-b border-stone-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="px-5 py-2.5 bg-stone-50 border-b border-stone-100 flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-4">
-                  <span className="font-bold text-stone-700">Day {activeDayTab} Nutrition Balance:</span>
+                  <span className="font-semibold text-stone-700">Day {activeDayTab} Balance:</span>
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-stone-900">{dayCalories} kcal</span>
                     <span className="text-stone-300">•</span>
@@ -865,12 +865,12 @@ export default function MealPlanGenerator() {
 
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-stone-500">Target: {targets.calories} kcal</span>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
                     calStatus === 'optimal' 
-                      ? 'bg-emerald-100 text-emerald-800' 
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60' 
                       : calStatus === 'over' 
-                      ? 'bg-amber-100 text-amber-800' 
-                      : 'bg-blue-100 text-blue-800'
+                      ? 'bg-amber-50 text-amber-800 border border-amber-200/60' 
+                      : 'bg-blue-50 text-blue-800 border border-blue-200/60'
                   }`}>
                     {calStatus === 'optimal' ? 'On Target' : calStatus === 'over' ? `+${calDiff} kcal` : `${calDiff} kcal`}
                   </span>
@@ -878,20 +878,20 @@ export default function MealPlanGenerator() {
               </div>
 
               {/* Active Day Meals List */}
-              <div className="p-6 space-y-4 max-h-[620px] overflow-y-auto">
+              <div className="p-5 space-y-3.5 max-h-[620px] overflow-y-auto">
                 {currentDay?.meals.map((meal, idx) => {
                   const isSwapping = swapTarget?.dayNumber === activeDayTab && swapTarget?.mealIndex === idx;
 
                   return (
                     <div 
                       key={idx} 
-                      className={`p-4 rounded-xl border transition-all ${
-                        isSwapping ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-400/20' : 'bg-white border-stone-200 hover:border-stone-300'
+                      className={`p-4 rounded-lg border transition-all ${
+                        isSwapping ? 'bg-amber-50/70 border-amber-300 ring-1 ring-amber-400/30' : 'bg-white border-stone-200/90 hover:border-stone-300 shadow-2xs'
                       }`}
                     >
                       <div className="flex flex-wrap justify-between items-start gap-2 mb-2">
                         <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-stone-100 text-stone-700 border border-stone-200">
                             {meal.type}
                           </span>
                           <h4 className="font-bold text-stone-900 text-sm mt-1">{meal.name}</h4>
@@ -910,7 +910,7 @@ export default function MealPlanGenerator() {
                             <button
                               onClick={() => setEditingMeal({ dayNumber: activeDayTab, mealIndex: idx, meal: { ...meal } })}
                               title="Edit meal portion and macros"
-                              className="p-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
+                              className="p-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-md transition-colors"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
@@ -918,7 +918,7 @@ export default function MealPlanGenerator() {
                             <button 
                               onClick={() => setSwapTarget({ dayNumber: activeDayTab, mealIndex: idx })}
                               title="Swap with recipe from knowledge base"
-                              className="p-1.5 text-stone-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                              className="p-1.5 text-stone-500 hover:text-orange-600 hover:bg-orange-50 rounded-md transition-colors"
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
                             </button>
@@ -926,7 +926,7 @@ export default function MealPlanGenerator() {
                             <button
                               onClick={() => handleDeleteMeal(activeDayTab, idx)}
                               title="Remove meal"
-                              className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -955,9 +955,9 @@ export default function MealPlanGenerator() {
                 {/* Add Meal to Day Button */}
                 <button
                   onClick={() => handleAddMeal(activeDayTab)}
-                  className="w-full py-3 border border-dashed border-orange-300 rounded-xl text-xs font-bold text-orange-700 hover:text-orange-900 hover:border-orange-400 hover:bg-orange-50/50 transition-all flex items-center justify-center gap-1.5"
+                  className="w-full py-2.5 border border-dashed border-stone-300 rounded-lg text-xs font-semibold text-stone-700 hover:text-stone-900 hover:border-stone-400 hover:bg-stone-50 transition-all flex items-center justify-center gap-1.5"
                 >
-                  <Plus className="w-4 h-4 text-orange-500" />
+                  <Plus className="w-3.5 h-3.5 text-stone-500" />
                   Add Approved Clinical Recipe to Day {activeDayTab}
                 </button>
               </div>
@@ -968,11 +968,10 @@ export default function MealPlanGenerator() {
 
       {/* Edit Meal Modal */}
       {editingMeal && (
-
-        <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-stone-200 animate-in fade-in zoom-in-95">
-            <h3 className="font-bold text-stone-900 text-base mb-4 flex items-center gap-2">
-              <Edit3 className="w-4 h-4 text-orange-500" />
+        <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-stone-200">
+            <h3 className="font-serif font-bold text-stone-900 text-sm mb-4 flex items-center gap-2">
+              <Edit3 className="w-4 h-4 text-orange-600" />
               Edit Meal — Day {editingMeal.dayNumber}
             </h3>
 
@@ -986,7 +985,7 @@ export default function MealPlanGenerator() {
                     ...editingMeal,
                     meal: { ...editingMeal.meal, name: e.target.value }
                   })}
-                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-stone-900 font-semibold outline-none focus:ring-2 focus:ring-orange-400"
+                  className="w-full border border-stone-300 rounded-lg px-3 py-1.5 text-stone-900 font-semibold outline-none focus:ring-1 focus:ring-orange-500"
                 />
               </div>
 
@@ -999,7 +998,7 @@ export default function MealPlanGenerator() {
                       ...editingMeal,
                       meal: { ...editingMeal.meal, type: e.target.value }
                     })}
-                    className="w-full border border-stone-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                    className="w-full border border-stone-300 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-orange-500 bg-white"
                   >
                     <option value="Breakfast">Breakfast</option>
                     <option value="Morning Snack">Morning Snack</option>
@@ -1019,7 +1018,7 @@ export default function MealPlanGenerator() {
                       ...editingMeal,
                       meal: { ...editingMeal.meal, portion: e.target.value }
                     })}
-                    className="w-full border border-stone-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-orange-400"
+                    className="w-full border border-stone-300 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-orange-500"
                   />
                 </div>
               </div>
@@ -1034,7 +1033,7 @@ export default function MealPlanGenerator() {
                       ...editingMeal,
                       meal: { ...editingMeal.meal, calories: Number(e.target.value) }
                     })}
-                    className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-orange-400 font-bold"
+                    className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-orange-500 font-bold"
                   />
                 </div>
                 <div>
@@ -1046,7 +1045,7 @@ export default function MealPlanGenerator() {
                       ...editingMeal,
                       meal: { ...editingMeal.meal, protein: Number(e.target.value) }
                     })}
-                    className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-orange-400 font-bold"
+                    className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-orange-500 font-bold"
                   />
                 </div>
                 <div>
@@ -1058,7 +1057,7 @@ export default function MealPlanGenerator() {
                       ...editingMeal,
                       meal: { ...editingMeal.meal, carbs: Number(e.target.value) }
                     })}
-                    className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-orange-400 font-bold"
+                    className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-orange-500 font-bold"
                   />
                 </div>
                 <div>
@@ -1070,7 +1069,7 @@ export default function MealPlanGenerator() {
                       ...editingMeal,
                       meal: { ...editingMeal.meal, fat: Number(e.target.value) }
                     })}
-                    className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-orange-400 font-bold"
+                    className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-orange-500 font-bold"
                   />
                 </div>
               </div>
@@ -1084,21 +1083,21 @@ export default function MealPlanGenerator() {
                     ...editingMeal,
                     meal: { ...editingMeal.meal, ingredients: e.target.value.split(',').map(s => s.trim()) }
                   })}
-                  className="w-full border border-stone-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-orange-400"
+                  className="w-full border border-stone-300 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-orange-500"
                 />
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="mt-5 flex justify-end gap-2.5">
               <button
                 onClick={() => setEditingMeal(null)}
-                className="px-4 py-2 border border-stone-300 rounded-xl text-xs font-bold text-stone-600 hover:bg-stone-50 transition-colors"
+                className="px-4 py-2 border border-stone-200 rounded-lg text-xs font-semibold text-stone-600 hover:bg-stone-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveMealEdit}
-                className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors shadow-xs"
+                className="px-4 py-2 bg-stone-900 hover:bg-black text-white rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors shadow-xs"
               >
                 Apply Changes
               </button>

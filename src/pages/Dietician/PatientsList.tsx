@@ -74,48 +74,48 @@ export default function PatientsList() {
   const attentionCount = patients.filter(p => (p.adherencePercentage ?? (p.needsAttention ? 48 : 84)) < 70 || p.needsAttention).length;
 
   return (
-    <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-6 font-sans">
+    <div className="p-5 md:p-8 max-w-7xl mx-auto space-y-5 font-sans">
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-200">
         <div>
-          <h1 className="text-2xl md:text-3xl font-serif font-black text-stone-900 tracking-tight">
+          <h1 className="text-xl md:text-2xl font-serif font-bold text-stone-900 tracking-tight">
             Client Caseload Directory
           </h1>
-          <p className="text-xs md:text-sm text-stone-500 mt-0.5">
-            Manage your clinical nutrition clients, compliance tracking, and consultation histories
+          <p className="text-xs text-stone-500 mt-0.5">
+            Active patient profiles, clinical targets, adherence ratings, and dietary compliance
           </p>
         </div>
 
         <Link
           to="/dietician/patients/new"
-          className="px-5 py-2.5 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 self-start sm:self-auto"
+          className="px-3.5 py-2 bg-stone-900 hover:bg-stone-800 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 self-start sm:self-auto"
         >
           <Plus className="w-3.5 h-3.5" />
-          Add New Client
+          Add Client
         </Link>
       </div>
 
       {/* Search & Filter Toolbar */}
-      <div className="bg-white rounded-3xl border border-stone-200/80 p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="bg-white rounded-xl border border-stone-200 p-3 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
         {/* Search Input */}
         <div className="relative w-full md:max-w-md">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" />
           <input 
             type="text" 
-            placeholder="Search by client name, email, goal, or medical condition..." 
+            placeholder="Search by client name, email, dietary goal..." 
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-stone-300 rounded-xl text-xs focus:ring-2 focus:ring-orange-400 focus:outline-none transition-all placeholder:text-stone-400"
+            className="w-full pl-9 pr-3 py-1.5 bg-stone-50/70 border border-stone-200 rounded-lg text-xs focus:ring-1 focus:ring-stone-400 focus:outline-none transition-all placeholder:text-stone-400"
           />
         </div>
 
         {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto text-xs font-bold text-stone-600">
+        <div className="flex items-center gap-1 overflow-x-auto w-full md:w-auto text-xs font-medium text-stone-600">
           {[
             { id: 'all', label: `All (${patients.length})` },
             { id: 'active', label: `Active (${activeCount})` },
-            { id: 'attention', label: `Needs Attention (${attentionCount})` },
+            { id: 'attention', label: `Needs Focus (${attentionCount})` },
             { id: 'veg', label: 'Vegetarian' },
             { id: 'non_veg', label: 'Non-Veg' }
           ].map(tab => (
@@ -123,9 +123,9 @@ export default function PatientsList() {
               key={tab.id}
               type="button"
               onClick={() => setFilterCategory(tab.id as FilterCategory)}
-              className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition-all ${
+              className={`px-2.5 py-1 rounded-md whitespace-nowrap transition-colors ${
                 filterCategory === tab.id 
-                  ? 'bg-stone-900 text-white shadow-xs' 
+                  ? 'bg-stone-900 text-white font-semibold shadow-2xs' 
                   : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
               }`}
             >
@@ -136,7 +136,7 @@ export default function PatientsList() {
       </div>
 
       {/* Caseload Table Card */}
-      <div className="bg-white rounded-3xl border border-stone-200/80 overflow-hidden shadow-sm">
+      <div className="bg-white rounded-xl border border-stone-200 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 text-[11px] font-bold uppercase tracking-wider">
@@ -207,21 +207,21 @@ export default function PatientsList() {
                       </div>
                     </td>
 
-                    <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-full ${
+                    <td className="px-6 py-3.5">
+                      <span className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-md ${
                         p.status === 'active' 
-                          ? 'bg-emerald-100 text-emerald-800' 
-                          : 'bg-stone-100 text-stone-600'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                          : 'bg-stone-100 text-stone-600 border border-stone-200'
                       }`}>
                         {p.status}
                       </span>
                     </td>
 
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Link
                           to={`/dietician/patients/${p.id}`}
-                          className="px-3 py-1.5 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-lg transition-all"
+                          className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-semibold rounded-lg transition-colors"
                         >
                           View Dossier
                         </Link>

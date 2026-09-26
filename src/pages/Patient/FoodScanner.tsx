@@ -258,26 +258,26 @@ export default function FoodScanner() {
     <div className="p-4 md:p-8 max-w-4xl mx-auto pb-24 md:pb-8">
       {/* Header */}
       <div className="mb-6">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="px-2.5 py-0.5 bg-brand-50 border border-brand-200 text-brand-800 text-[11px] font-bold uppercase tracking-wider rounded-sm flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-brand-600" /> Powered by Gemini Vision
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="px-2.5 py-0.5 bg-orange-50 border border-orange-200 text-orange-800 text-[11px] font-bold uppercase tracking-wider rounded-md flex items-center gap-1">
+            <Sparkles className="w-3 h-3 text-orange-600" /> Powered by Gemini Vision
           </span>
         </div>
-        <h1 className="text-2xl md:text-3xl font-serif font-bold text-stone-900 tracking-tight">AI Food & Plate Scanner</h1>
-        <p className="text-stone-500 text-sm">
+        <h1 className="text-xl md:text-2xl font-bold text-stone-900 tracking-tight">AI Food & Plate Scanner</h1>
+        <p className="text-stone-500 text-xs md:text-sm mt-0.5">
           Snap a photo of your plate, add any preparation notes, and our clinical AI will breakdown every food item, portion quantity, and nutritional value.
         </p>
       </div>
 
       {/* Main Upload / Camera Box */}
-      <div className="bg-white border border-stone-200 p-6 md:p-8 mb-6 shadow-sm">
+      <div className="bg-white border border-stone-200/90 rounded-xl p-6 md:p-8 mb-6 shadow-xs">
         {!imagePreview ? (
           <div className="text-center py-6">
-            <div className="w-20 h-20 mx-auto bg-brand-50 text-brand-700 rounded-full flex items-center justify-center mb-4 border border-brand-100 shadow-inner">
-              <Camera className="w-9 h-9" />
+            <div className="w-14 h-14 mx-auto bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-3.5 border border-orange-100 shadow-xs">
+              <Camera className="w-7 h-7" />
             </div>
-            <h2 className="text-lg font-serif font-bold text-stone-900 mb-2">Upload or Take a Photo of Your Meal</h2>
-            <p className="text-stone-500 text-xs max-w-md mx-auto mb-6">
+            <h2 className="text-base font-semibold text-stone-900 mb-1.5">Upload or Take a Photo of Your Meal</h2>
+            <p className="text-stone-500 text-xs max-w-md mx-auto mb-5">
               Ensure the meal is well-lit and clearly visible. You can add extra details below for precision accuracy.
             </p>
 
@@ -290,7 +290,7 @@ export default function FoodScanner() {
             />
             <label 
               htmlFor="camera-input"
-              className="inline-flex items-center gap-2 px-6 py-3.5 bg-stone-900 text-white text-xs uppercase font-bold tracking-widest rounded-none hover:bg-stone-800 transition-colors cursor-pointer shadow-sm"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-stone-900 text-white text-xs font-semibold rounded-lg hover:bg-stone-800 transition-colors cursor-pointer shadow-xs"
             >
               <Upload className="w-4 h-4" />
               Choose Photo / Camera
@@ -300,7 +300,7 @@ export default function FoodScanner() {
           <div className="space-y-6">
             {/* Image Preview & Details */}
             <div className="flex flex-col md:flex-row gap-6 items-start">
-              <div className="w-full md:w-56 h-56 relative bg-stone-100 border border-stone-200 overflow-hidden shrink-0 group">
+              <div className="w-full md:w-56 h-56 relative bg-stone-100 border border-stone-200 rounded-lg overflow-hidden shrink-0 group">
                 <img 
                   src={imagePreview} 
                   alt="Scanned Food Preview" 
@@ -309,7 +309,7 @@ export default function FoodScanner() {
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="absolute top-2 right-2 p-1.5 bg-stone-900/80 text-white text-xs rounded hover:bg-stone-900 transition-colors flex items-center gap-1 shadow"
+                  className="absolute top-2 right-2 p-1.5 bg-stone-900/80 text-white text-xs rounded-md hover:bg-stone-900 transition-colors flex items-center gap-1 shadow-xs"
                   title="Change image"
                 >
                   <RotateCcw className="w-3.5 h-3.5" /> Retake
@@ -318,7 +318,7 @@ export default function FoodScanner() {
 
               {/* Extra Context Notes Input */}
               <div className="flex-1 w-full space-y-3">
-                <label className="block text-xs uppercase tracking-widest font-bold text-stone-700">
+                <label className="block text-xs uppercase tracking-wider font-bold text-stone-700">
                   Specify Extra Details & Context for Gemini AI:
                 </label>
                 <div className="relative">
@@ -327,7 +327,7 @@ export default function FoodScanner() {
                     value={userNotes}
                     onChange={e => setUserNotes(e.target.value)}
                     placeholder="e.g. Cooked in 1 tbsp olive oil, 2 whole wheat rotis, 1 cup homemade yellow dal, added 1 scoop whey protein..."
-                    className="w-full p-3 text-xs text-stone-900 border border-stone-300 focus:border-brand-600 focus:ring-1 focus:ring-brand-600 outline-none bg-[#FCFBF9] resize-none"
+                    className="w-full p-3 text-xs text-stone-900 border border-stone-200 rounded-lg focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none bg-stone-50/40 resize-none"
                   />
                   <FileText className="w-4 h-4 text-stone-400 absolute right-3 bottom-3 pointer-events-none" />
                 </div>
@@ -341,9 +341,9 @@ export default function FoodScanner() {
                         key={chip}
                         type="button"
                         onClick={() => handleChipClick(chip)}
-                        className={`text-[11px] px-2.5 py-1 border rounded-sm transition-colors ${
+                        className={`text-[11px] px-2.5 py-1 border rounded-md transition-colors ${
                           userNotes.includes(chip)
-                            ? 'bg-brand-50 border-brand-300 text-brand-800 font-semibold'
+                            ? 'bg-orange-50 border-orange-300 text-orange-800 font-semibold'
                             : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
                         }`}
                       >
@@ -359,9 +359,9 @@ export default function FoodScanner() {
             {!result && !scanning && (
               <button 
                 onClick={handleScan}
-                className="w-full py-4 bg-brand-700 text-white font-bold text-xs uppercase tracking-widest rounded-none hover:bg-brand-800 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                className="w-full py-3.5 bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs md:text-sm rounded-lg transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
               >
-                <Sparkles className="w-4 h-4 text-brand-200" />
+                <Sparkles className="w-4 h-4 text-orange-200" />
                 Analyze Plate with Gemini Multimodal AI
               </button>
             )}
@@ -371,9 +371,9 @@ export default function FoodScanner() {
 
       {/* Loading State */}
       {scanning && (
-        <div className="bg-white border border-stone-200 p-8 text-center mb-6 animate-pulse">
-          <Loader2 className="w-10 h-10 animate-spin text-brand-700 mx-auto mb-4" />
-          <h3 className="text-base font-bold text-stone-900 mb-1">Gemini AI is Analyzing Your Food Plate...</h3>
+        <div className="bg-white border border-stone-200/90 rounded-xl p-8 text-center mb-6 shadow-xs animate-pulse">
+          <Loader2 className="w-8 h-8 animate-spin text-orange-600 mx-auto mb-3" />
+          <h3 className="text-sm font-semibold text-stone-900 mb-1">Gemini AI is Analyzing Your Food Plate...</h3>
           <p className="text-xs text-stone-500 max-w-sm mx-auto">
             Detecting individual food items, measuring portion weights, calculating macronutrients, and compiling clinical feedback.
           </p>
@@ -382,7 +382,7 @@ export default function FoodScanner() {
 
       {/* Scan Error Message */}
       {scanError && (
-        <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-none mb-6 flex items-start gap-3 text-xs">
+        <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-lg mb-6 flex items-start gap-3 text-xs">
           <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
           <div>
             <p className="font-bold mb-0.5">Scan Analysis Failed</p>
@@ -394,84 +394,84 @@ export default function FoodScanner() {
       {/* Results Section */}
       {result && (
         <div className="space-y-6">
-          <div className="bg-white border border-stone-200 p-6 md:p-8 shadow-sm">
+          <div className="bg-white border border-stone-200/90 rounded-xl p-6 md:p-8 shadow-xs">
             {/* Header & Total Calories */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-stone-200 gap-4">
               <div>
-                <span className="text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 bg-brand-50 text-brand-800 border border-brand-200 rounded-sm">
+                <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 bg-orange-50 text-orange-800 border border-orange-200 rounded-md">
                   AI Nutrition Breakdown
                 </span>
-                <h2 className="text-xl md:text-2xl font-serif font-bold text-stone-900 mt-1">Plate Analysis Results</h2>
+                <h2 className="text-xl font-bold text-stone-900 tracking-tight mt-1">Plate Analysis Results</h2>
                 <p className="text-xs text-stone-500">
                   {result.items?.length || result.detectedFoods.length} items detected on plate
                 </p>
               </div>
 
               {/* Total Calorie Pill */}
-              <div className="bg-stone-900 text-white px-5 py-3 text-right">
-                <p className="text-[10px] uppercase tracking-widest text-stone-400 font-bold">Total Meal Energy</p>
-                <div className="text-2xl font-serif font-bold text-white flex items-baseline gap-1">
-                  {result.nutrition.calories} <span className="text-xs font-normal text-stone-300 font-sans">kcal</span>
+              <div className="bg-stone-900 text-white px-5 py-2.5 rounded-lg text-right shadow-xs">
+                <p className="text-[10px] uppercase tracking-wider text-stone-400 font-semibold">Total Meal Energy</p>
+                <div className="text-xl font-bold text-white flex items-baseline gap-1">
+                  {result.nutrition.calories} <span className="text-xs font-normal text-stone-300">kcal</span>
                 </div>
               </div>
             </div>
 
             {/* Macro Cards Summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-6">
-              <div className="p-3.5 bg-emerald-50/70 border border-emerald-200">
+              <div className="p-3.5 bg-emerald-50/50 border border-emerald-200/80 rounded-lg">
                 <div className="flex items-center justify-between text-emerald-800 mb-1">
                   <span className="text-[11px] font-bold uppercase tracking-wider">Protein</span>
-                  <Dna className="w-4 h-4" />
+                  <Dna className="w-4 h-4 text-emerald-600" />
                 </div>
-                <p className="text-xl font-bold text-emerald-950">{result.nutrition.protein} <span className="text-xs font-normal text-emerald-700">g</span></p>
+                <p className="text-lg font-bold text-emerald-950">{result.nutrition.protein} <span className="text-xs font-normal text-emerald-700">g</span></p>
               </div>
 
-              <div className="p-3.5 bg-amber-50/70 border border-amber-200">
+              <div className="p-3.5 bg-amber-50/50 border border-amber-200/80 rounded-lg">
                 <div className="flex items-center justify-between text-amber-800 mb-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wider">Carbohydrates</span>
-                  <Wheat className="w-4 h-4" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider">Carbs</span>
+                  <Wheat className="w-4 h-4 text-amber-600" />
                 </div>
-                <p className="text-xl font-bold text-amber-950">{result.nutrition.carbs} <span className="text-xs font-normal text-amber-700">g</span></p>
+                <p className="text-lg font-bold text-amber-950">{result.nutrition.carbs} <span className="text-xs font-normal text-amber-700">g</span></p>
               </div>
 
-              <div className="p-3.5 bg-rose-50/70 border border-rose-200">
+              <div className="p-3.5 bg-rose-50/50 border border-rose-200/80 rounded-lg">
                 <div className="flex items-center justify-between text-rose-800 mb-1">
                   <span className="text-[11px] font-bold uppercase tracking-wider">Total Fats</span>
-                  <Droplet className="w-4 h-4" />
+                  <Droplet className="w-4 h-4 text-rose-600" />
                 </div>
-                <p className="text-xl font-bold text-rose-950">{result.nutrition.fat} <span className="text-xs font-normal text-rose-700">g</span></p>
+                <p className="text-lg font-bold text-rose-950">{result.nutrition.fat} <span className="text-xs font-normal text-rose-700">g</span></p>
               </div>
 
-              <div className="p-3.5 bg-sky-50/70 border border-sky-200">
+              <div className="p-3.5 bg-sky-50/50 border border-sky-200/80 rounded-lg">
                 <div className="flex items-center justify-between text-sky-800 mb-1">
                   <span className="text-[11px] font-bold uppercase tracking-wider">Fiber</span>
-                  <Flame className="w-4 h-4" />
+                  <Flame className="w-4 h-4 text-sky-600" />
                 </div>
-                <p className="text-xl font-bold text-sky-950">{result.nutrition.fiber || 0} <span className="text-xs font-normal text-sky-700">g</span></p>
+                <p className="text-lg font-bold text-sky-950">{result.nutrition.fiber || 0} <span className="text-xs font-normal text-sky-700">g</span></p>
               </div>
             </div>
 
             {/* Itemized Food Breakdown Table */}
             <div className="mb-6">
-              <h3 className="text-xs uppercase tracking-widest font-bold text-stone-700 mb-3 flex items-center gap-2">
-                <Utensils className="w-4 h-4 text-brand-700" />
+              <h3 className="text-xs uppercase tracking-wider font-bold text-stone-700 mb-2.5 flex items-center gap-2">
+                <Utensils className="w-3.5 h-3.5 text-orange-600" />
                 Detected Plate Items & Quantities
               </h3>
 
-              <div className="border border-stone-200 divide-y divide-stone-100 overflow-x-auto">
+              <div className="border border-stone-200 rounded-lg divide-y divide-stone-100 overflow-x-auto shadow-xs">
                 {result.items && result.items.length > 0 ? (
                   result.items.map((item, idx) => (
-                    <div key={idx} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-stone-50/60 transition-colors">
+                    <div key={idx} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-stone-50/60 transition-colors">
                       <div>
-                        <h4 className="font-bold text-stone-900 text-sm">{item.name}</h4>
+                        <h4 className="font-semibold text-stone-900 text-sm">{item.name}</h4>
                         <p className="text-xs text-stone-500 mt-0.5">
-                          Portion: <strong className="text-stone-700">{item.portion}</strong>
+                          Portion: <strong className="text-stone-700 font-medium">{item.portion}</strong>
                           {item.notes ? ` • ${item.notes}` : ''}
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-4 text-xs font-mono shrink-0">
-                        <span className="px-2.5 py-1 bg-stone-100 border border-stone-200 text-stone-900 font-bold font-sans rounded-sm">
+                      <div className="flex items-center gap-3.5 text-xs font-mono shrink-0">
+                        <span className="px-2.5 py-1 bg-stone-100 border border-stone-200 text-stone-900 font-semibold font-sans rounded-md">
                           {item.calories} kcal
                         </span>
                         <div className="hidden sm:flex items-center gap-2 text-stone-500 text-[11px] font-sans">
@@ -492,12 +492,12 @@ export default function FoodScanner() {
 
             {/* Clinical AI Feedback Card */}
             {result.insight && (
-              <div className="bg-brand-50/70 border border-brand-200 p-4 mb-6">
-                <div className="flex items-start gap-3">
-                  <Sparkles className="w-4 h-4 text-brand-700 shrink-0 mt-0.5" />
+              <div className="bg-orange-50/40 border border-orange-200/80 rounded-lg p-4 mb-6 shadow-xs">
+                <div className="flex items-start gap-2.5">
+                  <Sparkles className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-xs font-bold text-brand-950 uppercase tracking-wider mb-0.5">Clinical Dietician Insight</p>
-                    <p className="text-xs text-brand-900 leading-relaxed">{result.insight}</p>
+                    <p className="text-xs font-bold text-orange-950 uppercase tracking-wider mb-0.5">Clinical Dietician Insight</p>
+                    <p className="text-xs text-stone-700 leading-relaxed">{result.insight}</p>
                   </div>
                 </div>
               </div>
@@ -505,7 +505,7 @@ export default function FoodScanner() {
 
             {/* Meal Type Selection Before Logging */}
             <div className="pt-4 border-t border-stone-200 mb-6">
-              <label className="block text-xs uppercase tracking-widest font-bold text-stone-700 mb-2">
+              <label className="block text-xs uppercase tracking-wider font-bold text-stone-700 mb-2">
                 Select Meal Category to Log:
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -514,9 +514,9 @@ export default function FoodScanner() {
                     key={type}
                     type="button"
                     onClick={() => setSelectedMealType(type)}
-                    className={`py-2 px-3 text-xs font-bold uppercase tracking-wider border rounded-none transition-colors ${
+                    className={`py-2 px-3 text-xs font-semibold uppercase tracking-wider border rounded-lg transition-colors ${
                       selectedMealType === type
-                        ? 'bg-stone-900 text-white border-stone-900'
+                        ? 'bg-stone-900 text-white border-stone-900 shadow-xs'
                         : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
                     }`}
                   >
@@ -531,39 +531,39 @@ export default function FoodScanner() {
               <button 
                 onClick={handleLog}
                 disabled={logging}
-                className="w-full py-4 bg-brand-700 text-white font-bold text-xs uppercase tracking-widest rounded-none hover:bg-brand-800 transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+                className="w-full py-3 bg-stone-900 hover:bg-stone-800 text-white font-semibold text-xs md:text-sm rounded-lg transition-colors flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 cursor-pointer"
               >
                 {logging ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                 {logging ? 'Saving to Your Health Record...' : `Save ${selectedMealType} (${result.nutrition.calories} kcal) to Progress Log`}
               </button>
             ) : (
-              <div className="bg-emerald-50 border border-emerald-200 p-6 text-center space-y-4">
-                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center">
-                  <CheckCircle2 className="w-6 h-6" />
+              <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-6 text-center space-y-4 shadow-xs">
+                <div className="w-11 h-11 rounded-lg bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-base font-bold text-emerald-950">Successfully Logged to Your Progress!</h4>
-                  <p className="text-xs text-emerald-800 mt-1">
+                  <h4 className="text-sm md:text-base font-bold text-emerald-950">Successfully Logged to Your Progress!</h4>
+                  <p className="text-xs text-emerald-800 mt-1 max-w-md mx-auto">
                     Added {result.nutrition.calories} kcal to your daily intake tracker. Your dietician can now see this meal and its nutritional breakdown.
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
                   <Link
                     to="/patient/progress"
-                    className="px-5 py-2.5 bg-emerald-800 text-white text-xs font-bold uppercase tracking-wider hover:bg-emerald-900 transition-colors inline-flex items-center gap-1.5"
+                    className="px-4 py-2 bg-emerald-800 text-white text-xs font-semibold rounded-lg hover:bg-emerald-900 transition-colors inline-flex items-center gap-1.5 shadow-xs"
                   >
                     View Progress Page <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
                   <Link
                     to="/patient"
-                    className="px-5 py-2.5 bg-white border border-stone-300 text-stone-800 text-xs font-bold uppercase tracking-wider hover:bg-stone-50 transition-colors"
+                    className="px-4 py-2 bg-white border border-stone-300 text-stone-800 text-xs font-semibold rounded-lg hover:bg-stone-50 transition-colors shadow-xs"
                   >
                     Today's Plan
                   </Link>
                   <button
                     onClick={handleReset}
-                    className="px-4 py-2.5 text-stone-500 hover:text-stone-900 text-xs font-bold uppercase tracking-wider"
+                    className="px-3.5 py-2 text-stone-500 hover:text-stone-900 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     Scan Another Meal
                   </button>

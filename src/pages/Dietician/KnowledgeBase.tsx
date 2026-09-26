@@ -515,60 +515,60 @@ export default function KnowledgeBase() {
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto flex flex-col h-full overflow-y-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-serif font-bold text-stone-900">Clinical Recipe Knowledge Base</h1>
-        <p className="text-stone-500 text-sm mt-1">Upload recipes, tag them for medical conditions, and assign them to patient weekly meal plans.</p>
+      <div className="mb-6">
+        <h1 className="text-xl md:text-2xl font-serif font-bold text-stone-900">Clinical Recipe Knowledge Base</h1>
+        <p className="text-stone-500 text-xs mt-1">Upload recipes, tag them for medical conditions, and assign them to patient weekly meal plans.</p>
       </div>
 
       {/* Top Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
         {/* Upload */}
-        <div className="bg-white rounded-none border border-stone-200 p-6 flex flex-col items-center justify-center text-center shadow-sm">
-          <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center mb-3 text-emerald-700">
-            <Archive className="w-7 h-7" />
+        <div className="bg-white rounded-xl border border-stone-200/90 p-5 md:p-6 flex flex-col items-center justify-center text-center shadow-xs">
+          <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center mb-3 text-emerald-700 border border-emerald-100">
+            <Archive className="w-6 h-6" />
           </div>
           <div className="flex items-center gap-1.5 mb-1">
-            <h3 className="font-bold text-stone-900">Upload Recipes (.ZIP / Excel)</h3>
-            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">Batch ZIP</span>
+            <h3 className="font-serif font-bold text-stone-900 text-sm">Upload Recipes (.ZIP / Excel)</h3>
+            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200/60 rounded-md">Batch ZIP</span>
           </div>
-          <p className="text-xs text-stone-500 mb-5 max-w-md">
-            Upload a <strong>.ZIP archive</strong> containing all your Excel sheets, or individual <strong>.xlsx / .xls</strong> files. ICMR/IFCT format auto-detected.
+          <p className="text-xs text-stone-500 mb-4 max-w-md">
+            Upload a <strong>.ZIP archive</strong> containing your practice recipes, or individual <strong>.xlsx / .xls</strong> files. ICMR/IFCT format auto-detected.
           </p>
           <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".zip,.xlsx,.xls,.csv,.pdf,.doc,.docx" className="hidden" />
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="px-6 py-2.5 bg-stone-900 text-white font-medium hover:bg-stone-800 transition-colors disabled:opacity-50 flex items-center gap-2 text-xs uppercase tracking-wider font-bold rounded-full shadow-sm"
+            className="px-5 py-2.5 bg-stone-900 text-white font-semibold hover:bg-black transition-colors disabled:opacity-50 flex items-center gap-2 text-xs uppercase tracking-wider rounded-lg shadow-xs"
           >
             {uploading ? <Loader2 className="w-4 h-4 animate-spin text-emerald-400" /> : <FileSpreadsheet className="w-4 h-4 text-emerald-400" />}
             {uploading ? (uploadStatus || 'Processing...') : 'Upload .ZIP / Excel Files'}
           </button>
-          {uploading && uploadStatus && <p className="mt-3 text-xs text-emerald-700 font-mono animate-pulse">{uploadStatus}</p>}
+          {uploading && uploadStatus && <p className="mt-2.5 text-xs text-emerald-700 font-mono animate-pulse">{uploadStatus}</p>}
         </div>
 
         {/* Stats */}
-        <div className="bg-white rounded-none border border-stone-200 p-6 flex flex-col justify-between shadow-sm">
+        <div className="bg-white rounded-xl border border-stone-200/90 p-5 md:p-6 flex flex-col justify-between shadow-xs">
           <div>
-            <div className="flex justify-between items-start mb-4">
+            <div className="flex justify-between items-start mb-3">
               <div>
-                <h3 className="font-bold text-stone-900">Firestore Recipe DB</h3>
-                <p className="text-xs text-stone-500 mt-0.5">Cloud-persisted Knowledge Base</p>
+                <h3 className="font-serif font-bold text-stone-900 text-sm">Firestore Recipe DB</h3>
+                <p className="text-[11px] text-stone-500 mt-0.5">Cloud-persisted clinical repository</p>
               </div>
-              <span className="text-3xl font-serif font-black text-emerald-700">{recipes.length}</span>
+              <span className="text-2xl md:text-3xl font-serif font-bold text-emerald-700">{recipes.length}</span>
             </div>
-            <div className="p-3 bg-emerald-50/60 border border-emerald-200 text-xs text-emerald-900 rounded space-y-1">
+            <div className="p-3 bg-emerald-50/50 border border-emerald-200/60 text-xs text-emerald-900 rounded-lg space-y-1">
               <p className="font-bold flex items-center gap-1">
-                <BookOpen className="w-4 h-4 text-emerald-700" /> Assign Recipes to Weekly Plans
+                <BookOpen className="w-3.5 h-3.5 text-emerald-700" /> Assign Recipes to Weekly Plans
               </p>
-              <p>Click <strong>Assign to Week Plan</strong> on any recipe card to schedule it for a patient's specific day and meal slot.</p>
+              <p className="text-[11px] text-emerald-800">Click <strong>Assign to Week Plan</strong> on any recipe card to schedule it for a patient's specific day and meal slot.</p>
             </div>
           </div>
-          <div className="mt-4 pt-4 border-t border-stone-100 flex justify-between items-center">
+          <div className="mt-4 pt-3 border-t border-stone-100 flex justify-between items-center">
             <span className="text-xs text-stone-400">{filtered.length} recipes showing</span>
             <button
               onClick={handleClear}
               disabled={clearing || recipes.length === 0}
-              className="text-red-600 font-medium text-xs hover:underline disabled:opacity-50 flex items-center gap-1.5"
+              className="text-rose-600 font-medium text-xs hover:underline disabled:opacity-50 flex items-center gap-1.5"
             >
               {clearing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
               Clear Database
@@ -578,20 +578,20 @@ export default function KnowledgeBase() {
       </div>
 
       {/* Recipe List */}
-      <div className="bg-white border border-stone-200 shadow-sm flex-1 flex flex-col overflow-hidden">
+      <div className="bg-white border border-stone-200/90 rounded-xl shadow-xs flex-1 flex flex-col overflow-hidden">
         {/* Filters */}
-        <div className="p-4 border-b border-stone-200 bg-stone-50 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="p-4 border-b border-stone-100 bg-stone-50/70 flex flex-col md:flex-row justify-between items-center gap-3">
           <div className="relative w-full md:w-80">
-            <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input type="text" placeholder="Search recipes, ingredients, tags..."
               value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-stone-300 rounded text-xs outline-none focus:border-stone-900 bg-white"
+              className="w-full pl-8 pr-3 py-1.5 border border-stone-300 rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
             />
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <span className="font-bold text-stone-500 uppercase tracking-wider">Dietary Filter:</span>
+            <span className="font-semibold text-stone-500 uppercase tracking-wider text-[11px]">Diet:</span>
             <select value={filterDiet} onChange={e => setFilterDiet(e.target.value)}
-              className="border border-stone-300 px-3 py-1.5 rounded outline-none focus:border-stone-900 bg-white"
+              className="border border-stone-300 px-3 py-1.5 rounded-lg outline-none focus:ring-1 focus:ring-orange-500 bg-white text-xs font-medium"
             >
               <option value="All">All Diets</option>
               <option value="Vegetarian">Vegetarian</option>

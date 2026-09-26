@@ -270,157 +270,156 @@ export default function MealNotepad() {
         </div>
       )}
 
-      {/* NOTEPAD CONTAINER WITH CLIPBOARD BINDING STYLING */}
-      <div className="bg-[#FFFDF9] rounded-3xl border-2 border-stone-300/80 shadow-2xl relative overflow-hidden transition-all">
+      {/* CLINICAL DAILY MEAL SCHEDULE CONTAINER */}
+      <div className="bg-white rounded-xl border border-stone-200/90 shadow-xs relative overflow-hidden transition-all">
         
-        {/* Realistic Notepad Top Clip & Binding Bar */}
-        <div className="bg-stone-800 text-stone-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b-4 border-orange-500 shadow-inner">
+        {/* Header Bar */}
+        <div className="bg-stone-900 text-stone-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-stone-800">
           <div className="flex items-center gap-3">
-            {/* Brass Clip Simulation */}
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-stone-900 font-black shadow-md flex-shrink-0">
-              <CheckSquare className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-lg bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CheckSquare className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono tracking-widest text-amber-400 uppercase font-black">
-                  CLINICAL NUTRITION NOTEPAD
+                <span className="text-[10px] font-mono tracking-wider text-orange-400 uppercase font-semibold">
+                  CLINICAL NUTRITION SCHEDULE
                 </span>
-                <span className="text-stone-400 text-[10px]">•</span>
+                <span className="text-stone-500 text-[10px]">•</span>
                 <span className="text-stone-300 text-[11px] font-mono">{formattedDate}</span>
               </div>
-              <h1 className="text-lg md:text-xl font-serif font-black text-white tracking-tight">
+              <h1 className="text-base md:text-lg font-bold text-white tracking-tight">
                 Today's Assigned Meal To-Do Checklist
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 bg-stone-900/80 px-3 py-1.5 rounded-xl border border-stone-700">
-            <span className="text-xs font-bold text-stone-300">Progress:</span>
-            <span className="text-xs font-extrabold text-orange-400 font-mono">
+          <div className="flex items-center gap-2 bg-stone-800/90 px-3 py-1.5 rounded-lg border border-stone-700/80">
+            <span className="text-xs font-medium text-stone-300">Progress:</span>
+            <span className="text-xs font-bold text-orange-400 font-mono">
               {completedCount} / {items.length} Done ({progressPercent}%)
             </span>
           </div>
         </div>
 
-        {/* Lined Paper Header & Dietician Sticky Note */}
-        <div className="p-6 md:p-8 border-b border-dashed border-stone-200 bg-gradient-to-b from-amber-50/40 to-transparent">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Clinical Dossier Header & Dietician Briefing */}
+        <div className="p-6 border-b border-stone-200 bg-stone-50/40">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-orange-600 mb-1">
-                Patient: <span className="text-stone-900 font-extrabold">{profile?.name}</span>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-stone-500 mb-0.5">
+                Client: <span className="text-stone-900 font-semibold">{profile?.name}</span>
               </p>
               <p className="text-xs text-stone-500">
-                Check off each item as you consume it. Your progress is recorded in real-time.
+                Check off each item as you consume it. Your progress is synced to your clinical record in real-time.
               </p>
             </div>
 
-            {/* Sticky Note Box */}
-            <div className="bg-[#FEF9C3] text-yellow-900 border border-yellow-300/80 rounded-2xl p-4 shadow-sm max-w-sm rotate-[-1deg] hover:rotate-0 transition-transform">
-              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-yellow-800 mb-1">
-                <Sparkles className="w-3.5 h-3.5 text-yellow-600" />
-                Dietician's Daily Note:
+            {/* Dietician Clinical Directive Callout */}
+            <div className="border-l-2 border-orange-500 bg-orange-50/50 rounded-r-lg p-3.5 max-w-md shadow-xs">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-orange-800 mb-1">
+                <Sparkles className="w-3.5 h-3.5 text-orange-600" />
+                Dietician Directive
               </div>
-              <p className="text-xs leading-relaxed font-sans text-yellow-900 font-medium">
+              <p className="text-xs leading-relaxed text-stone-700 font-normal">
                 {activePlan?.instructions || 'Chew slowly, stay hydrated between meals, and avoid processed refined sugars today.'}
               </p>
             </div>
           </div>
 
-          {/* Progress Bar on Notepad */}
-          <div className="mt-6">
-            <div className="flex items-center justify-between text-xs font-bold text-stone-500 mb-1.5">
-              <span>Today's Completion Rate</span>
-              <span>{totalCaloriesTracked > 0 && `${totalCaloriesTracked} kcal checked off`}</span>
+          {/* Progress Bar */}
+          <div className="mt-5">
+            <div className="flex items-center justify-between text-xs font-medium text-stone-500 mb-1.5">
+              <span>Completion Rate</span>
+              <span>{totalCaloriesTracked > 0 && `${totalCaloriesTracked} kcal logged`}</span>
             </div>
-            <div className="w-full bg-stone-200 h-3 rounded-full overflow-hidden shadow-inner">
+            <div className="w-full bg-stone-200/80 h-2 rounded-full overflow-hidden">
               <div 
-                className="bg-gradient-to-r from-orange-500 via-pink-500 to-emerald-500 h-full rounded-full transition-all duration-500"
+                className="bg-gradient-to-r from-orange-500 to-emerald-500 h-full rounded-full transition-all duration-500"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
           </div>
         </div>
 
-        {/* TO-DO CHECKLIST ITEMS (RULED NOTEPAD PAPER STYLE) */}
-        <div className="p-4 md:p-8">
+        {/* TO-DO CHECKLIST ITEMS */}
+        <div className="p-4 md:p-6">
           {items.length === 0 ? (
-            <div className="bg-amber-50/60 rounded-3xl border-2 border-dashed border-amber-300/80 p-8 text-center max-w-lg mx-auto my-4">
-              <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3 shadow-inner">
-                <ChefHat className="w-7 h-7" />
+            <div className="bg-stone-50 rounded-xl border border-dashed border-stone-200 p-8 text-center max-w-lg mx-auto my-4">
+              <div className="w-12 h-12 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center mx-auto mb-3 border border-orange-100">
+                <ChefHat className="w-6 h-6" />
               </div>
-              <h3 className="font-bold text-stone-900 text-base mb-1">
+              <h3 className="font-bold text-stone-900 text-sm mb-1">
                 Awaiting Dietician's Meal Plan
               </h3>
-              <p className="text-xs text-stone-600 leading-relaxed mb-5">
+              <p className="text-xs text-stone-500 leading-relaxed mb-5">
                 Only your clinical dietician can assign and send your daily meal plan. Every meal is prescribed strictly from our approved clinical recipes database. Once sent, your recipes and checklist will appear here.
               </p>
               <Link
                 to="/patient/inbox"
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-pink-500 hover:brightness-110 text-white font-bold text-xs rounded-xl shadow-sm transition-all"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white font-medium text-xs rounded-lg shadow-xs transition-colors"
               >
                 <MessageCircle className="w-3.5 h-3.5" />
                 Message Lead Dietician
               </Link>
             </div>
           ) : (
-            <div className="divide-y divide-stone-200/70">
+            <div className="divide-y divide-stone-100">
               {items.map((item) => {
                 const isExpanded = expandedId === item.id;
                 return (
                   <div 
                     key={item.id}
-                    className={`py-4 px-3 rounded-2xl transition-all ${
+                    className={`py-3.5 px-3 rounded-lg transition-colors ${
                       item.completed 
-                        ? 'bg-emerald-50/40 border border-emerald-100/60 my-1' 
-                        : 'hover:bg-amber-50/30'
+                        ? 'bg-emerald-50/30' 
+                        : 'hover:bg-stone-50/70'
                     }`}
                   >
-                    <div className="flex items-start gap-3.5">
+                    <div className="flex items-start gap-3">
                       {/* Interactive Checkbox */}
                       <button
                         type="button"
                         onClick={() => toggleItem(item.id)}
-                        className={`mt-0.5 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all flex-shrink-0 cursor-pointer ${
+                        className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 cursor-pointer ${
                           item.completed 
-                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-sm scale-105' 
-                            : 'border-stone-400 bg-white hover:border-orange-500 hover:scale-105'
+                            ? 'bg-emerald-500 border-emerald-600 text-white' 
+                            : 'border-stone-300 bg-white hover:border-orange-500'
                         }`}
                       >
-                        {item.completed && <CheckCircle2 className="w-4 h-4 stroke-[3]" />}
+                        {item.completed && <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />}
                       </button>
 
                       {/* Meal Content */}
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-                          <span className="text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-stone-100 text-stone-700">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-stone-100 text-stone-600">
                             {item.mealType}
                           </span>
                           
                           {item.completed && item.completedAt && (
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded flex items-center gap-1">
                               <Clock className="w-3 h-3" /> Checked at {item.completedAt}
                             </span>
                           )}
                         </div>
 
-                        <h3 className={`text-sm md:text-base font-bold transition-all ${
+                        <h3 className={`text-sm font-semibold transition-all ${
                           item.completed 
-                            ? 'line-through text-stone-400 font-medium' 
-                            : 'text-stone-900 font-bold'
+                            ? 'line-through text-stone-400 font-normal' 
+                            : 'text-stone-900'
                         }`}>
                           {item.name}
                         </h3>
 
                         <div className="flex flex-wrap items-center gap-3 text-xs text-stone-500 mt-1">
-                          <span className="font-semibold text-stone-600">Portion: {item.portion}</span>
+                          <span>Portion: <strong className="text-stone-700 font-medium">{item.portion}</strong></span>
                           {item.calories && (
                             <span>• <span className="font-semibold text-orange-600">{item.calories}</span> kcal</span>
                           )}
                           {item.protein && (
-                            <span>• <span className="font-semibold text-stone-700">{item.protein}g</span> Protein</span>
+                            <span>• <span className="font-medium text-stone-700">{item.protein}g</span> Protein</span>
                           )}
                           {item.carbs && (
-                            <span>• <span className="font-semibold text-stone-700">{item.carbs}g</span> Carbs</span>
+                            <span>• <span className="font-medium text-stone-700">{item.carbs}g</span> Carbs</span>
                           )}
                         </div>
 
@@ -430,24 +429,24 @@ export default function MealNotepad() {
                             <button
                               type="button"
                               onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                              className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 transition-colors"
+                              className="text-xs font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1 transition-colors"
                             >
                               <ChefHat className="w-3 h-3" />
-                              {isExpanded ? 'Hide chef recipe & notes' : 'View dietician instructions & recipe'}
+                              {isExpanded ? 'Hide preparation details' : 'View dietician instructions & recipe'}
                               {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                             </button>
 
                             {isExpanded && (
-                              <div className="mt-3 p-4 bg-white rounded-xl border border-stone-200 text-xs space-y-2.5 shadow-sm animate-in fade-in">
+                              <div className="mt-2.5 p-3.5 bg-stone-50 rounded-lg border border-stone-200/80 text-xs space-y-2 shadow-xs">
                                 {item.notes && (
-                                  <p className="text-stone-700 font-medium leading-relaxed">
-                                    <span className="font-bold text-stone-900">Dietician Instructions:</span> {item.notes}
+                                  <p className="text-stone-700 leading-relaxed">
+                                    <span className="font-semibold text-stone-900">Dietician Instructions:</span> {item.notes}
                                   </p>
                                 )}
 
                                 {item.ingredients && item.ingredients.length > 0 && (
                                   <div>
-                                    <span className="font-bold text-stone-900">Ingredients:</span>
+                                    <span className="font-semibold text-stone-900">Ingredients:</span>
                                     <ul className="list-disc list-inside mt-1 text-stone-600 space-y-0.5">
                                       {item.ingredients.map((ing, i) => (
                                         <li key={i}>{ing}</li>
@@ -458,7 +457,7 @@ export default function MealNotepad() {
 
                                 {item.recipe && item.recipe.length > 0 && (
                                   <div>
-                                    <span className="font-bold text-stone-900">Preparation:</span>
+                                    <span className="font-semibold text-stone-900">Preparation:</span>
                                     <ol className="list-decimal list-inside mt-1 text-stone-600 space-y-0.5">
                                       {item.recipe.map((step, i) => (
                                         <li key={i}>{step}</li>
@@ -479,19 +478,19 @@ export default function MealNotepad() {
           )}
         </div>
 
-        {/* PATIENT REFLECTION / NOTEPAD SCRATCHPAD SECTION */}
-        <div className="p-6 md:p-8 bg-amber-50/50 border-t-2 border-stone-200">
-          <div className="flex items-center justify-between mb-3">
+        {/* PATIENT REFLECTION / CLINICAL CONSULTATION NOTES */}
+        <div className="p-6 bg-stone-50/50 border-t border-stone-200">
+          <div className="flex items-center justify-between mb-2.5">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-orange-600" />
-              <h3 className="font-bold text-stone-900 text-sm">
+              <h3 className="font-semibold text-stone-900 text-xs md:text-sm">
                 Patient Notes & Reflections for Dietician
               </h3>
             </div>
             <button
               type="button"
               onClick={handleSaveReflection}
-              className="px-3 py-1.5 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
+              className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors"
             >
               <Save className="w-3.5 h-3.5" />
               Save Notes
@@ -502,11 +501,11 @@ export default function MealNotepad() {
             value={patientReflection}
             onChange={(e) => setPatientReflection(e.target.value)}
             rows={3}
-            placeholder="Jot down notes for your dietician here (e.g. Felt great after lunch, swapped brown rice for quinoa, experienced mild sweet cravings at 5 PM)..."
-            className="w-full p-4 bg-white border border-stone-300 rounded-2xl text-xs md:text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-stone-400 shadow-inner resize-y font-sans"
+            placeholder="Jot down notes for your dietician here (e.g. Felt energetic after lunch, swapped brown rice for quinoa, experienced mild sweet cravings at 5 PM)..."
+            className="w-full p-3 bg-white border border-stone-200 rounded-lg text-xs text-stone-800 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 placeholder:text-stone-400 resize-y"
           />
           <p className="text-[11px] text-stone-400 mt-1.5">
-            Your dietician can review these notes during clinical consultations.
+            Your dietician reviews these notes during clinical consultations.
           </p>
         </div>
 

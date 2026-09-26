@@ -200,6 +200,8 @@ export default function Login() {
 
       const TEST_PATIENT_EMAIL = 'testpatient@nutrisnap.com';
       const TEST_PATIENT_PASS = 'Patient123!';
+      const MEALS_TEST_EMAIL = 'mealstest@nutrisnap.com';
+      const MEALS_TEST_PASS = 'Meals123!';
 
       if (email.toLowerCase() === SPECIAL_ID && password === SPECIAL_PASS) {
         try {
@@ -213,7 +215,7 @@ export default function Login() {
             throw authError;
           }
         }
-      } else if (email.toLowerCase() === TEST_PATIENT_EMAIL && password === TEST_PATIENT_PASS) {
+      } else if ((email.toLowerCase() === TEST_PATIENT_EMAIL && password === TEST_PATIENT_PASS) || (email.toLowerCase() === MEALS_TEST_EMAIL && password === MEALS_TEST_PASS)) {
         try {
           const userCred = await signInWithEmailAndPassword(auth, email, password);
           saveLocalSubscription(userCred.user.uid, {
@@ -227,7 +229,9 @@ export default function Login() {
           navigate('/patient');
         } catch (authError: any) {
           if (authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential') {
-            const user = await registerPatient(email, password, 'Demo VIP Patient', {
+            const isMealsTest = email.toLowerCase() === MEALS_TEST_EMAIL;
+            const patientName = isMealsTest ? 'Meals Test Patient' : 'Demo VIP Patient';
+            const user = await registerPatient(email, password, patientName, {
               gender: 'Female',
               age: 29,
               lifeStage: 'Adult',

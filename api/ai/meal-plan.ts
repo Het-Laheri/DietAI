@@ -156,6 +156,22 @@ export default async function handler(req: any, res: any) {
       ? availableRecipes
       : DEFAULT_RECIPES;
 
+    // Extract Patient Clinical Conditions and Strict Allergies
+    const rawConditions: string[] = [
+      ...(patientProfile?.medicalHistory || []),
+      ...(patientProfile?.healthInfo?.conditions && patientProfile.healthInfo.conditions.toLowerCase() !== 'none'
+        ? patientProfile.healthInfo.conditions.split(',').map((c: string) => c.trim())
+        : []),
+      ...(patientProfile?.diagnosisOrProcedure ? [patientProfile.diagnosisOrProcedure] : [])
+    ].filter(Boolean);
+
+    const rawAllergies: string[] = [
+      ...(Array.isArray(patientProfile?.allergies) ? patientProfile.allergies : []),
+      ...(patientProfile?.healthInfo?.allergies && patientProfile.healthInfo.allergies.toLowerCase() !== 'none'
+        ? patientProfile.healthInfo.allergies.split(',').map((a: string) => a.trim())
+        : [])
+    ].filter(Boolean);
+
     // Filter recipes compatible with patient dietary preference via clinical hierarchy
     const pDiet = (patientProfile?.dietaryType || '').toLowerCase();
     let eligibleRecipes = recipePool;
@@ -189,6 +205,39 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    // Filter recipes against medical conditions and strict allergies
+    if (rawConditions.length > 0 || rawAllergies.length > 0) {
+      const lowerConditions = rawConditions.map(c => c.toLowerCase().trim());
+      const lowerAllergies = rawAllergies.map(a => a.toLowerCase().trim()).filter(a => a !== 'none' && a !== 'nil');
+
+      const safe = eligibleRecipes.filter((r: any) => {
+        // Condition restrictions
+        if (lowerConditions.length > 0) {
+          if (Array.isArray(r.restrictedConditions) && r.restrictedConditions.length > 0) {
+            const rc = r.restrictedConditions.map((c: string) => c.toLowerCase().trim());
+            if (rc.some((cond: string) => lowerConditions.some(lc => lc.includes(cond) || cond.includes(lc)))) return false;
+          }
+          if (Array.isArray(r.contraindicatedFor) && r.contraindicatedFor.length > 0) {
+            const cc = r.contraindicatedFor.map((c: string) => c.toLowerCase().trim());
+            if (cc.some((cond: string) => lowerConditions.some(lc => lc.includes(cond) || cond.includes(lc)))) return false;
+          }
+        }
+        // Strict allergies in ingredients
+        if (lowerAllergies.length > 0) {
+          const ingText = (Array.isArray(r.ingredients) ? r.ingredients.join(' ') : String(r.ingredients || '')).toLowerCase();
+          const recText = (Array.isArray(r.recipe) ? r.recipe.join(' ') : String(r.recipe || '')).toLowerCase();
+          const nameText = String(r.name || '').toLowerCase();
+          const full = `${nameText} ${ingText} ${recText}`;
+          if (lowerAllergies.some(alg => full.includes(alg))) return false;
+        }
+        return true;
+      });
+
+      if (safe.length >= 4) {
+        eligibleRecipes = safe;
+      }
+    }
+
     const recipeContext = eligibleRecipes.map((r: any) => ({
       name: r.name,
       dietaryType: r.dietaryType,
@@ -211,6 +260,11 @@ export default async function handler(req: any, res: any) {
 Patient: ${JSON.stringify(patientProfile || {})}
 Macro Targets: ${JSON.stringify(targets || { calories: 2000, protein: 120, carbs: 200, fat: 60 })}
 Dietary Notes: ${instructions || 'None'}
+
+CLINICAL CONDITIONS & ALLERGIES TO STRICTLY ENFORCE:
+- Medical Conditions: ${rawConditions.length > 0 ? rawConditions.join(', ') : 'None flagged'}
+- STRICT ALLERGIES / INTOLERANCES: ${rawAllergies.length > 0 ? rawAllergies.join(', ') : 'None flagged'}
+- CLINICAL DIRECTIVE: You MUST NEVER prescribe or select any recipe containing the patient's allergens (${rawAllergies.join(', ')}). All chosen recipes must be clinically safe for ${rawConditions.join(', ') || 'general wellness'}.
 
 CLINICAL DIETARY HIERARCHY LOGIC:
 - Non-Vegetarian: Can and should consume dishes across all categories (Non-Vegetarian, Eggetarian, Vegetarian, Jain, Vegan). Provide a realistic, well-rounded clinical Indian diet including healthy vegetarian dals, rotis, sabzis, and salads alongside lean non-veg dishes.

@@ -323,14 +323,57 @@ export async function updateRecipeTags(
 
 export function filterRecipesForPatient(
   recipes: RecipeDBItem[],
-  patientConditions: string[]
+  patientConditions: string[] = [],
+  patientAllergies: string[] = []
 ): RecipeDBItem[] {
-  if (!patientConditions || patientConditions.length === 0) return recipes;
-  const lowerConditions = patientConditions.map(c => c.toLowerCase().trim());
+  if (
+    (!patientConditions || patientConditions.length === 0) &&
+    (!patientAllergies || patientAllergies.length === 0)
+  ) {
+    return recipes;
+  }
+
+  const lowerConditions = (patientConditions || [])
+    .map(c => c.toLowerCase().trim())
+    .filter(c => c && c !== 'none' && c !== 'nil' && c !== 'no');
+
+  const lowerAllergies = (patientAllergies || [])
+    .map(a => a.toLowerCase().trim())
+    .filter(a => a && a !== 'none' && a !== 'nil' && a !== 'no');
+
   return recipes.filter(recipe => {
-    if (!recipe.restrictedConditions || recipe.restrictedConditions.length === 0) return true;
-    const restricted = recipe.restrictedConditions.map(c => c.toLowerCase().trim());
-    return !restricted.some(rc => lowerConditions.some(pc => pc.includes(rc) || rc.includes(pc)));
+    // 1. Condition check against restrictedConditions & contraindicatedFor
+    if (lowerConditions.length > 0) {
+      if (recipe.restrictedConditions && recipe.restrictedConditions.length > 0) {
+        const restricted = recipe.restrictedConditions.map(c => c.toLowerCase().trim());
+        if (restricted.some(rc => lowerConditions.some(pc => pc.includes(rc) || rc.includes(pc)))) {
+          return false;
+        }
+      }
+      if (recipe.contraindicatedFor && recipe.contraindicatedFor.length > 0) {
+        const contra = recipe.contraindicatedFor.map(c => c.toLowerCase().trim());
+        if (contra.some(cc => lowerConditions.some(pc => pc.includes(cc) || cc.includes(pc)))) {
+          return false;
+        }
+      }
+    }
+
+    // 2. Strict allergy check against ingredients and recipe preparation text
+    if (lowerAllergies.length > 0) {
+      const ingredientsText = (recipe.ingredients || []).join(' ').toLowerCase();
+      const recipeText = (recipe.recipe || []).join(' ').toLowerCase();
+      const recipeName = (recipe.name || '').toLowerCase();
+      const fullText = `${recipeName} ${ingredientsText} ${recipeText}`;
+
+      const hasAllergen = lowerAllergies.some(allergen => {
+        // Match allergen as word or substring (e.g. "peanut", "egg", "milk", "gluten")
+        return fullText.includes(allergen);
+      });
+
+      if (hasAllergen) return false;
+    }
+
+    return true;
   });
 }
 

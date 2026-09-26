@@ -6,7 +6,8 @@ import { getPatients, PatientProfile, MealPlan, saveMealPlan, getStoredRecipesFr
 import { 
   Loader2, Wand2, Save, BookOpen, Utensils, RefreshCw, 
   Check, Search, Edit3, Trash2, Plus, Copy, Calendar,
-  Sparkles, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, ChevronDown, ChevronUp
+  Sparkles, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, ChevronDown, ChevronUp,
+  ShieldAlert, Activity, Flame
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -32,6 +33,8 @@ interface DayPlan {
   meals: MealItem[];
 }
 
+export type KbSlotItem = { recipe: RecipeDBItem; portion: string; notes: string };
+
 export default function MealPlanGenerator() {
   const [patients, setPatients] = useState<PatientProfile[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState('');
@@ -49,8 +52,8 @@ export default function MealPlanGenerator() {
   const [saving, setSaving] = useState(false);
   const [assignStatus, setAssignStatus] = useState<'draft' | 'published'>('published');
   
-  // Swap Target state
-  const [swapTarget, setSwapTarget] = useState<{ dayNumber: number; mealIndex: number } | null>(null);
+  // Swap Target state: allows swapping a specific dish or adding a new dish to a specific slot
+  const [swapTarget, setSwapTarget] = useState<{ dayNumber: number; mealIndex: number; mealSlot?: string } | null>(null);
 
   // Edit Meal Modal / Inline state
   const [editingMeal, setEditingMeal] = useState<{
@@ -62,20 +65,20 @@ export default function MealPlanGenerator() {
   // Studio tab: 'ai' | 'kb'
   const [studioTab, setStudioTab] = useState<'ai' | 'kb'>('ai');
 
-  // KB Week Planner state
+  // KB Week Planner state — supports multiple dishes per meal slot
   const WEEK_DAYS: WeekDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const MEAL_SLOTS: MealSlot[] = ['Breakfast', 'Morning Snack', 'Lunch', 'Evening Snack', 'Dinner', 'Bedtime Snack'];
-  const [kbWeekPlan, setKbWeekPlan] = useState<Record<string, Record<string, { recipe: RecipeDBItem; portion: string; notes: string } | null>>>({});
+  const [kbWeekPlan, setKbWeekPlan] = useState<Record<string, Record<string, KbSlotItem[]>>>({});
   const [kbSaving, setKbSaving] = useState(false);
   const [kbExpandedRecipe, setKbExpandedRecipe] = useState<string | null>(null);
   const [kbAssigning, setKbAssigning] = useState<{ day: WeekDay; slot: MealSlot } | null>(null);
 
   const initKbWeekPlan = () => {
-    const empty: Record<string, Record<string, null>> = {};
+    const empty: Record<string, Record<string, KbSlotItem[]>> = {};
     for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']) {
       empty[day] = {};
       for (const slot of ['Breakfast', 'Morning Snack', 'Lunch', 'Evening Snack', 'Dinner', 'Bedtime Snack']) {
-        empty[day][slot] = null;
+        empty[day][slot] = [];
       }
     }
     return empty;
@@ -85,21 +88,33 @@ export default function MealPlanGenerator() {
 
   const assignKbRecipe = (recipe: RecipeDBItem) => {
     if (!kbAssigning) return;
-    setKbWeekPlan(prev => ({
-      ...prev,
-      [kbAssigning.day]: {
-        ...prev[kbAssigning.day],
-        [kbAssigning.slot]: { recipe, portion: '1 serving', notes: '' }
-      }
-    }));
+    setKbWeekPlan(prev => {
+      const daySlots = prev[kbAssigning.day] || {};
+      const currentItems = Array.isArray(daySlots[kbAssigning.slot]) ? daySlots[kbAssigning.slot] : [];
+      return {
+        ...prev,
+        [kbAssigning.day]: {
+          ...daySlots,
+          [kbAssigning.slot]: [
+            ...currentItems,
+            { recipe, portion: recipe.portionSize || '1 serving', notes: '' }
+          ]
+        }
+      };
+    });
     setKbAssigning(null);
   };
 
-  const removeKbEntry = (day: string, slot: string) => {
-    setKbWeekPlan(prev => ({
-      ...prev,
-      [day]: { ...prev[day], [slot]: null }
-    }));
+  const removeKbEntry = (day: string, slot: string, itemIdx: number) => {
+    setKbWeekPlan(prev => {
+      const daySlots = prev[day] || {};
+      const currentItems = Array.isArray(daySlots[slot]) ? [...daySlots[slot]] : [];
+      currentItems.splice(itemIdx, 1);
+      return {
+        ...prev,
+        [day]: { ...daySlots, [slot]: currentItems }
+      };
+    });
   };
 
   const saveKbWeekPlan = async (status: 'draft' | 'published') => {
@@ -108,15 +123,19 @@ export default function MealPlanGenerator() {
     try {
       const entries: WeekPlanEntry[] = [];
       for (const [day, slots] of Object.entries(kbWeekPlan)) {
-        for (const [slot, val] of Object.entries(slots)) {
-          if (val) {
-            entries.push({
-              day: day as WeekDay,
-              mealSlot: slot as MealSlot,
-              recipeId: val.recipe.id || val.recipe.name,
-              recipeName: val.recipe.name,
-              portion: val.portion,
-              notes: val.notes
+        for (const [slot, items] of Object.entries(slots)) {
+          if (Array.isArray(items)) {
+            items.forEach(val => {
+              if (val && val.recipe) {
+                entries.push({
+                  day: day as WeekDay,
+                  mealSlot: slot as MealSlot,
+                  recipeId: val.recipe.id || val.recipe.name,
+                  recipeName: val.recipe.name,
+                  portion: val.portion || '1 serving',
+                  notes: val.notes || ''
+                });
+              }
             });
           }
         }
@@ -148,21 +167,25 @@ export default function MealPlanGenerator() {
         dayNames.forEach((dName, dIdx) => {
           const dayNum = dIdx + 1;
           const daySlots = kbWeekPlan[dName] || {};
-          Object.entries(daySlots).forEach(([slot, val]: [string, any]) => {
-            if (val) {
-              daysMap[dayNum].push({
-                type: slot,
-                name: val.recipe.name,
-                portion: val.portion || '1 serving',
-                calories: Number(val.recipe.calories) || 300,
-                protein: Number(val.recipe.protein) || 15,
-                carbs: Number(val.recipe.carbs) || 35,
-                fat: Number(val.recipe.fat) || 8,
-                prepTime: val.recipe.prepTime || '10 mins',
-                cookTime: val.recipe.cookTime || '10 mins',
-                ingredients: val.recipe.ingredients || [],
-                recipe: val.recipe.recipe || [],
-                notes: val.notes || val.recipe.clinicalFocus
+          Object.entries(daySlots).forEach(([slot, items]: [string, any]) => {
+            if (Array.isArray(items)) {
+              items.forEach(val => {
+                if (val && val.recipe) {
+                  daysMap[dayNum].push({
+                    type: slot,
+                    name: val.recipe.name,
+                    portion: val.portion || '1 serving',
+                    calories: Number(val.recipe.calories) || 300,
+                    protein: Number(val.recipe.protein) || 15,
+                    carbs: Number(val.recipe.carbs) || 35,
+                    fat: Number(val.recipe.fat) || 8,
+                    prepTime: val.recipe.prepTime || '10 mins',
+                    cookTime: val.recipe.cookTime || '10 mins',
+                    ingredients: val.recipe.ingredients || [],
+                    recipe: val.recipe.recipe || [],
+                    notes: val.notes || val.recipe.clinicalFocus
+                  });
+                }
               });
             }
           });
@@ -204,32 +227,91 @@ export default function MealPlanGenerator() {
     load();
   }, []);
 
-  // When patient selection changes, fetch relevant recipes from Firestore database
+  // When patient selection changes, fetch relevant recipes from Firestore database and load existing draft plan
   useEffect(() => {
     async function loadRecipes() {
       if (!selectedPatientId) {
         setDbRecipes([]);
+        setKbWeekPlan(initKbWeekPlan());
         return;
       }
       const patient = patients.find(p => p.id === selectedPatientId);
+      if (!patient) return;
       setLoadingRecipes(true);
       try {
-        const fetched = await getStoredRecipesFromDB(patient?.dietaryType);
-        const patientConditions = patient?.medicalHistory || (patient?.healthInfo?.conditions ? patient.healthInfo.conditions.split(',').map(c => c.trim()) : []);
-        const safeRecipes = filterRecipesForPatient(fetched, patientConditions);
+        const fetched = await getStoredRecipesFromDB(patient.dietaryType);
+        
+        const conds = [
+          ...(patient.medicalHistory || []),
+          ...(patient.healthInfo?.conditions && patient.healthInfo.conditions.toLowerCase() !== 'none'
+            ? patient.healthInfo.conditions.split(',').map(c => c.trim())
+            : []),
+          ...(patient.diagnosisOrProcedure ? [patient.diagnosisOrProcedure] : [])
+        ].filter((v, i, a) => v && v.toLowerCase() !== 'none' && v.toLowerCase() !== 'nil' && a.indexOf(v) === i);
+
+        const allgs = [
+          ...(Array.isArray(patient.allergies) ? patient.allergies : []),
+          ...(patient.healthInfo?.allergies && patient.healthInfo.allergies.toLowerCase() !== 'none'
+            ? patient.healthInfo.allergies.split(',').map(a => a.trim())
+            : [])
+        ].filter((v, i, a) => v && v.toLowerCase() !== 'none' && v.toLowerCase() !== 'nil' && a.indexOf(v) === i);
+
+        const safeRecipes = filterRecipesForPatient(fetched, conds, allgs);
         setDbRecipes(safeRecipes);
         
-        // Auto-adapt targets if available from clinical profile
-        if (patient) {
-          const estimatedCals = patient.targetWeightKg ? Math.round(patient.targetWeightKg * 28) : 1900;
-          setTargets(prev => ({
-            ...prev,
-            calories: estimatedCals,
-            protein: Math.round((estimatedCals * 0.25) / 4),
-            carbs: Math.round((estimatedCals * 0.50) / 4),
-            fat: Math.round((estimatedCals * 0.25) / 9),
-          }));
+        // Auto-adapt targets from clinical profile
+        const estimatedCals = patient.targetWeightKg ? Math.round(patient.targetWeightKg * 28) : 1900;
+        setTargets(prev => ({
+          ...prev,
+          calories: estimatedCals,
+          protein: Math.round((estimatedCals * 0.25) / 4),
+          carbs: Math.round((estimatedCals * 0.50) / 4),
+          fat: Math.round((estimatedCals * 0.25) / 9),
+        }));
+
+        // Populate clinical instructions with patient's conditions and allergies
+        const directiveParts = [];
+        if (conds.length > 0) directiveParts.push(`Medical Conditions: ${conds.join(', ')}`);
+        if (allgs.length > 0) directiveParts.push(`Strict Allergies: ${allgs.join(', ')} (ZERO allergen exposure)`);
+        if (patient.preferences?.dislikes && patient.preferences.dislikes.toLowerCase() !== 'none') {
+          directiveParts.push(`Dislikes: ${patient.preferences.dislikes}`);
         }
+        if (directiveParts.length > 0) {
+          setInstructions(directiveParts.join(' • '));
+        }
+
+        // Load existing draft week plan if present
+        const existingPlans = await getAllDraftWeekPlans(patient.id);
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+        const monday = new Date(today.setDate(diff));
+        const weekStart = monday.toISOString().split('T')[0];
+        const draft = existingPlans.find(p => p.weekStartDate === weekStart);
+
+        const freshState = initKbWeekPlan();
+        if (draft && Array.isArray(draft.entries)) {
+          draft.entries.forEach(entry => {
+            const r = fetched.find(rec => rec.name.toLowerCase() === entry.recipeName.toLowerCase()) || {
+              name: entry.recipeName,
+              dietaryType: patient.dietaryType || 'Vegetarian',
+              calories: 300,
+              protein: 15,
+              carbs: 35,
+              fat: 8,
+              ingredients: [],
+              recipe: []
+            };
+            if (freshState[entry.day] && Array.isArray(freshState[entry.day][entry.mealSlot])) {
+              freshState[entry.day][entry.mealSlot].push({
+                recipe: r,
+                portion: entry.portion || '1 serving',
+                notes: entry.notes || ''
+              });
+            }
+          });
+        }
+        setKbWeekPlan(freshState);
       } catch (e) {
         console.error('Error fetching recipes from DB:', e);
       } finally {
@@ -241,6 +323,26 @@ export default function MealPlanGenerator() {
 
   const selectedPatient = patients.find(p => p.id === selectedPatientId);
 
+  // Clean deduplicated conditions, allergies, and dislikes for selected patient
+  const patientConditions = selectedPatient ? [
+    ...(selectedPatient.medicalHistory || []),
+    ...(selectedPatient.healthInfo?.conditions && selectedPatient.healthInfo.conditions.toLowerCase() !== 'none'
+      ? selectedPatient.healthInfo.conditions.split(',').map(c => c.trim())
+      : []),
+    ...(selectedPatient.diagnosisOrProcedure ? [selectedPatient.diagnosisOrProcedure] : [])
+  ].filter((v, i, a) => v && v.toLowerCase() !== 'none' && v.toLowerCase() !== 'nil' && a.indexOf(v) === i) : [];
+
+  const patientAllergies = selectedPatient ? [
+    ...(Array.isArray(selectedPatient.allergies) ? selectedPatient.allergies : []),
+    ...(selectedPatient.healthInfo?.allergies && selectedPatient.healthInfo.allergies.toLowerCase() !== 'none'
+      ? selectedPatient.healthInfo.allergies.split(',').map(a => a.trim())
+      : [])
+  ].filter((v, i, a) => v && v.toLowerCase() !== 'none' && v.toLowerCase() !== 'nil' && a.indexOf(v) === i) : [];
+
+  const patientDislikes = selectedPatient?.preferences?.dislikes && selectedPatient.preferences.dislikes.toLowerCase() !== 'none'
+    ? selectedPatient.preferences.dislikes.split(',').map(d => d.trim()).filter(Boolean)
+    : [];
+
   const handleGenerate = async () => {
     if (!selectedPatientId) {
       alert('Please select a patient first.');
@@ -250,9 +352,10 @@ export default function MealPlanGenerator() {
     setGenerating(true);
     setGeneratedPlan(null);
     try {
-      // 1. Fetch pre-provided recipes database
-      const patientConditions = selectedPatient?.medicalHistory || (selectedPatient?.healthInfo?.conditions ? selectedPatient.healthInfo.conditions.split(',').map(c => c.trim()) : []);
-      const pool = dbRecipes.length > 0 ? dbRecipes : filterRecipesForPatient(await getStoredRecipesFromDB(selectedPatient?.dietaryType), patientConditions);
+      // 1. Fetch pre-provided recipes database with both conditions and allergies filtered
+      const pool = dbRecipes.length > 0 
+        ? dbRecipes 
+        : filterRecipesForPatient(await getStoredRecipesFromDB(selectedPatient?.dietaryType), patientConditions, patientAllergies);
 
       // Attempt AI generation with strict instruction to select only from pre-provided recipes
       let planGenerated: DayPlan[] | null = null;
@@ -306,19 +409,22 @@ export default function MealPlanGenerator() {
     const updated = [...generatedPlan];
     const dayIdx = updated.findIndex((d) => d.dayNumber === swapTarget.dayNumber);
     if (dayIdx !== -1) {
+      const existingMeal = swapTarget.mealIndex >= 0 ? updated[dayIdx].meals[swapTarget.mealIndex] : null;
+      const targetSlot = swapTarget.mealSlot || existingMeal?.type || 'Lunch';
+
       const newMealObj: MealItem = {
-        type: swapTarget.mealIndex >= 0 ? (updated[dayIdx].meals[swapTarget.mealIndex]?.type || 'Meal') : 'Snack',
+        type: targetSlot,
         name: dbRecipe.name,
-        portion: '1 portion',
-        calories: Number(dbRecipe.calories) || 350,
+        portion: dbRecipe.portionSize || '1 serving',
+        calories: Number(dbRecipe.calories) || 300,
         protein: Number(dbRecipe.protein) || 15,
-        carbs: Number(dbRecipe.carbs) || 45,
-        fat: Number(dbRecipe.fat) || 12,
+        carbs: Number(dbRecipe.carbs) || 35,
+        fat: Number(dbRecipe.fat) || 8,
         prepTime: dbRecipe.prepTime || '10 mins',
         cookTime: dbRecipe.cookTime || '15 mins',
         ingredients: dbRecipe.ingredients || [],
         recipe: dbRecipe.recipe || [],
-        notes: `Clinical Approved Recipe (${dbRecipe.dietaryType || 'Standard'}) — ${dbRecipe.clinicalFocus || 'High Satiety'}`
+        notes: `Clinical Approved Recipe (${dbRecipe.dietaryType || 'Standard'}) — ${dbRecipe.clinicalFocus || 'Balanced Nutrition'}`
       };
 
       if (swapTarget.mealIndex >= 0) {
@@ -432,6 +538,28 @@ export default function MealPlanGenerator() {
         </div>
       </div>
 
+      {/* Clinical Safeguards Alert Banner */}
+      {selectedPatient && (patientConditions.length > 0 || patientAllergies.length > 0) && (
+        <div className="mb-5 p-3.5 bg-rose-50/80 border border-rose-200 rounded-xl flex items-start gap-3 text-xs text-rose-950 shadow-2xs">
+          <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-bold uppercase tracking-wider text-[10px] px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300">
+                Clinical Safeguards Active for {selectedPatient.name}
+              </span>
+              <span className="text-[11px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold">
+                ✓ {dbRecipes.length} safe recipes available
+              </span>
+            </div>
+            <p className="text-[11px] text-stone-700 leading-relaxed">
+              {patientConditions.length > 0 && <><strong>Medical Conditions:</strong> {patientConditions.join(', ')} • </>}
+              {patientAllergies.length > 0 && <><strong>Strict Allergies:</strong> <span className="text-rose-700 font-bold">{patientAllergies.join(', ')}</span> (zero allergen exposure) • </>}
+              All recipes containing contraindicated ingredients or client allergens are safely excluded from generation and assignment.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Mode Tabs */}
       <div className="flex items-center gap-1.5 mb-6 border-b border-stone-200">
         <button
@@ -465,6 +593,42 @@ export default function MealPlanGenerator() {
                 <option key={p.id} value={p.id}>{p.name} ({p.dietaryType || 'Standard'})</option>
               ))}
             </select>
+
+            {selectedPatient && (
+              <div className="mt-3 pt-3 border-t border-stone-100 flex flex-wrap items-center gap-2.5 text-xs">
+                <span className="text-stone-500 font-medium">Dietary Type:</span>
+                <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200 text-[10px] font-bold uppercase">
+                  {selectedPatient.dietaryType || 'Standard'}
+                </span>
+                {patientConditions.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="text-stone-500 text-[11px] font-medium flex items-center gap-0.5">
+                      <Activity className="w-3 h-3 text-blue-600" /> Conditions:
+                    </span>
+                    {patientConditions.map((c, i) => (
+                      <span key={i} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-semibold">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {patientAllergies.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="text-stone-500 text-[11px] font-medium flex items-center gap-0.5">
+                      <ShieldAlert className="w-3 h-3 text-rose-600" /> Allergies:
+                    </span>
+                    {patientAllergies.map((a, i) => (
+                      <span key={i} className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200 text-[10px] font-bold flex items-center gap-0.5">
+                        <AlertTriangle className="w-2.5 h-2.5 text-rose-600" /> {a}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 ml-auto font-semibold">
+                  ✓ {dbRecipes.length} safe recipes
+                </span>
+              </div>
+            )}
           </div>
 
           {/* KB Recipe Picker */}
@@ -540,26 +704,40 @@ export default function MealPlanGenerator() {
                         {slot}
                       </td>
                       {WEEK_DAYS.map(day => {
-                        const cell = kbWeekPlan[day]?.[slot];
+                        const items = kbWeekPlan[day]?.[slot] || [];
+                        const slotCalories = items.reduce((sum, item) => sum + (Number(item.recipe.calories) || 0), 0);
                         return (
-                          <td key={day} className="p-2 border-r border-stone-100 align-top">
-                            {cell ? (
-                              <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-lg p-2 relative shadow-2xs">
-                                <button onClick={() => removeKbEntry(day, slot)}
-                                  className="absolute top-1 right-1 text-stone-400 hover:text-rose-600"
-                                  title="Remove"
-                                >×</button>
-                                <p className="font-bold text-emerald-950 pr-3 leading-tight">{cell.recipe.name}</p>
-                                <p className="text-emerald-700 text-[10px] mt-0.5">{cell.recipe.calories} kcal</p>
-                              </div>
-                            ) : (
+                          <td key={day} className="p-2 border-r border-stone-100 align-top min-w-[140px]">
+                            <div className="space-y-1.5">
+                              {items.map((item, itemIdx) => (
+                                <div key={itemIdx} className="bg-emerald-50/80 border border-emerald-200/90 rounded-lg p-2 relative shadow-2xs group">
+                                  <button onClick={() => removeKbEntry(day, slot, itemIdx)}
+                                    className="absolute top-1 right-1 text-stone-400 hover:text-rose-600 transition-colors"
+                                    title="Remove this dish"
+                                  >×</button>
+                                  <p className="font-bold text-emerald-950 pr-3 leading-tight text-[11px]">{item.recipe.name}</p>
+                                  <p className="text-emerald-700 text-[10px] mt-0.5">{item.recipe.calories} kcal • {item.portion}</p>
+                                </div>
+                              ))}
+
+                              {items.length > 0 && (
+                                <div className="text-[9px] text-stone-500 font-semibold px-1 flex justify-between">
+                                  <span>Subtotal:</span>
+                                  <span>{slotCalories} kcal</span>
+                                </div>
+                              )}
+
                               <button
                                 onClick={() => { if (!selectedPatientId) { alert('Select a patient first'); return; } setKbAssigning({ day, slot }); }}
-                                className="w-full h-12 border border-dashed border-stone-200 rounded-lg text-stone-400 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/30 transition-all flex items-center justify-center"
+                                className={`w-full py-1.5 border border-dashed rounded-lg text-stone-500 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/40 transition-all flex items-center justify-center gap-1 text-[10px] font-semibold ${
+                                  items.length === 0 ? 'h-12 border-stone-200 text-stone-400' : 'border-stone-200/80 bg-white/70'
+                                }`}
+                                title={`Add dish to ${day} ${slot}`}
                               >
-                                <Plus className="w-3.5 h-3.5" />
+                                <Plus className="w-3 h-3" />
+                                <span>{items.length === 0 ? 'Add Dish' : '+ Add Another'}</span>
                               </button>
-                            )}
+                            </div>
                           </td>
                         );
                       })}
@@ -614,23 +792,80 @@ export default function MealPlanGenerator() {
             </select>
 
             {selectedPatient && (
-              <div className="mt-3.5 p-3 bg-stone-50 border border-stone-200/80 rounded-lg text-xs text-stone-700 space-y-1.5">
+              <div className="mt-3.5 p-3.5 bg-stone-50 border border-stone-200/90 rounded-xl text-xs text-stone-700 space-y-2.5 shadow-2xs">
+                {/* Dietary Profile */}
                 <div className="flex justify-between items-center">
-                  <span className="text-stone-500 text-[11px]">Dietary Profile:</span>
-                  <span className="font-semibold px-2 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200/60 text-[10px] uppercase">
+                  <span className="text-stone-500 text-[11px] font-medium">Dietary Type:</span>
+                  <span className="font-bold px-2 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200/60 text-[10px] uppercase">
                     {selectedPatient.dietaryType || 'Standard'}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-stone-500 text-[11px]">Primary Goals:</span>
-                  <span className="font-medium truncate max-w-[180px] text-right">
-                    {selectedPatient.goals?.join(', ') || 'Metabolic Wellness'}
-                  </span>
+
+                {/* Primary Goals */}
+                <div className="flex justify-between items-start gap-2">
+                  <span className="text-stone-500 text-[11px] font-medium shrink-0">Goals:</span>
+                  <div className="flex flex-wrap justify-end gap-1">
+                    {(selectedPatient.goals?.length ? selectedPatient.goals : ['Metabolic Wellness']).map((g, i) => (
+                      <span key={i} className="px-1.5 py-0.5 rounded bg-stone-200/70 text-stone-800 text-[10px] font-semibold">
+                        {g}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-stone-500 text-[11px]">Conditions & Allergies:</span>
-                  <span className={`font-medium ${(selectedPatient.allergies?.length || selectedPatient.healthInfo?.allergies) ? 'text-rose-600' : 'text-stone-700'}`}>
-                    {(Array.isArray(selectedPatient.allergies) ? selectedPatient.allergies.join(', ') : selectedPatient.healthInfo?.allergies) || selectedPatient.healthInfo?.conditions || 'None flagged'}
+
+                {/* Pre-existing Medical Conditions */}
+                <div className="pt-2 border-t border-stone-200/70">
+                  <span className="text-stone-500 text-[11px] font-semibold block mb-1 flex items-center gap-1">
+                    <Activity className="w-3 h-3 text-blue-600" /> Pre-existing Conditions:
+                  </span>
+                  {patientConditions.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {patientConditions.map((cond, i) => (
+                        <span key={i} className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold">
+                          {cond}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-stone-400 text-[11px] italic">None flagged</span>
+                  )}
+                </div>
+
+                {/* Allergies & Intolerances */}
+                <div className="pt-2 border-t border-stone-200/70">
+                  <span className="text-stone-500 text-[11px] font-semibold block mb-1 flex items-center gap-1">
+                    <ShieldAlert className="w-3 h-3 text-rose-600" /> Allergies & Intolerances:
+                  </span>
+                  {patientAllergies.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {patientAllergies.map((allg, i) => (
+                        <span key={i} className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-800 border border-rose-200 text-[10px] font-bold flex items-center gap-1">
+                          <AlertTriangle className="w-2.5 h-2.5 text-rose-600" /> {allg}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-stone-400 text-[11px] italic">None reported (Zero allergies)</span>
+                  )}
+                </div>
+
+                {/* Food Dislikes */}
+                {patientDislikes.length > 0 && (
+                  <div className="pt-2 border-t border-stone-200/70 flex justify-between items-start gap-2">
+                    <span className="text-stone-500 text-[11px] font-semibold shrink-0">Dislikes:</span>
+                    <span className="text-[10px] font-medium text-stone-600 text-right">
+                      {patientDislikes.join(', ')}
+                    </span>
+                  </div>
+                )}
+
+                {/* Safe Recipe Pool Indicator */}
+                <div className="pt-2 border-t border-stone-200/70 flex justify-between items-center text-[10px]">
+                  <span className="text-stone-500 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-600" /> Clinical Pool:
+                  </span>
+                  <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    {dbRecipes.length} safe recipes active
                   </span>
                 </div>
               </div>
@@ -745,11 +980,11 @@ export default function MealPlanGenerator() {
               </div>
 
               {swapTarget && (
-                <div className="mb-3 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 flex justify-between items-center">
+                <div className="mb-3 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 flex justify-between items-center shadow-2xs">
                   <span>
                     {swapTarget.mealIndex >= 0 
-                      ? <>Replacing <strong>Day {swapTarget.dayNumber} Meal {swapTarget.mealIndex + 1}</strong></> 
-                      : <>Adding approved recipe to <strong>Day {swapTarget.dayNumber}</strong></>}
+                      ? <>Replacing <strong>Day {swapTarget.dayNumber} {swapTarget.mealSlot || 'Dish'}</strong></> 
+                      : <>Adding dish to <strong>Day {swapTarget.dayNumber} • {swapTarget.mealSlot || 'Course'}</strong></>}
                   </span>
                   <button onClick={() => setSwapTarget(null)} className="font-bold underline text-amber-700">Cancel</button>
                 </div>
@@ -782,8 +1017,8 @@ export default function MealPlanGenerator() {
                       >
                         <Check className="w-3 h-3" />
                         {swapTarget.mealIndex >= 0 
-                          ? `Swap Into Day ${swapTarget.dayNumber} Meal ${swapTarget.mealIndex + 1}`
-                          : `Add to Day ${swapTarget.dayNumber}`}
+                          ? `Swap Into Day ${swapTarget.dayNumber} ${swapTarget.mealSlot || ''}`
+                          : `Add to Day ${swapTarget.dayNumber} • ${swapTarget.mealSlot || 'Dish'}`}
                       </button>
                     ) : (
                       <button 
@@ -911,88 +1146,179 @@ export default function MealPlanGenerator() {
                 </div>
               </div>
 
-              {/* Active Day Meals List */}
-              <div className="p-5 space-y-3.5 max-h-[620px] overflow-y-auto">
-                {currentDay?.meals.map((meal, idx) => {
-                  const isSwapping = swapTarget?.dayNumber === activeDayTab && swapTarget?.mealIndex === idx;
+              {/* Active Day Meals List organized by clinical meal slots */}
+              <div className="p-5 space-y-4 max-h-[660px] overflow-y-auto">
+                {(() => {
+                  const dayMeals = currentDay?.meals || [];
+                  const STANDARD_SLOTS = ['Breakfast', 'Morning Snack', 'Lunch', 'Evening Snack', 'Dinner', 'Bedtime Snack'];
+                  
+                  // Group indexed meals by standard slot
+                  const bySlot: Record<string, { meal: MealItem; globalIndex: number }[]> = {};
+                  STANDARD_SLOTS.forEach(s => { bySlot[s] = []; });
+                  const customMeals: { meal: MealItem; globalIndex: number }[] = [];
 
-                  return (
-                    <div 
-                      key={idx} 
-                      className={`p-4 rounded-lg border transition-all ${
-                        isSwapping ? 'bg-amber-50/70 border-amber-300 ring-1 ring-amber-400/30' : 'bg-white border-stone-200/90 hover:border-stone-300 shadow-2xs'
-                      }`}
-                    >
-                      <div className="flex flex-wrap justify-between items-start gap-2 mb-2">
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-stone-100 text-stone-700 border border-stone-200">
-                            {meal.type}
-                          </span>
-                          <h4 className="font-bold text-stone-900 text-sm mt-1">{meal.name}</h4>
-                          <span className="text-xs text-stone-500 font-medium">Portion: {meal.portion || '1 serving'}</span>
-                        </div>
+                  dayMeals.forEach((m, idx) => {
+                    const match = STANDARD_SLOTS.find(s => s.toLowerCase() === (m.type || '').toLowerCase());
+                    if (match) {
+                      bySlot[match].push({ meal: m, globalIndex: idx });
+                    } else {
+                      customMeals.push({ meal: m, globalIndex: idx });
+                    }
+                  });
 
-                        <div className="flex items-center gap-3">
-                          <div className="text-right text-xs">
-                            <span className="font-bold text-stone-900">{meal.calories} kcal</span>
-                            <div className="text-[10px] text-stone-500">
-                              P:{meal.protein}g • C:{meal.carbs}g • F:{meal.fat}g
+                  return (<>
+                    {STANDARD_SLOTS.map(slot => {
+                      const items = bySlot[slot] || [];
+                      const slotKcal = items.reduce((sum, item) => sum + (Number(item.meal.calories) || 0), 0);
+                      const slotProtein = items.reduce((sum, item) => sum + (Number(item.meal.protein) || 0), 0);
+
+                      return (
+                        <div key={slot} className="bg-stone-50/60 border border-stone-200/90 rounded-xl p-3.5 space-y-2.5">
+                          {/* Slot Header */}
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-stone-900 text-white shadow-2xs">
+                                {slot}
+                              </span>
+                              <span className="text-[11px] text-stone-500 font-medium">
+                                {items.length} {items.length === 1 ? 'dish' : 'dishes'}
+                              </span>
+                              {items.length > 0 && (
+                                <span className="text-[10px] font-bold text-orange-700 bg-orange-50 px-2 py-0.5 rounded border border-orange-200/60">
+                                  {slotKcal} kcal • {slotProtein}g P
+                                </span>
+                              )}
                             </div>
-                          </div>
-
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => setEditingMeal({ dayNumber: activeDayTab, mealIndex: idx, meal: { ...meal } })}
-                              title="Edit meal portion and macros"
-                              className="p-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-md transition-colors"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-
-                            <button 
-                              onClick={() => setSwapTarget({ dayNumber: activeDayTab, mealIndex: idx })}
-                              title="Swap with recipe from knowledge base"
-                              className="p-1.5 text-stone-500 hover:text-orange-600 hover:bg-orange-50 rounded-md transition-colors"
-                            >
-                              <RefreshCw className="w-3.5 h-3.5" />
-                            </button>
 
                             <button
-                              onClick={() => handleDeleteMeal(activeDayTab, idx)}
-                              title="Remove meal"
-                              className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+                              onClick={() => setSwapTarget({ dayNumber: activeDayTab, mealIndex: -1, mealSlot: slot })}
+                              className="px-2.5 py-1 bg-white hover:bg-orange-50 hover:text-orange-700 hover:border-orange-300 border border-stone-200 text-stone-700 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all flex items-center gap-1 shadow-2xs"
+                              title={`Add another dish to ${slot}`}
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Plus className="w-3 h-3 text-orange-600" />
+                              Add Dish to {slot}
                             </button>
                           </div>
+
+                          {/* Items in this slot */}
+                          {items.length === 0 ? (
+                            <div className="py-2.5 px-3 border border-dashed border-stone-200 rounded-lg text-stone-400 text-xs flex justify-between items-center bg-white/50">
+                              <span className="text-[11px] italic">No dishes in {slot} yet.</span>
+                              <button
+                                onClick={() => setSwapTarget({ dayNumber: activeDayTab, mealIndex: -1, mealSlot: slot })}
+                                className="text-orange-600 hover:text-orange-700 text-[10px] font-bold flex items-center gap-1"
+                              >
+                                <Plus className="w-3 h-3" /> Add First Dish
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {items.map(({ meal, globalIndex }) => {
+                                const isSwapping = swapTarget?.dayNumber === activeDayTab && swapTarget?.mealIndex === globalIndex;
+                                return (
+                                  <div
+                                    key={globalIndex}
+                                    className={`p-3.5 rounded-lg border transition-all ${
+                                      isSwapping ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-400/40' : 'bg-white border-stone-200 hover:border-stone-300 shadow-2xs'
+                                    }`}
+                                  >
+                                    <div className="flex flex-wrap justify-between items-start gap-2 mb-1.5">
+                                      <div>
+                                        <h4 className="font-bold text-stone-900 text-xs sm:text-sm">{meal.name}</h4>
+                                        <span className="text-[11px] text-stone-500 font-medium">Portion: {meal.portion || '1 serving'}</span>
+                                      </div>
+
+                                      <div className="flex items-center gap-2.5">
+                                        <div className="text-right text-xs">
+                                          <span className="font-bold text-stone-900">{meal.calories} kcal</span>
+                                          <div className="text-[10px] text-stone-500">
+                                            P:{meal.protein}g • C:{meal.carbs}g • F:{meal.fat}g
+                                          </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            onClick={() => setEditingMeal({ dayNumber: activeDayTab, mealIndex: globalIndex, meal: { ...meal } })}
+                                            title="Edit portion and macros"
+                                            className="p-1 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded transition-colors"
+                                          >
+                                            <Edit3 className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            onClick={() => setSwapTarget({ dayNumber: activeDayTab, mealIndex: globalIndex, mealSlot: slot })}
+                                            title="Swap with recipe from knowledge base"
+                                            className="p-1 text-stone-500 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                                          >
+                                            <RefreshCw className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            onClick={() => handleDeleteMeal(activeDayTab, globalIndex)}
+                                            title="Remove dish"
+                                            className="p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Ingredients & Prep */}
+                                    <div className="mt-2 pt-2 border-t border-stone-100 text-[11px] text-stone-600 space-y-0.5">
+                                      <p>
+                                        <strong className="text-stone-700">Ingredients:</strong>{' '}
+                                        {Array.isArray(meal.ingredients) ? meal.ingredients.join(', ') : meal.ingredients || 'None specified'}
+                                      </p>
+                                      {meal.notes && (
+                                        <p className="text-[10px] text-stone-400 italic">Note: {meal.notes}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Custom Meals if any */}
+                    {customMeals.length > 0 && (
+                      <div className="bg-stone-50/60 border border-stone-200/90 rounded-xl p-3.5 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-stone-700 text-white">
+                            Custom / Additional Courses
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          {customMeals.map(({ meal, globalIndex }) => (
+                            <div key={globalIndex} className="p-3 bg-white border border-stone-200 rounded-lg text-xs">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <span className="text-[10px] font-bold text-stone-500 uppercase">{meal.type}</span>
+                                  <h4 className="font-bold text-stone-900">{meal.name}</h4>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold">{meal.calories} kcal</span>
+                                  <button onClick={() => handleDeleteMeal(activeDayTab, globalIndex)} className="text-stone-400 hover:text-rose-600">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-
-                      {/* Ingredients & Prep */}
-                      <div className="mt-3 pt-3 border-t border-stone-100 text-xs text-stone-600 space-y-1">
-                        <p>
-                          <strong className="text-stone-700">Ingredients:</strong>{' '}
-                          {Array.isArray(meal.ingredients) ? meal.ingredients.join(', ') : meal.ingredients || 'None specified'}
-                        </p>
-                        <p>
-                          <strong className="text-stone-700">Instructions:</strong>{' '}
-                          {Array.isArray(meal.recipe) ? meal.recipe.join(' ') : meal.recipe || 'Standard preparation.'}
-                        </p>
-                        {meal.notes && (
-                          <p className="text-[11px] text-stone-400 italic">Note: {meal.notes}</p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                    )}
+                  </>);
+                })()}
 
                 {/* Add Meal to Day Button */}
                 <button
-                  onClick={() => handleAddMeal(activeDayTab)}
+                  onClick={() => setSwapTarget({ dayNumber: activeDayTab, mealIndex: -1, mealSlot: 'Lunch' })}
                   className="w-full py-2.5 border border-dashed border-stone-300 rounded-lg text-xs font-semibold text-stone-700 hover:text-stone-900 hover:border-stone-400 hover:bg-stone-50 transition-all flex items-center justify-center gap-1.5"
                 >
                   <Plus className="w-3.5 h-3.5 text-stone-500" />
-                  Add Approved Clinical Recipe to Day {activeDayTab}
+                  Add Another Dish to Day {activeDayTab}
                 </button>
               </div>
             </div>

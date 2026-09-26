@@ -1,7 +1,7 @@
-name: Vercel Production Deployment
+name: CI & Deployment
 env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || 'team_G2aZWgHIUyeLtjUSYzOHOMAW' }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || 'prj_ZkneM212E3JNHzlIwZNKPkQeB2rm' }}
 
 on:
   push:
@@ -13,6 +13,7 @@ on:
 
 jobs:
   lint-and-build:
+    name: Build & TypeScript Verification
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,12 +25,13 @@ jobs:
         run: npm ci
       - name: TypeScript Check
         run: npx tsc --noEmit
-      - name: Build
-        run: npx vite build
+      - name: Production Build
+        run: npm run build
 
   deploy-preview:
+    name: Vercel Preview Deployment
     needs: lint-and-build
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && secrets.VERCEL_TOKEN != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,8 +45,9 @@ jobs:
         run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
 
   deploy-production:
+    name: Vercel Production Deployment
     needs: lint-and-build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.VERCEL_TOKEN != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -34,11 +34,12 @@ export default function TodayPlan() {
   // Parse patient conditions from profile
   const patientConditions: string[] = (() => {
     const conds: string[] = [];
-    if (profile?.healthInfo?.conditions) {
-      conds.push(...profile.healthInfo.conditions.split(/,|;/).map(s => s.trim()).filter(Boolean));
+    const pAny = profile as any;
+    if (pAny?.healthInfo?.conditions) {
+      conds.push(...pAny.healthInfo.conditions.split(/,|;/).map((s: string) => s.trim()).filter(Boolean));
     }
-    if (Array.isArray((profile as any)?.medicalHistory)) {
-      conds.push(...(profile as any).medicalHistory);
+    if (Array.isArray(pAny?.medicalHistory)) {
+      conds.push(...pAny.medicalHistory);
     }
     return conds;
   })();

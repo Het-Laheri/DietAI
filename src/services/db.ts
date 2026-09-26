@@ -575,13 +575,17 @@ export async function logMeal(log: FoodLog): Promise<string> {
 export async function getFoodLogs(patientId: string, date: string): Promise<FoodLog[]> {
   const q = query(collection(db, 'food_logs'), where('patientId', '==', patientId), where('date', '==', date));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ ...d.data(), id: d.id } as FoodLog));
+  return snap.docs
+    .filter(d => d.data().type !== 'checklist')
+    .map(d => ({ ...d.data(), id: d.id } as FoodLog));
 }
 
 export async function getAllFoodLogsForPatient(patientId: string): Promise<FoodLog[]> {
   const q = query(collection(db, 'food_logs'), where('patientId', '==', patientId));
   const snap = await getDocs(q);
-  const logs = snap.docs.map(d => ({ ...d.data(), id: d.id } as FoodLog));
+  const logs = snap.docs
+    .filter(d => d.data().type !== 'checklist')
+    .map(d => ({ ...d.data(), id: d.id } as FoodLog));
   // Sort by date descending
   return logs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
@@ -1394,18 +1398,23 @@ export interface ChecklistMealItem {
 
 export async function savePatientChecklist(patientId: string, date: string, items: ChecklistMealItem[]) {
   const sanitized = cleanFirestoreData(items);
-  await setDoc(doc(db, 'patient_checklists', `${patientId}_${date}`), {
+  await setDoc(doc(db, 'food_logs', `checklist_${patientId}_${date}`), {
     patientId,
     date,
     items: sanitized,
+    type: 'checklist',
     updatedAt: serverTimestamp()
   });
 }
 
 export async function getPatientChecklist(patientId: string, date: string): Promise<ChecklistMealItem[]> {
-  const d = await getDoc(doc(db, 'patient_checklists', `${patientId}_${date}`));
-  if (d.exists()) {
-    return d.data().items || [];
+  try {
+    const d = await getDoc(doc(db, 'food_logs', `checklist_${patientId}_${date}`));
+    if (d.exists()) {
+      return d.data().items || [];
+    }
+  } catch (err) {
+    console.warn('Notice: getPatientChecklist failed:', err);
   }
   return [];
 }

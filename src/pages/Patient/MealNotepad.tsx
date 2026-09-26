@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getMealPlans, getPatientWeekPlan, getStoredRecipesFromDB, MealPlan, Meal, PatientWeekPlan, RecipeDBItem, WeekDay } from '../../services/db';
+import {  getMealPlans, getPatientWeekPlan, getStoredRecipesFromDB, MealPlan, Meal, ChecklistMealItem, savePatientChecklist, getPatientChecklist , PatientWeekPlan, RecipeDBItem, WeekDay } from '../../services/db';
 import { isPatientSubscribed } from '../../services/subscription';
 import SubscriptionPaywall from '../../components/SubscriptionPaywall';
 import { 
@@ -21,21 +21,6 @@ import {
   MessageCircle
 } from 'lucide-react';
 
-interface ChecklistMealItem {
-  id: string;
-  mealType: string;
-  name: string;
-  portion: string;
-  calories?: number;
-  protein?: number;
-  carbs?: number;
-  fat?: number;
-  notes?: string;
-  recipe?: string[];
-  ingredients?: string[];
-  completed: boolean;
-  completedAt?: string;
-}
 
 export default function MealNotepad() {
   const { profile } = useAuth();
@@ -43,6 +28,8 @@ export default function MealNotepad() {
   const [items, setItems] = useState<ChecklistMealItem[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [patientReflection, setPatientReflection] = useState('');
+  const [customFoodText, setCustomFoodText] = useState('');
+  const [addingCustomFood, setAddingCustomFood] = useState(false);
   const [notesSavedToast, setNotesSavedToast] = useState(false);
   const [loading, setLoading] = useState(true);
   const [subscribed, setSubscribed] = useState(() => isPatientSubscribed(profile));
@@ -69,10 +56,9 @@ export default function MealNotepad() {
         setActivePlan(published || null);
 
         // Load saved checklist state from localStorage
-        const savedRaw = localStorage.getItem(storageKey);
-        const savedState: Record<string, { completed: boolean; completedAt?: string }> = savedRaw
-          ? JSON.parse(savedRaw)
-          : {};
+        const savedStateList = await getPatientChecklist(profile.uid, todayStr);
+        const savedState: Record<string, ChecklistMealItem> = {};
+        savedStateList.forEach(i => savedState[i.id] = i);
 
         // Load reflection notes
         const savedReflection = localStorage.getItem(reflectionKey);
@@ -147,6 +133,20 @@ export default function MealNotepad() {
 
         // NOTE: No mock or random fallback meals outside of pre-provided recipes.
         // NOTE: Patients cannot add meals; only dietician can prescribe and send meals.
+        // Add any custom items from savedState that aren't in initialList
+        const planItemIds = new Set(initialList.map(i => i.id));
+        savedStateList.forEach(item => {
+          if (!planItemIds.has(item.id)) {
+            initialList.push(item);
+          } else {
+            // Update initialList with saved completed info
+            const match = initialList.find(i => i.id === item.id);
+            if (match) {
+              match.completed = item.completed;
+              match.completedAt = item.completedAt;
+            }
+          }
+        });
         setItems(initialList);
       } catch (err) {
         console.error('Failed to load meal checklist:', err);
@@ -183,9 +183,48 @@ export default function MealNotepad() {
       stateMap[it.id] = { completed: it.completed, completedAt: it.completedAt };
     });
     localStorage.setItem(storageKey, JSON.stringify(stateMap));
+    if (profile) savePatientChecklist(profile.uid, todayStr, updated);
   };
 
 
+
+  
+  const handleAddCustomItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customFoodText.trim() || !profile) return;
+    setAddingCustomFood(true);
+    try {
+      const res = await fetch('/api/ai/estimate-food', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ foodDesc: customFoodText })
+      });
+      let est = { name: customFoodText, portion: 'As consumed', calories: 0, protein: 0, carbs: 0, fat: 0 };
+      if (res.ok) {
+        est = await res.json();
+      }
+      const newItem: ChecklistMealItem = {
+        id: 'custom_' + Date.now(),
+        mealType: 'CUSTOM DIETARY NOTE',
+        name: est.name || customFoodText,
+        portion: est.portion || 'As consumed',
+        calories: est.calories || 0,
+        protein: est.protein || 0,
+        carbs: est.carbs || 0,
+        fat: est.fat || 0,
+        completed: true,
+        completedAt: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      };
+      const updated = [...items, newItem];
+      setItems(updated);
+      setCustomFoodText('');
+      await savePatientChecklist(profile.uid, todayStr, updated);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAddingCustomFood(false);
+    }
+  };
 
   const handleSaveReflection = () => {
     if (!profile) return;

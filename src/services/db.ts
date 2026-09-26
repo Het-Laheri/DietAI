@@ -190,6 +190,7 @@ export interface AiCoachMessage {
 }
 
 export interface RecipeDBItem {
+  contraindicatedFor?: string[];
   id?: string;
   name: string;
   dietaryType: string;
@@ -1260,7 +1261,7 @@ export function buildClinicalMealPlanFromRecipes(
 
   // Filter out contraindicated recipes based on medical conditions
   const conditions = [
-    ...(patientProfile?.clinicalConditions || []),
+    ...(patientProfile?.medicalHistory || []),
     ...(patientProfile?.healthInfo?.allergies ? [patientProfile.healthInfo.allergies] : []),
     ...(patientProfile?.goals || [])
   ].map(c => c.toLowerCase());
@@ -1373,4 +1374,38 @@ export function buildClinicalMealPlanFromRecipes(
   }
 
   return days;
+}
+
+export interface ChecklistMealItem {
+  id: string;
+  mealType: string;
+  name: string;
+  portion: string;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  notes?: string;
+  recipe?: string[];
+  ingredients?: string[];
+  completed: boolean;
+  completedAt?: string;
+}
+
+export async function savePatientChecklist(patientId: string, date: string, items: ChecklistMealItem[]) {
+  const sanitized = cleanFirestoreData(items);
+  await setDoc(doc(db, 'patient_checklists', `${patientId}_${date}`), {
+    patientId,
+    date,
+    items: sanitized,
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function getPatientChecklist(patientId: string, date: string): Promise<ChecklistMealItem[]> {
+  const d = await getDoc(doc(db, 'patient_checklists', `${patientId}_${date}`));
+  if (d.exists()) {
+    return d.data().items || [];
+  }
+  return [];
 }

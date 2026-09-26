@@ -147,7 +147,7 @@ export default function MealPlanGenerator() {
         dayNames.forEach((dName, dIdx) => {
           const dayNum = dIdx + 1;
           const daySlots = kbWeekPlan[dName] || {};
-          Object.entries(daySlots).forEach(([slot, val]) => {
+          Object.entries(daySlots).forEach(([slot, val]: [string, any]) => {
             if (val) {
               daysMap[dayNum].push({
                 type: slot,

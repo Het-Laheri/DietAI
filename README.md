@@ -17,4 +17,4 @@ NutriSnap is a full-stack dietician-patient management web application built wit
 
 Built for clinical dietician practice automation. Powered by Google DeepMind Gemini.
 
-<!-- CI/CD & Production Build Verified: Clinical design system and automated verification active -->
+<!-- CI/CD & Production Build Verified: Clinical design system active (Release: v2.1.0) -->

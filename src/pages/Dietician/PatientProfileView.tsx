@@ -78,6 +78,7 @@ export default function PatientProfileView() {
   
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Note form state
   const [newNoteContent, setNewNoteContent] = useState('');
@@ -119,8 +120,9 @@ export default function PatientProfileView() {
         setQueries(qs);
         setClinicalNotes(notes);
         setTodayChecklist(checklist || []); // arguments[0] is the Promise.all result array
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to load complete patient profile dossier:', err);
+        setLoadError(err.message || String(err));
       } finally {
         setLoading(false);
       }

@@ -19,6 +19,8 @@ import {
   clearRecipeDB,
   buildClinicalMealPlanFromRecipes
 } from './src/services/db';
+import createOrderHandler from './api/payment/create-order';
+import verifyPaymentHandler from './api/payment/verify-payment';
 
 // Upstash Redis Initialization
 let redis: Redis | null = null;
@@ -1079,7 +1081,9 @@ Draft a helpful clinical nutrition response for the dietician to review.`;
     }
   });
 
-
+  // ─── RAZORPAY STANDARD CHECKOUT ROUTES ─────────────────────────────────────
+  app.all(['/api/create-order', '/api/payment/create-order'], (req, res) => createOrderHandler(req, res));
+  app.all(['/api/verify-payment', '/api/payment/verify-payment'], (req, res) => verifyPaymentHandler(req, res));
 
 async function startServer() {
   // Vite middleware for development (Only if not running on Vercel)

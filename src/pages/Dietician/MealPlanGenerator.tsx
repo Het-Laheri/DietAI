@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getPatients, PatientProfile, MealPlan, saveMealPlan, getStoredRecipesFromDB, RecipeDBItem,
   savePatientWeekPlan, getAllDraftWeekPlans, PatientWeekPlan, WeekDay, MealSlot, WeekPlanEntry,
-  buildClinicalMealPlanFromRecipes
+  buildClinicalMealPlanFromRecipes, filterRecipesForPatient
 } from '../../services/db';
 import { 
   Loader2, Wand2, Save, BookOpen, Utensils, RefreshCw, 
@@ -214,7 +214,9 @@ export default function MealPlanGenerator() {
       setLoadingRecipes(true);
       try {
         const fetched = await getStoredRecipesFromDB(patient?.dietaryType);
-        setDbRecipes(fetched);
+        const patientConditions = patient?.medicalHistory || (patient?.healthInfo?.conditions ? patient.healthInfo.conditions.split(',').map(c => c.trim()) : []);
+        const safeRecipes = filterRecipesForPatient(fetched, patientConditions);
+        setDbRecipes(safeRecipes);
         
         // Auto-adapt targets if available from clinical profile
         if (patient) {
@@ -248,7 +250,8 @@ export default function MealPlanGenerator() {
     setGeneratedPlan(null);
     try {
       // 1. Fetch pre-provided recipes database
-      const pool = dbRecipes.length > 0 ? dbRecipes : await getStoredRecipesFromDB(selectedPatient?.dietaryType);
+      const patientConditions = selectedPatient?.medicalHistory || (selectedPatient?.healthInfo?.conditions ? selectedPatient.healthInfo.conditions.split(',').map(c => c.trim()) : []);
+      const pool = dbRecipes.length > 0 ? dbRecipes : filterRecipesForPatient(await getStoredRecipesFromDB(selectedPatient?.dietaryType), patientConditions);
 
       // Attempt AI generation with strict instruction to select only from pre-provided recipes
       let planGenerated: DayPlan[] | null = null;
@@ -725,9 +728,18 @@ export default function MealPlanGenerator() {
                       <span className="font-bold text-stone-900">{r.name}</span>
                       <span className="text-orange-600 font-bold text-[11px]">{r.calories} kcal</span>
                     </div>
-                    <p className="text-[10px] text-stone-500 truncate mb-2">
+                    <p className="text-[10px] text-stone-500 truncate mb-1">
                       P: {r.protein}g • C: {r.carbs}g • F: {r.fat}g
                     </p>
+                    {r.tags && r.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {r.tags.slice(0, 3).map((t, tIdx) => (
+                          <span key={tIdx} className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-bold border border-blue-200">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     
                     {swapTarget ? (
                       <button 

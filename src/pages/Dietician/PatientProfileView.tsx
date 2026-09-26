@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import {  
+import { useAuth } from '../../contexts/AuthContext';
+import {
   getPatientProfile, 
   getMealPlans, 
   saveMealPlan, 
@@ -20,7 +21,8 @@ import {
   Query,
   ClinicalNote,
   RecipeDBItem,
-  buildClinicalMealPlanFromRecipes
+  buildClinicalMealPlanFromRecipes,
+  filterRecipesForPatient
 } from '../../services/db';
 import { 
   ChevronLeft, 
@@ -64,6 +66,7 @@ type ActiveTab = 'overview' | 'food_logs' | 'meal_plans' | 'progress' | 'chat' |
 export default function PatientProfileView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { profile: authProfile } = useAuth();
 
   const [profile, setProfile] = useState<PatientProfile | null>(null);
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
@@ -200,7 +203,7 @@ export default function PatientProfileView() {
         patientId: id,
         category: newNoteCategory,
         content: newNoteContent.trim(),
-        authorName: 'Lead Dietician',
+        authorName: authProfile?.name || 'Lead Dietician',
         date: todayStr
       });
       setNewNoteContent('');
@@ -237,7 +240,9 @@ export default function PatientProfileView() {
   const handleGenerateAIPlan = async () => {
     setGeneratingPlan(true);
     try {
-      const pool = await getStoredRecipesFromDB(profile.dietaryType);
+      const rawPool = await getStoredRecipesFromDB(profile.dietaryType);
+      const patientConditions = profile.medicalHistory || (profile.healthInfo?.conditions ? profile.healthInfo.conditions.split(',').map(c => c.trim()) : []);
+      const pool = filterRecipesForPatient(rawPool, patientConditions);
       let planDays: any = null;
 
       try {
@@ -1129,7 +1134,7 @@ export default function PatientProfileView() {
           <div className="space-y-6 text-stone-800">
             <div className="border-b border-stone-200 pb-4">
               <h2 className="text-2xl font-serif font-black text-stone-900">NutriSnap Clinical Nutrition Progress Report</h2>
-              <p className="text-xs text-stone-500 mt-1">Prepared by Dr. {profile?.name} • Date of Report: {todayStr}</p>
+              <p className="text-xs text-stone-500 mt-1">Prepared by Dr. {authProfile?.name || 'Lead Dietician'} (Clinical Nutritionist) • Date of Report: {todayStr}</p>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">

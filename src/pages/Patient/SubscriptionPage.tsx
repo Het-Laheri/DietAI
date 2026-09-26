@@ -4,6 +4,7 @@ import {
   SUBSCRIPTION_PLANS, 
   isPatientSubscribed, 
   getLocalSubscription, 
+  saveLocalSubscription,
   initiateRazorpayPayment,
   ActiveSubscription
 } from '../../services/subscription';
@@ -191,6 +192,10 @@ export default function SubscriptionPage() {
                     paymentId: result.razorpay_payment_id,
                     orderId: result.razorpay_order_id
                   };
+                  const uid = user?.uid || profile?.uid;
+                  if (uid) {
+                    saveLocalSubscription(uid, sub);
+                  }
                   setActiveSub(sub);
                 }}
                 onError={(err) => {

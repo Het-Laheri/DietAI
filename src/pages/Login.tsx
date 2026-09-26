@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../services/firebase';
-import { registerPatient } from '../services/db';
+import { registerPatient, createDietician, createNotification } from '../services/db';
+import { saveLocalSubscription } from '../services/subscription';
 import { 
   Heart, 
   Dumbbell, 
@@ -206,7 +207,6 @@ export default function Login() {
           navigate('/dietician');
         } catch (authError: any) {
           if (authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential') {
-            const { createDietician } = await import('../services/db');
             await createDietician(email, password, 'Lead Dietician');
             navigate('/dietician');
           } else {
@@ -216,7 +216,6 @@ export default function Login() {
       } else if (email.toLowerCase() === TEST_PATIENT_EMAIL && password === TEST_PATIENT_PASS) {
         try {
           const userCred = await signInWithEmailAndPassword(auth, email, password);
-          const { saveLocalSubscription } = await import('../services/subscription');
           saveLocalSubscription(userCred.user.uid, {
             status: 'active',
             planId: '3_months',
@@ -228,8 +227,6 @@ export default function Login() {
           navigate('/patient');
         } catch (authError: any) {
           if (authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential') {
-            const { registerPatient } = await import('../services/db');
-            const { saveLocalSubscription } = await import('../services/subscription');
             const user = await registerPatient(email, password, 'Demo VIP Patient', {
               gender: 'Female',
               age: 29,
@@ -268,7 +265,6 @@ export default function Login() {
         }
       } else {
         const userCred = await signInWithEmailAndPassword(auth, email, password);
-        const { createNotification } = await import('../services/db');
         createNotification({
           type: 'PATIENT_LOGIN',
           patientId: userCred.user.uid,
@@ -393,7 +389,6 @@ export default function Login() {
         conditions: selectedConditions.join(', ') + (diagnosisOrProcedure ? ` | Note: ${diagnosisOrProcedure}` : '')
       });
 
-      const { createNotification } = await import('../services/db');
       await createNotification({
         type: 'NEW_PATIENT',
         patientId: userCred.uid,

@@ -1215,15 +1215,38 @@ export function buildClinicalMealPlanFromRecipes(
     const sRecipe = getSlotRecipe(snacks, day - 1);
     const dRecipe = getSlotRecipe(dinners, day);
 
+    const targetCalories = Number(targets?.calories) || 2000;
+    const bTarget = Math.round(targetCalories * 0.28);
+    const lTarget = Math.round(targetCalories * 0.38);
+    const sTarget = Math.round(targetCalories * 0.12);
+    const dTarget = Math.max(150, targetCalories - bTarget - lTarget - sTarget);
+
+    const bBase = Number(bRecipe.calories) || 300;
+    const lBase = Number(lRecipe.calories) || 450;
+    const sBase = Number(sRecipe.calories) || 180;
+    const dBase = Number(dRecipe.calories) || 350;
+
+    const bScale = bTarget / bBase;
+    const lScale = lTarget / lBase;
+    const sScale = sTarget / sBase;
+    const dScale = dTarget / dBase;
+
+    const formatPortion = (basePortion: string, scale: number) => {
+      if (scale > 1.25 || scale < 0.8) {
+        return `${Math.round(scale * 10) / 10}x portion (${basePortion})`;
+      }
+      return basePortion;
+    };
+
     const dayMeals: Meal[] = [
       {
         type: 'Breakfast',
         name: bRecipe.name,
-        portion: '1 serving',
-        calories: Number(bRecipe.calories) || 300,
-        protein: Number(bRecipe.protein) || 15,
-        carbs: Number(bRecipe.carbs) || 35,
-        fat: Number(bRecipe.fat) || 8,
+        portion: formatPortion(bRecipe.portionSize || '1 serving', bScale),
+        calories: bTarget,
+        protein: Math.round((Number(bRecipe.protein) || 15) * bScale),
+        carbs: Math.round((Number(bRecipe.carbs) || 35) * bScale),
+        fat: Math.round((Number(bRecipe.fat) || 8) * bScale),
         prepTime: bRecipe.prepTime || '10 mins',
         cookTime: bRecipe.cookTime || '10 mins',
         ingredients: bRecipe.ingredients || [],
@@ -1233,11 +1256,11 @@ export function buildClinicalMealPlanFromRecipes(
       {
         type: 'Lunch',
         name: lRecipe.name,
-        portion: '1 plate',
-        calories: Number(lRecipe.calories) || 450,
-        protein: Number(lRecipe.protein) || 25,
-        carbs: Number(lRecipe.carbs) || 55,
-        fat: Number(lRecipe.fat) || 12,
+        portion: formatPortion(lRecipe.portionSize || '1 plate', lScale),
+        calories: lTarget,
+        protein: Math.round((Number(lRecipe.protein) || 25) * lScale),
+        carbs: Math.round((Number(lRecipe.carbs) || 55) * lScale),
+        fat: Math.round((Number(lRecipe.fat) || 12) * lScale),
         prepTime: lRecipe.prepTime || '15 mins',
         cookTime: lRecipe.cookTime || '15 mins',
         ingredients: lRecipe.ingredients || [],
@@ -1247,11 +1270,11 @@ export function buildClinicalMealPlanFromRecipes(
       {
         type: 'Evening Snack',
         name: sRecipe.name,
-        portion: '1 portion',
-        calories: Number(sRecipe.calories) || 180,
-        protein: Number(sRecipe.protein) || 8,
-        carbs: Number(sRecipe.carbs) || 22,
-        fat: Number(sRecipe.fat) || 4,
+        portion: formatPortion(sRecipe.portionSize || '1 portion', sScale),
+        calories: sTarget,
+        protein: Math.round((Number(sRecipe.protein) || 8) * sScale),
+        carbs: Math.round((Number(sRecipe.carbs) || 22) * sScale),
+        fat: Math.round((Number(sRecipe.fat) || 4) * sScale),
         prepTime: sRecipe.prepTime || '10 mins',
         cookTime: sRecipe.cookTime || '5 mins',
         ingredients: sRecipe.ingredients || [],
@@ -1261,11 +1284,11 @@ export function buildClinicalMealPlanFromRecipes(
       {
         type: 'Dinner',
         name: dRecipe.name,
-        portion: '1 bowl',
-        calories: Number(dRecipe.calories) || 350,
-        protein: Number(dRecipe.protein) || 20,
-        carbs: Number(dRecipe.carbs) || 35,
-        fat: Number(dRecipe.fat) || 10,
+        portion: formatPortion(dRecipe.portionSize || '1 bowl', dScale),
+        calories: dTarget,
+        protein: Math.round((Number(dRecipe.protein) || 20) * dScale),
+        carbs: Math.round((Number(dRecipe.carbs) || 35) * dScale),
+        fat: Math.round((Number(dRecipe.fat) || 10) * dScale),
         prepTime: dRecipe.prepTime || '12 mins',
         cookTime: dRecipe.cookTime || '12 mins',
         ingredients: dRecipe.ingredients || [],

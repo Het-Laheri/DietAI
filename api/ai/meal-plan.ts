@@ -238,13 +238,18 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    const targetCalories = Number(targets?.calories) || 2000;
+    const targetProtein = Number(targets?.protein) || Math.round((targetCalories * 0.25) / 4);
+    const targetCarbs = Number(targets?.carbs) || Math.round((targetCalories * 0.50) / 4);
+    const targetFat = Number(targets?.fat) || Math.round((targetCalories * 0.25) / 9);
+
     const recipeContext = eligibleRecipes.map((r: any) => ({
       name: r.name,
       dietaryType: r.dietaryType,
-      calories: r.calories,
-      protein: r.protein,
-      carbs: r.carbs,
-      fat: r.fat,
+      calories: Number(r.calories) || 300,
+      protein: Number(r.protein) || 15,
+      carbs: Number(r.carbs) || 35,
+      fat: Number(r.fat) || 8,
       prepTime: r.prepTime || '10 mins',
       cookTime: r.cookTime || '15 mins',
       ingredients: r.ingredients || [],
@@ -258,8 +263,18 @@ export default async function handler(req: any, res: any) {
       const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
       const prompt = `You are a licensed clinical dietician creating a 7-day meal plan.
 Patient: ${JSON.stringify(patientProfile || {})}
-Macro Targets: ${JSON.stringify(targets || { calories: 2000, protein: 120, carbs: 200, fat: 60 })}
 Dietary Notes: ${instructions || 'None'}
+
+STRICT DAILY CALORIC TARGET TO ENFORCE:
+- Target Daily Calories: ${targetCalories} kcal (Target range: ${targetCalories - 60} to ${targetCalories + 60} kcal).
+- Target Macros: Protein ~${targetProtein}g, Carbs ~${targetCarbs}g, Fat ~${targetFat}g.
+- MANDATORY CALORIC CEILING: For EVERY single day (Day 1 through Day 7), the sum of calories across all 4 meals MUST closely equal ${targetCalories} kcal.
+- Suggested Calorie Distribution per day:
+  * Breakfast: ~28% of daily calories (~${Math.round(targetCalories * 0.28)} kcal)
+  * Lunch: ~38% of daily calories (~${Math.round(targetCalories * 0.38)} kcal)
+  * Evening Snack: ~12% of daily calories (~${Math.round(targetCalories * 0.12)} kcal)
+  * Dinner: ~22% of daily calories (~${Math.round(targetCalories * 0.22)} kcal)
+- Adjust the "portion" string and the meal "calories" / macros proportionally (e.g. "1.5 servings", "1 plate + 1 roti") so that each day precisely achieves the ${targetCalories} kcal goal.
 
 CLINICAL CONDITIONS & ALLERGIES TO STRICTLY ENFORCE:
 - Medical Conditions: ${rawConditions.length > 0 ? rawConditions.join(', ') : 'None flagged'}
@@ -279,7 +294,7 @@ DO NOT CREATE, INVENT, OR SUGGEST ANY DISH OR RECIPE OUTSIDE OF THIS LIST:
 ${JSON.stringify(recipeContext)}
 
 Return ONLY a valid JSON array of 7 objects (Day 1 through Day 7). Each day must have 4 meals: Breakfast, Lunch, Evening Snack, Dinner.
-Each meal must use the exact name, ingredients, recipe, calories, and macros from the matching pre-provided recipe.
+Each meal must match a dish name from the pre-provided list. Ensure the day's total calories sum to ~${targetCalories} kcal.
 
 JSON Array format:
 [
@@ -290,15 +305,15 @@ JSON Array format:
         "type": "Breakfast",
         "name": "Recipe Name from List",
         "portion": "1 serving",
-        "calories": 300,
-        "protein": 15,
-        "carbs": 35,
-        "fat": 8,
+        "calories": ${Math.round(targetCalories * 0.28)},
+        "protein": 18,
+        "carbs": 40,
+        "fat": 10,
         "prepTime": "10 mins",
         "cookTime": "10 mins",
         "ingredients": ["item 1", "item 2"],
         "recipe": ["step 1", "step 2"],
-        "notes": "Dietician clinical note"
+        "notes": "Clinical breakfast note"
       }
     ]
   }
@@ -316,71 +331,114 @@ JSON Array format:
       const text = response.text || '';
       const parsed = JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim());
       if (Array.isArray(parsed) && parsed.length === 7) {
-        // Enforce that every meal name exists in eligibleRecipes
-        const verified = parsed.map((dayObj: any, dIdx: number) => ({
-          dayNumber: dayObj.dayNumber || dIdx + 1,
-          meals: (dayObj.meals || []).map((m: any, mIdx: number) => {
+        // Enforce that every meal name exists in eligibleRecipes & calibrated to targetCalories
+        const verified = parsed.map((dayObj: any, dIdx: number) => {
+          const rawMeals = (dayObj.meals || []).map((m: any, mIdx: number) => {
             const match = eligibleRecipes.find((r: any) => r.name.toLowerCase() === (m.name || '').toLowerCase());
-            if (match) {
-              return {
-                type: m.type || (mIdx === 0 ? 'Breakfast' : mIdx === 1 ? 'Lunch' : mIdx === 2 ? 'Evening Snack' : 'Dinner'),
-                name: match.name,
-                portion: m.portion || '1 serving',
-                calories: match.calories,
-                protein: match.protein,
-                carbs: match.carbs,
-                fat: match.fat,
-                prepTime: match.prepTime || '10 mins',
-                cookTime: match.cookTime || '15 mins',
-                ingredients: match.ingredients || [],
-                recipe: match.recipe || [],
-                notes: m.notes || match.clinicalFocus
-              };
-            }
-            // Fallback to an eligible recipe from catalog
-            const fallback = eligibleRecipes[(dIdx + mIdx) % eligibleRecipes.length];
+            const baseRecipe = match || eligibleRecipes[(dIdx + mIdx) % eligibleRecipes.length];
+            const baseCals = Number(baseRecipe.calories) || 300;
+            const mealCals = Number(m.calories) > 50 ? Number(m.calories) : baseCals;
+
             return {
               type: m.type || (mIdx === 0 ? 'Breakfast' : mIdx === 1 ? 'Lunch' : mIdx === 2 ? 'Evening Snack' : 'Dinner'),
-              name: fallback.name,
-              portion: '1 serving',
-              calories: fallback.calories,
-              protein: fallback.protein,
-              carbs: fallback.carbs,
-              fat: fallback.fat,
-              prepTime: fallback.prepTime || '10 mins',
-              cookTime: fallback.cookTime || '15 mins',
-              ingredients: fallback.ingredients || [],
-              recipe: fallback.recipe || [],
-              notes: fallback.clinicalFocus
+              name: baseRecipe.name,
+              portion: m.portion || '1 serving',
+              calories: mealCals,
+              protein: Number(m.protein) || Number(baseRecipe.protein) || 15,
+              carbs: Number(m.carbs) || Number(baseRecipe.carbs) || 35,
+              fat: Number(m.fat) || Number(baseRecipe.fat) || 8,
+              prepTime: baseRecipe.prepTime || '10 mins',
+              cookTime: baseRecipe.cookTime || '15 mins',
+              ingredients: baseRecipe.ingredients || [],
+              recipe: baseRecipe.recipe || [],
+              notes: m.notes || baseRecipe.clinicalFocus || 'Clinical Nutrition'
             };
-          })
-        }));
+          });
+
+          // Check Day Calorie Sum against Target Calories
+          const currentDaySum = rawMeals.reduce((acc: number, item: any) => acc + (Number(item.calories) || 0), 0);
+          if (currentDaySum > 0 && Math.abs(currentDaySum - targetCalories) > 100) {
+            const scale = targetCalories / currentDaySum;
+            // Calibrate meals proportionally to accurately respect targetCalories
+            let runningSum = 0;
+            const calibratedMeals = rawMeals.map((meal: any, idx: number) => {
+              if (idx === rawMeals.length - 1) {
+                // Last meal absorbs remainder for exact match
+                const remainderCals = Math.max(100, targetCalories - runningSum);
+                return {
+                  ...meal,
+                  calories: remainderCals,
+                  protein: Math.round(meal.protein * scale),
+                  carbs: Math.round(meal.carbs * scale),
+                  fat: Math.round(meal.fat * scale)
+                };
+              }
+              const scaledCals = Math.round(meal.calories * scale);
+              runningSum += scaledCals;
+              return {
+                ...meal,
+                calories: scaledCals,
+                protein: Math.round(meal.protein * scale),
+                carbs: Math.round(meal.carbs * scale),
+                fat: Math.round(meal.fat * scale)
+              };
+            });
+            return {
+              dayNumber: dayObj.dayNumber || dIdx + 1,
+              meals: calibratedMeals
+            };
+          }
+
+          return {
+            dayNumber: dayObj.dayNumber || dIdx + 1,
+            meals: rawMeals
+          };
+        });
+
         generatedPlan = verified;
       }
     } catch (aiErr) {
       console.warn('Gemini meal plan generation error, falling back to deterministic assembly:', aiErr);
     }
 
-    // Deterministic fallback using pre-provided recipes only
+    // Deterministic fallback using pre-provided recipes calibrated to targetCalories
     if (!generatedPlan) {
       const days = [];
-      const mealSlots = ['Breakfast', 'Lunch', 'Evening Snack', 'Dinner'];
+      const mealSlots = [
+        { slot: 'Breakfast', ratio: 0.28 },
+        { slot: 'Lunch', ratio: 0.38 },
+        { slot: 'Evening Snack', ratio: 0.12 },
+        { slot: 'Dinner', ratio: 0.22 }
+      ];
+
       for (let day = 1; day <= 7; day++) {
-        const meals = mealSlots.map((slot, sIdx) => {
+        let runningDaySum = 0;
+        const meals = mealSlots.map(({ slot, ratio }, sIdx) => {
           const r = eligibleRecipes[(day + sIdx - 1) % eligibleRecipes.length];
+          const slotTarget = sIdx === mealSlots.length - 1
+            ? Math.max(150, targetCalories - runningDaySum)
+            : Math.round(targetCalories * ratio);
+          runningDaySum += slotTarget;
+
+          const baseCals = Number(r.calories) || 300;
+          const scale = slotTarget / baseCals;
+          const portionText = scale > 1.25
+            ? `${(Math.round(scale * 10) / 10)}x portion (${r.portionSize || '1 serving'})`
+            : r.portionSize || '1 serving';
+
           return {
             type: slot,
             name: r.name,
-            portion: '1 serving',
-            calories: Number(r.calories) || 300,
-            protein: Number(r.protein) || 15,
-            carbs: Number(r.carbs) || 35,
-            fat: Number(r.fat) || 8,
+            portion: portionText,
+            calories: slotTarget,
+            protein: Math.round((Number(r.protein) || 15) * scale),
+            carbs: Math.round((Number(r.carbs) || 35) * scale),
+            fat: Math.round((Number(r.fat) || 8) * scale),
             prepTime: r.prepTime || '10 mins',
             cookTime: r.cookTime || '15 mins',
             ingredients: r.ingredients || [],
             recipe: r.recipe || [],
-            notes: `Clinical Approved Recipe (${r.dietaryType}) — ${r.clinicalFocus || 'Metabolic Balance'}`
+            notes: `Clinical Approved Recipe (${r.dietaryType}) — ${r.clinicalFocus || 'Calibrated Target Nutrition'}`
           };
         });
         days.push({ dayNumber: day, meals });

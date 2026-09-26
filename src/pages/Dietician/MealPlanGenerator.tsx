@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { getPatients, PatientProfile, MealPlan, saveMealPlan, getStoredRecipesFromDB, RecipeDBItem,
   savePatientWeekPlan, getAllDraftWeekPlans, PatientWeekPlan, WeekDay, MealSlot, WeekPlanEntry,
   buildClinicalMealPlanFromRecipes, filterRecipesForPatient
@@ -7,7 +7,7 @@ import {
   Loader2, Wand2, Save, BookOpen, Utensils, RefreshCw, 
   Check, Search, Edit3, Trash2, Plus, Copy, Calendar,
   Sparkles, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, ChevronDown, ChevronUp,
-  ShieldAlert, Activity, Flame
+  ShieldAlert, Activity, Flame, X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -52,6 +52,35 @@ export default function MealPlanGenerator() {
   const [saving, setSaving] = useState(false);
   const [assignStatus, setAssignStatus] = useState<'draft' | 'published'>('published');
   
+  // Caloric Target Clinical Rationale
+  const [caloricRationale, setCaloricRationale] = useState<string>('');
+
+  // Universal Dish Selector Modal (for both Tab 1 AI Studio & Tab 2 KB Week Planner)
+  const [dishModal, setDishModal] = useState<{
+    isOpen: boolean;
+    context: 'ai' | 'kb';
+    dayNumber?: number;
+    dayName?: WeekDay;
+    mealSlot: string;
+    isSwap?: boolean;
+    swapMealIndex?: number;
+    existingMealName?: string;
+  } | null>(null);
+
+  const [dishModalSearch, setDishModalSearch] = useState('');
+  const [dishModalDiet, setDishModalDiet] = useState('All');
+  const [dishModalTab, setDishModalTab] = useState<'catalog' | 'custom'>('catalog');
+
+  const [customDish, setCustomDish] = useState({
+    name: '',
+    portion: '1 serving',
+    calories: 300,
+    protein: 15,
+    carbs: 35,
+    fat: 8,
+    notes: ''
+  });
+
   // Swap Target state: allows swapping a specific dish or adding a new dish to a specific slot
   const [swapTarget, setSwapTarget] = useState<{ dayNumber: number; mealIndex: number; mealSlot?: string } | null>(null);
 
@@ -85,6 +114,159 @@ export default function MealPlanGenerator() {
   };
 
   useEffect(() => { setKbWeekPlan(initKbWeekPlan()); }, []);
+
+  const getKbDayCalories = (day: string) => {
+    const daySlots = kbWeekPlan[day] || {};
+    let total = 0;
+    Object.values(daySlots).forEach(items => {
+      if (Array.isArray(items)) {
+        items.forEach(it => {
+          total += Number(it.recipe?.calories) || 0;
+        });
+      }
+    });
+    return total;
+  };
+
+  const openDishModal = (config: {
+    context: 'ai' | 'kb';
+    dayNumber?: number;
+    dayName?: WeekDay;
+    mealSlot: string;
+    isSwap?: boolean;
+    swapMealIndex?: number;
+    existingMealName?: string;
+  }) => {
+    if (config.context === 'kb' && !selectedPatientId) {
+      alert('Please select a client profile first.');
+      return;
+    }
+    setDishModalSearch('');
+    setDishModalDiet('All');
+    setDishModalTab('catalog');
+    const isSnack = config.mealSlot.toLowerCase().includes('snack');
+    setCustomDish({
+      name: '',
+      portion: '1 serving',
+      calories: isSnack ? 180 : 350,
+      protein: isSnack ? 8 : 18,
+      carbs: isSnack ? 22 : 40,
+      fat: isSnack ? 4 : 10,
+      notes: ''
+    });
+    setDishModal({
+      isOpen: true,
+      ...config
+    });
+  };
+
+  const handleAddOrSwapRecipe = (recipeItem: {
+    name: string;
+    portion?: string;
+    portionSize?: string;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    prepTime?: string;
+    cookTime?: string;
+    ingredients?: string[] | string;
+    recipe?: string[] | string;
+    notes?: string;
+    dietaryType?: string;
+  }) => {
+    if (!dishModal) return;
+
+    const portionStr = recipeItem.portion || recipeItem.portionSize || '1 serving';
+
+    if (dishModal.context === 'ai' && dishModal.dayNumber) {
+      if (!generatedPlan) return;
+      const updated = [...generatedPlan];
+      const dayIdx = updated.findIndex(d => d.dayNumber === dishModal.dayNumber);
+      if (dayIdx !== -1) {
+        const newMealObj: MealItem = {
+          type: dishModal.mealSlot,
+          name: recipeItem.name,
+          portion: portionStr,
+          calories: Number(recipeItem.calories) || 300,
+          protein: Number(recipeItem.protein) || 15,
+          carbs: Number(recipeItem.carbs) || 35,
+          fat: Number(recipeItem.fat) || 8,
+          prepTime: recipeItem.prepTime || '10 mins',
+          cookTime: recipeItem.cookTime || '15 mins',
+          ingredients: recipeItem.ingredients || [],
+          recipe: recipeItem.recipe || [],
+          notes: recipeItem.notes || `Clinical Approved Recipe (${recipeItem.dietaryType || 'Standard'})`
+        };
+
+        if (dishModal.isSwap && dishModal.swapMealIndex !== undefined && dishModal.swapMealIndex >= 0) {
+          updated[dayIdx].meals[dishModal.swapMealIndex] = newMealObj;
+        } else {
+          updated[dayIdx].meals.push(newMealObj);
+        }
+        setGeneratedPlan(updated);
+      }
+    } else if (dishModal.context === 'kb' && dishModal.dayName) {
+      const day = dishModal.dayName;
+      const slot = dishModal.mealSlot as MealSlot;
+      const dbItem: RecipeDBItem = {
+        id: `rcp_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        name: recipeItem.name,
+        calories: Number(recipeItem.calories) || 300,
+        protein: Number(recipeItem.protein) || 15,
+        carbs: Number(recipeItem.carbs) || 35,
+        fat: Number(recipeItem.fat) || 8,
+        portionSize: portionStr,
+        dietaryType: recipeItem.dietaryType || 'Standard',
+        ingredients: Array.isArray(recipeItem.ingredients) ? recipeItem.ingredients : [],
+        recipe: Array.isArray(recipeItem.recipe) ? recipeItem.recipe : [],
+        clinicalFocus: recipeItem.notes || 'Balanced Clinical Nutrition'
+      };
+
+      setKbWeekPlan(prev => {
+        const daySlots = prev[day] || {};
+        const currentItems = Array.isArray(daySlots[slot]) ? daySlots[slot] : [];
+        return {
+          ...prev,
+          [day]: {
+            ...daySlots,
+            [slot]: [
+              ...currentItems,
+              { recipe: dbItem, portion: dbItem.portionSize || '1 serving', notes: dbItem.clinicalFocus || '' }
+            ]
+          }
+        };
+      });
+    }
+
+    setDishModal(null);
+  };
+
+  const modalFilteredRecipes = useMemo(() => {
+    return dbRecipes.filter(r => {
+      const q = dishModalSearch.toLowerCase().trim();
+      const matchesSearch = !q ||
+        r.name.toLowerCase().includes(q) ||
+        (r.clinicalFocus || '').toLowerCase().includes(q) ||
+        (r.dietaryType || '').toLowerCase().includes(q) ||
+        (r.ingredients || []).some(ing => ing.toLowerCase().includes(q));
+
+      const matchesDiet = dishModalDiet === 'All' || (r.dietaryType || '').toLowerCase() === dishModalDiet.toLowerCase();
+      return matchesSearch && matchesDiet;
+    });
+  }, [dbRecipes, dishModalSearch, dishModalDiet]);
+
+  const modalDayCalories = useMemo(() => {
+    if (!dishModal) return 0;
+    if (dishModal.context === 'ai' && dishModal.dayNumber && generatedPlan) {
+      const day = generatedPlan.find(d => d.dayNumber === dishModal.dayNumber);
+      return day?.meals.reduce((sum, m) => sum + (Number(m.calories) || 0), 0) || 0;
+    }
+    if (dishModal.context === 'kb' && dishModal.dayName) {
+      return getKbDayCalories(dishModal.dayName);
+    }
+    return 0;
+  }, [dishModal, generatedPlan, kbWeekPlan]);
 
   const assignKbRecipe = (recipe: RecipeDBItem) => {
     if (!kbAssigning) return;
@@ -259,15 +441,53 @@ export default function MealPlanGenerator() {
         const safeRecipes = filterRecipesForPatient(fetched, conds, allgs);
         setDbRecipes(safeRecipes);
         
-        // Auto-adapt targets from clinical profile
-        const estimatedCals = patient.targetWeightKg ? Math.round(patient.targetWeightKg * 28) : 1900;
-        setTargets(prev => ({
-          ...prev,
-          calories: estimatedCals,
-          protein: Math.round((estimatedCals * 0.25) / 4),
-          carbs: Math.round((estimatedCals * 0.50) / 4),
-          fat: Math.round((estimatedCals * 0.25) / 9),
-        }));
+        // Auto-adapt targets from clinical profile using Mifflin-St Jeor & goal factors
+        const currentWeight = Number(patient.currentWeightKg) || Number(patient.targetWeightKg) || 65;
+        const targetWeight = Number(patient.targetWeightKg) || currentWeight;
+        const height = Number(patient.heightCm) || 165;
+        const age = Number(patient.age) || 32;
+        const isMale = (patient.gender || '').toLowerCase().startsWith('m');
+
+        // BMR
+        const bmr = isMale
+          ? (10 * currentWeight) + (6.25 * height) - (5 * age) + 5
+          : (10 * currentWeight) + (6.25 * height) - (5 * age) - 161;
+
+        // Activity multiplier
+        const act = (patient.activityLevel || '').toLowerCase();
+        let mult = 1.375;
+        if (act.includes('sedentary')) mult = 1.2;
+        else if (act.includes('moderate')) mult = 1.55;
+        else if (act.includes('active') || act.includes('heavy')) mult = 1.725;
+
+        const tdee = Math.round(bmr * mult);
+        const goalStr = [
+          patient.weightManagement?.primaryGoal,
+          ...(patient.goals || [])
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        let targetCals = tdee;
+        let rationale = `Mifflin-St Jeor TDEE (${tdee} kcal)`;
+
+        if (goalStr.includes('loss') || goalStr.includes('reduce') || goalStr.includes('cut') || targetWeight < currentWeight) {
+          const deficit = Math.min(500, Math.max(300, Math.round((currentWeight - targetWeight) * 45) || 400));
+          targetCals = Math.max(isMale ? 1500 : 1200, tdee - deficit);
+          rationale = `TDEE ${tdee} kcal - Deficit (${deficit} kcal) → ${targetCals} kcal/day`;
+        } else if (goalStr.includes('gain') || goalStr.includes('build') || targetWeight > currentWeight) {
+          targetCals = tdee + 350;
+          rationale = `TDEE ${tdee} kcal + Surplus (350 kcal) → ${targetCals} kcal/day`;
+        } else {
+          rationale = `TDEE ${tdee} kcal (Maintenance) → ${targetCals} kcal/day`;
+        }
+
+        const finalCals = Math.round(targetCals / 50) * 50;
+        setTargets({
+          calories: finalCals,
+          protein: Math.round((finalCals * 0.25) / 4),
+          carbs: Math.round((finalCals * 0.50) / 4),
+          fat: Math.round((finalCals * 0.25) / 9),
+        });
+        setCaloricRationale(rationale);
 
         // Populate clinical instructions with patient's conditions and allergies
         const directiveParts = [];
@@ -624,66 +844,36 @@ export default function MealPlanGenerator() {
                     ))}
                   </div>
                 )}
-                <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 ml-auto font-semibold">
+                <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold">
                   ✓ {dbRecipes.length} safe recipes
                 </span>
+                <div className="flex items-center gap-1.5 sm:ml-auto">
+                  <span className="text-stone-500 font-medium text-[11px] flex items-center gap-1">
+                    <Flame className="w-3 h-3 text-orange-600" /> Daily Target:
+                  </span>
+                  <input
+                    type="number"
+                    value={targets.calories}
+                    onChange={e => setTargets(t => ({ ...t, calories: Number(e.target.value) }))}
+                    className="w-20 px-2 py-0.5 border border-stone-300 rounded text-xs font-bold text-stone-900 outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                  />
+                  <span className="text-[10px] text-stone-500 font-semibold">kcal</span>
+                </div>
               </div>
             )}
           </div>
 
-          {/* KB Recipe Picker */}
-          {kbAssigning && (
-            <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-5 shadow-xs">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-amber-900 text-xs flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-amber-700" />
-                  Choose a recipe for <strong>{kbAssigning.day} — {kbAssigning.slot}</strong>
-                </h3>
-                <button onClick={() => setKbAssigning(null)} className="text-amber-700 text-xs font-semibold underline">Cancel</button>
-              </div>
-              <div className="relative mb-2">
-                <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input type="text" placeholder="Search practice recipes..." value={recipeSearch} onChange={e => setRecipeSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 border border-amber-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
-                />
-              </div>
-              <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1 text-[10px]">
-                {['All', 'Non-Vegetarian', 'Vegetarian', 'Jain', 'Eggetarian', 'Vegan'].map(diet => (
-                  <button
-                    key={diet}
-                    onClick={() => setRecipeDietFilter(diet)}
-                    className={`px-2 py-0.5 rounded-md font-semibold whitespace-nowrap transition-colors ${
-                      recipeDietFilter === diet
-                        ? 'bg-amber-900 text-white'
-                        : 'bg-white border border-amber-200 text-stone-600 hover:bg-amber-100/50'
-                    }`}
-                  >
-                    {diet}
-                  </button>
-                ))}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-80 overflow-y-auto">
-                {filteredDbRecipes.map((r, i) => (
-                  <button key={r.id || i} onClick={() => assignKbRecipe(r)}
-                    className="p-3 border border-stone-200 bg-white hover:bg-emerald-50/50 hover:border-emerald-300 text-left rounded-lg transition-colors shadow-2xs"
-                  >
-                    <p className="font-bold text-stone-900 text-xs leading-tight">{r.name}</p>
-                    <p className="text-[10px] text-stone-500 mt-1">{r.calories} kcal · {r.dietaryType}</p>
-                    <p className="text-[10px] text-stone-400">P:{r.protein}g C:{r.carbs}g F:{r.fat}g</p>
-                    <p className="text-[10px] text-emerald-700 font-semibold mt-1">→ Assign to {kbAssigning.slot}</p>
-                  </button>
-                ))}
-                {filteredDbRecipes.length === 0 && <p className="text-xs text-stone-400 py-4 col-span-3 text-center">No recipes found.</p>}
-              </div>
-            </div>
-          )}
-
           {/* Week Grid */}
           <div className="bg-white border border-stone-200/90 rounded-xl shadow-xs overflow-hidden">
             <div className="p-4 border-b border-stone-100 bg-stone-50/70 flex justify-between items-center">
-              <h3 className="font-serif font-bold text-stone-900 text-sm flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-orange-600" /> Weekly Meal Assignment Grid
-              </h3>
+              <div>
+                <h3 className="font-serif font-bold text-stone-900 text-sm flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-orange-600" /> Weekly Meal Assignment Grid
+                </h3>
+                <p className="text-[11px] text-stone-500 mt-0.5">
+                  Click <strong>+ Add Another</strong> on any cell to open the Dish Selector and stack multiple dishes into a meal slot.
+                </p>
+              </div>
               {loadingRecipes && <Loader2 className="w-4 h-4 animate-spin text-orange-500" />}
             </div>
 
@@ -693,7 +883,7 @@ export default function MealPlanGenerator() {
                   <tr className="bg-stone-50 border-b border-stone-200 text-stone-600">
                     <th className="p-3 text-left font-bold uppercase tracking-wider w-32">Meal Slot</th>
                     {WEEK_DAYS.map(day => (
-                      <th key={day} className="p-3 text-center font-bold uppercase tracking-wider min-w-[120px]">{day.slice(0, 3)}</th>
+                      <th key={day} className="p-3 text-center font-bold uppercase tracking-wider min-w-[140px]">{day.slice(0, 3)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -728,13 +918,13 @@ export default function MealPlanGenerator() {
                               )}
 
                               <button
-                                onClick={() => { if (!selectedPatientId) { alert('Select a patient first'); return; } setKbAssigning({ day, slot }); }}
-                                className={`w-full py-1.5 border border-dashed rounded-lg text-stone-500 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/40 transition-all flex items-center justify-center gap-1 text-[10px] font-semibold ${
-                                  items.length === 0 ? 'h-12 border-stone-200 text-stone-400' : 'border-stone-200/80 bg-white/70'
+                                onClick={() => openDishModal({ context: 'kb', dayName: day, mealSlot: slot })}
+                                className={`w-full py-1.5 border border-dashed rounded-lg text-stone-600 hover:border-orange-500 hover:text-orange-700 hover:bg-orange-50/60 transition-all flex items-center justify-center gap-1 text-[10px] font-bold ${
+                                  items.length === 0 ? 'h-11 border-stone-300 text-stone-500 bg-stone-50/50' : 'border-stone-200/80 bg-white/70 shadow-2xs'
                                 }`}
                                 title={`Add dish to ${day} ${slot}`}
                               >
-                                <Plus className="w-3 h-3" />
+                                <Plus className="w-3 h-3 text-orange-600" />
                                 <span>{items.length === 0 ? 'Add Dish' : '+ Add Another'}</span>
                               </button>
                             </div>
@@ -743,6 +933,65 @@ export default function MealPlanGenerator() {
                       })}
                     </tr>
                   ))}
+
+                  {/* Daily Caloric Goal Compliance Row */}
+                  <tr className="bg-stone-100/90 font-bold border-t-2 border-stone-300">
+                    <td className="p-3 text-stone-900 text-xs uppercase tracking-wider bg-stone-200/80 border-r border-stone-300">
+                      <div className="flex items-center gap-1.5">
+                        <Flame className="w-3.5 h-3.5 text-orange-600" />
+                        <span>Daily Total</span>
+                      </div>
+                      <div className="text-[10px] text-stone-500 font-normal mt-0.5">
+                        Target: {targets.calories} kcal
+                      </div>
+                    </td>
+                    {WEEK_DAYS.map(day => {
+                      const dayTotal = getKbDayCalories(day);
+                      const diff = dayTotal - targets.calories;
+                      const isOptimal = Math.abs(diff) <= 100 && dayTotal > 0;
+                      const isUnder = diff < -100;
+                      const isOver = diff > 100;
+
+                      return (
+                        <td key={day} className="p-2.5 border-r border-stone-200 align-top bg-white">
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-baseline">
+                              <span className="text-xs font-bold text-stone-900">{dayTotal} kcal</span>
+                              <span className="text-[10px] text-stone-400 font-normal">/ {targets.calories}</span>
+                            </div>
+
+                            {/* Caloric goal progress bar */}
+                            <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  isOptimal ? 'bg-emerald-500' : isOver ? 'bg-rose-500' : 'bg-amber-400'
+                                }`}
+                                style={{ width: `${Math.min(100, Math.round((dayTotal / (targets.calories || 2000)) * 100))}%` }}
+                              />
+                            </div>
+
+                            <div className="text-[10px]">
+                              {dayTotal === 0 ? (
+                                <span className="text-stone-400 italic">No dishes</span>
+                              ) : isOptimal ? (
+                                <span className="text-emerald-700 font-bold flex items-center gap-0.5">
+                                  <Check className="w-3 h-3" /> On Target
+                                </span>
+                              ) : isUnder ? (
+                                <span className="text-amber-700 font-medium">
+                                  {Math.abs(diff)} kcal left
+                                </span>
+                              ) : (
+                                <span className="text-rose-700 font-medium">
+                                  +{diff} kcal over
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -1119,30 +1368,54 @@ export default function MealPlanGenerator() {
                 </button>
               </div>
 
-              {/* Day Macro Diagnostic Bar */}
-              <div className="px-5 py-2.5 bg-stone-50 border-b border-stone-100 flex flex-wrap items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-4">
-                  <span className="font-semibold text-stone-700">Day {activeDayTab} Balance:</span>
+              {/* Day Caloric & Macro Compliance Bar */}
+              <div className="px-5 py-3 bg-stone-50 border-b border-stone-200/80 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-3">
-                    <span className="font-bold text-stone-900">{dayCalories} kcal</span>
+                    <span className="font-bold text-stone-900 flex items-center gap-1.5">
+                      <Flame className="w-4 h-4 text-orange-600" />
+                      Day {activeDayTab} Total: <span className="text-orange-700 text-sm font-extrabold">{dayCalories} kcal</span>
+                    </span>
                     <span className="text-stone-300">•</span>
-                    <span className="text-stone-600">P: <strong className="text-stone-900">{dayProtein}g</strong></span>
-                    <span className="text-stone-600">C: <strong className="text-stone-900">{dayCarbs}g</strong></span>
-                    <span className="text-stone-600">F: <strong className="text-stone-900">{dayFat}g</strong></span>
+                    <span className="text-stone-500 font-medium">Daily Target: <strong>{targets.calories} kcal</strong></span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md border flex items-center gap-1 ${
+                      calStatus === 'optimal' 
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
+                        : calStatus === 'over' 
+                        ? 'bg-rose-50 text-rose-800 border-rose-300' 
+                        : 'bg-amber-50 text-amber-800 border-amber-300'
+                    }`}>
+                      {calStatus === 'optimal' ? (
+                        <>✓ Target Achieved ({Math.round((dayCalories / (targets.calories || 2000)) * 100)}%)</>
+                      ) : calStatus === 'over' ? (
+                        <>+{calDiff} kcal Over Target</>
+                      ) : (
+                        <>{Math.abs(calDiff)} kcal Budget Left</>
+                      )}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-stone-500">Target: {targets.calories} kcal</span>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                    calStatus === 'optimal' 
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60' 
-                      : calStatus === 'over' 
-                      ? 'bg-amber-50 text-amber-800 border border-amber-200/60' 
-                      : 'bg-blue-50 text-blue-800 border border-blue-200/60'
-                  }`}>
-                    {calStatus === 'optimal' ? 'On Target' : calStatus === 'over' ? `+${calDiff} kcal` : `${calDiff} kcal`}
-                  </span>
+                {/* Progress bar towards daily caloric target */}
+                <div className="w-full h-2 bg-stone-200/80 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      calStatus === 'optimal' ? 'bg-emerald-500' : calStatus === 'over' ? 'bg-rose-500' : 'bg-amber-400'
+                    }`}
+                    style={{ width: `${Math.min(100, Math.round((dayCalories / (targets.calories || 2000)) * 100))}%` }}
+                  />
+                </div>
+
+                {/* Macro breakdown pills */}
+                <div className="flex flex-wrap items-center gap-4 text-[11px] text-stone-600 pt-0.5">
+                  <span>Protein: <strong className="text-stone-900">{dayProtein}g</strong> / {targets.protein}g</span>
+                  <span className="text-stone-300">•</span>
+                  <span>Carbs: <strong className="text-stone-900">{dayCarbs}g</strong> / {targets.carbs}g</span>
+                  <span className="text-stone-300">•</span>
+                  <span>Fat: <strong className="text-stone-900">{dayFat}g</strong> / {targets.fat}g</span>
                 </div>
               </div>
 
@@ -1171,6 +1444,7 @@ export default function MealPlanGenerator() {
                       const items = bySlot[slot] || [];
                       const slotKcal = items.reduce((sum, item) => sum + (Number(item.meal.calories) || 0), 0);
                       const slotProtein = items.reduce((sum, item) => sum + (Number(item.meal.protein) || 0), 0);
+                      const slotPct = targets.calories > 0 ? Math.round((slotKcal / targets.calories) * 100) : 0;
 
                       return (
                         <div key={slot} className="bg-stone-50/60 border border-stone-200/90 rounded-xl p-3.5 space-y-2.5">
@@ -1185,13 +1459,13 @@ export default function MealPlanGenerator() {
                               </span>
                               {items.length > 0 && (
                                 <span className="text-[10px] font-bold text-orange-700 bg-orange-50 px-2 py-0.5 rounded border border-orange-200/60">
-                                  {slotKcal} kcal • {slotProtein}g P
+                                  {slotKcal} kcal ({slotPct}% of goal) • {slotProtein}g P
                                 </span>
                               )}
                             </div>
 
                             <button
-                              onClick={() => setSwapTarget({ dayNumber: activeDayTab, mealIndex: -1, mealSlot: slot })}
+                              onClick={() => openDishModal({ context: 'ai', dayNumber: activeDayTab, mealSlot: slot })}
                               className="px-2.5 py-1 bg-white hover:bg-orange-50 hover:text-orange-700 hover:border-orange-300 border border-stone-200 text-stone-700 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all flex items-center gap-1 shadow-2xs"
                               title={`Add another dish to ${slot}`}
                             >
@@ -1202,19 +1476,19 @@ export default function MealPlanGenerator() {
 
                           {/* Items in this slot */}
                           {items.length === 0 ? (
-                            <div className="py-2.5 px-3 border border-dashed border-stone-200 rounded-lg text-stone-400 text-xs flex justify-between items-center bg-white/50">
+                            <div className="py-3 px-3.5 border border-dashed border-stone-300 rounded-lg text-stone-500 text-xs flex justify-between items-center bg-white/70">
                               <span className="text-[11px] italic">No dishes in {slot} yet.</span>
                               <button
-                                onClick={() => setSwapTarget({ dayNumber: activeDayTab, mealIndex: -1, mealSlot: slot })}
-                                className="text-orange-600 hover:text-orange-700 text-[10px] font-bold flex items-center gap-1"
+                                onClick={() => openDishModal({ context: 'ai', dayNumber: activeDayTab, mealSlot: slot })}
+                                className="text-orange-600 hover:text-orange-800 text-[11px] font-bold flex items-center gap-1 px-2 py-1 rounded bg-orange-50/80 border border-orange-200 hover:bg-orange-100 transition-colors"
                               >
-                                <Plus className="w-3 h-3" /> Add First Dish
+                                <Plus className="w-3.5 h-3.5" /> Add First Dish
                               </button>
                             </div>
                           ) : (
                             <div className="space-y-2">
                               {items.map(({ meal, globalIndex }) => {
-                                const isSwapping = swapTarget?.dayNumber === activeDayTab && swapTarget?.mealIndex === globalIndex;
+                                const isSwapping = dishModal?.isSwap && dishModal?.swapMealIndex === globalIndex;
                                 return (
                                   <div
                                     key={globalIndex}
@@ -1245,7 +1519,7 @@ export default function MealPlanGenerator() {
                                             <Edit3 className="w-3.5 h-3.5" />
                                           </button>
                                           <button
-                                            onClick={() => setSwapTarget({ dayNumber: activeDayTab, mealIndex: globalIndex, mealSlot: slot })}
+                                            onClick={() => openDishModal({ context: 'ai', dayNumber: activeDayTab, mealSlot: slot, isSwap: true, swapMealIndex: globalIndex, existingMealName: meal.name })}
                                             title="Swap with recipe from knowledge base"
                                             className="p-1 text-stone-500 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
                                           >
@@ -1314,10 +1588,10 @@ export default function MealPlanGenerator() {
 
                 {/* Add Meal to Day Button */}
                 <button
-                  onClick={() => setSwapTarget({ dayNumber: activeDayTab, mealIndex: -1, mealSlot: 'Lunch' })}
-                  className="w-full py-2.5 border border-dashed border-stone-300 rounded-lg text-xs font-semibold text-stone-700 hover:text-stone-900 hover:border-stone-400 hover:bg-stone-50 transition-all flex items-center justify-center gap-1.5"
+                  onClick={() => openDishModal({ context: 'ai', dayNumber: activeDayTab, mealSlot: 'Lunch' })}
+                  className="w-full py-2.5 border border-dashed border-stone-300 rounded-lg text-xs font-bold text-stone-700 hover:text-stone-900 hover:border-orange-400 hover:bg-orange-50/30 transition-all flex items-center justify-center gap-1.5 shadow-2xs"
                 >
-                  <Plus className="w-3.5 h-3.5 text-stone-500" />
+                  <Plus className="w-4 h-4 text-orange-600" />
                   Add Another Dish to Day {activeDayTab}
                 </button>
               </div>
@@ -1466,6 +1740,287 @@ export default function MealPlanGenerator() {
         </div>
       )} {/* end editingMeal modal */}
       </>)} {/* end studioTab === 'ai' */}
+
+      {/* ══════════════ Universal Dish Selector & Custom Dish Modal ══════════════ */}
+      {dishModal && dishModal.isOpen && (
+        <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-stone-200 flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-stone-200">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-orange-100 text-orange-700">
+                    {dishModal.isSwap ? <RefreshCw className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  </span>
+                  <h3 className="font-serif font-bold text-stone-900 text-sm sm:text-base">
+                    {dishModal.isSwap ? 'Swap Dish' : 'Add Dish'} — {dishModal.context === 'ai' ? `Day ${dishModal.dayNumber}` : dishModal.dayName} • {dishModal.mealSlot}
+                  </h3>
+                </div>
+                <p className="text-xs text-stone-500 mt-1">
+                  {dishModal.isSwap 
+                    ? <>Replacing <strong className="text-stone-800">"{dishModal.existingMealName}"</strong></>
+                    : <>Stack another dish into <strong>{dishModal.mealSlot}</strong> ({dishModal.context === 'ai' ? `Day ${dishModal.dayNumber}` : dishModal.dayName})</>}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setDishModal(null)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Caloric Context Banner */}
+            <div className="py-2.5 px-3.5 bg-orange-50/70 border border-orange-200/80 rounded-xl my-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-orange-600 shrink-0" />
+                <span className="font-medium text-stone-700">
+                  Day Total so far: <strong className="text-stone-900">{modalDayCalories} kcal</strong>
+                </span>
+                <span className="text-stone-300">•</span>
+                <span className="text-stone-500">
+                  Target: <strong>{targets.calories} kcal</strong>
+                </span>
+              </div>
+              <div className="text-[11px] font-bold">
+                {targets.calories - modalDayCalories >= 0 ? (
+                  <span className="text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">
+                    {targets.calories - modalDayCalories} kcal remaining budget
+                  </span>
+                ) : (
+                  <span className="text-rose-700 bg-rose-100/70 px-2 py-0.5 rounded">
+                    +{modalDayCalories - targets.calories} kcal over target
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Mode Tabs */}
+            <div className="flex border-b border-stone-200 mb-3 text-xs">
+              <button
+                onClick={() => setDishModalTab('catalog')}
+                className={`pb-2 px-3 font-bold uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5 ${
+                  dishModalTab === 'catalog'
+                    ? 'border-orange-600 text-orange-700'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                From Knowledge Base ({modalFilteredRecipes.length})
+              </button>
+              <button
+                onClick={() => setDishModalTab('custom')}
+                className={`pb-2 px-3 font-bold uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5 ${
+                  dishModalTab === 'custom'
+                    ? 'border-orange-600 text-orange-700'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
+                }`}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                + Custom Clinical Dish
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto pr-1">
+              {dishModalTab === 'catalog' && (
+                <div className="space-y-3">
+                  {/* Search and Filters */}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Search recipe by name, ingredients, or clinical focus..."
+                        value={dishModalSearch}
+                        onChange={e => setDishModalSearch(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 border border-stone-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-stone-50/50"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dietary Filters */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[10px]">
+                    {['All', 'Non-Vegetarian', 'Vegetarian', 'Jain', 'Eggetarian', 'Vegan'].map(diet => (
+                      <button
+                        key={diet}
+                        onClick={() => setDishModalDiet(diet)}
+                        className={`px-2.5 py-1 rounded-md font-semibold whitespace-nowrap transition-colors ${
+                          dishModalDiet === diet
+                            ? 'bg-stone-900 text-white'
+                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                        }`}
+                      >
+                        {diet}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Recipe Cards List */}
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    {modalFilteredRecipes.map((r, i) => (
+                      <div
+                        key={r.id || i}
+                        className="p-3 border border-stone-200 rounded-xl bg-white hover:border-orange-300 hover:shadow-xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-stone-900 text-xs sm:text-sm">{r.name}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-100 text-stone-700 font-semibold border border-stone-200">
+                              {r.dietaryType}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500">
+                            <span className="font-bold text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200/60">
+                              {r.calories} kcal
+                            </span>
+                            <span>•</span>
+                            <span>Portion: {r.portionSize || '1 serving'}</span>
+                            <span>•</span>
+                            <span>P:{r.protein}g C:{r.carbs}g F:{r.fat}g</span>
+                          </div>
+                          {r.clinicalFocus && (
+                            <p className="text-[10px] text-emerald-700 font-medium">
+                              Focus: {r.clinicalFocus}
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => handleAddOrSwapRecipe(r)}
+                          className="shrink-0 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          {dishModal.isSwap ? 'Swap Dish' : `Add to ${dishModal.mealSlot}`}
+                        </button>
+                      </div>
+                    ))}
+
+                    {modalFilteredRecipes.length === 0 && (
+                      <div className="text-center py-8 text-stone-400 text-xs">
+                        No recipes found matching your search. Try adjusting the filter or use the Custom Dish tab.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {dishModalTab === 'custom' && (
+                <div className="space-y-3.5 text-xs py-1">
+                  <div>
+                    <label className="block uppercase font-bold text-stone-600 mb-1">Dish / Course Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., 2 Multigrain Rotis + 1 bowl Moong Dal"
+                      value={customDish.name}
+                      onChange={e => setCustomDish({ ...customDish, name: e.target.value })}
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-stone-900 font-semibold outline-none focus:ring-1 focus:ring-orange-500"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block uppercase font-bold text-stone-600 mb-1">Portion Size</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., 1 bowl / 200g"
+                        value={customDish.portion}
+                        onChange={e => setCustomDish({ ...customDish, portion: e.target.value })}
+                        className="w-full border border-stone-300 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block uppercase font-bold text-stone-600 mb-1">Calories (kcal) *</label>
+                      <input
+                        type="number"
+                        placeholder="300"
+                        value={customDish.calories}
+                        onChange={e => setCustomDish({ ...customDish, calories: Number(e.target.value) })}
+                        className="w-full border border-stone-300 rounded-lg px-3 py-1.5 font-bold text-orange-700 outline-none focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block uppercase font-bold text-stone-600 mb-1">Protein (g)</label>
+                      <input
+                        type="number"
+                        value={customDish.protein}
+                        onChange={e => setCustomDish({ ...customDish, protein: Number(e.target.value) })}
+                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block uppercase font-bold text-stone-600 mb-1">Carbs (g)</label>
+                      <input
+                        type="number"
+                        value={customDish.carbs}
+                        onChange={e => setCustomDish({ ...customDish, carbs: Number(e.target.value) })}
+                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block uppercase font-bold text-stone-600 mb-1">Fat (g)</label>
+                      <input
+                        type="number"
+                        value={customDish.fat}
+                        onChange={e => setCustomDish({ ...customDish, fat: Number(e.target.value) })}
+                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block uppercase font-bold text-stone-600 mb-1">Clinical Notes (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Low sodium preparation, roasted without oil"
+                      value={customDish.notes}
+                      onChange={e => setCustomDish({ ...customDish, notes: e.target.value })}
+                      className="w-full border border-stone-300 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-orange-500"
+                    />
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-2.5">
+                    <button
+                      onClick={() => setDishModal(null)}
+                      className="px-4 py-2 border border-stone-200 rounded-lg text-xs font-semibold text-stone-600 hover:bg-stone-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!customDish.name.trim()) {
+                          alert('Please enter a dish name.');
+                          return;
+                        }
+                        handleAddOrSwapRecipe({
+                          name: customDish.name.trim(),
+                          portion: customDish.portion || '1 serving',
+                          calories: Number(customDish.calories) || 250,
+                          protein: Number(customDish.protein) || 10,
+                          carbs: Number(customDish.carbs) || 30,
+                          fat: Number(customDish.fat) || 6,
+                          notes: customDish.notes || 'Custom clinical entry'
+                        });
+                      }}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors shadow-xs flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      {dishModal.isSwap ? 'Swap with Custom Dish' : `Add Custom Dish to ${dishModal.mealSlot}`}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

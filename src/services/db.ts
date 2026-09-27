@@ -1452,19 +1452,42 @@ export async function getPatientChecklist(patientId: string, date: string): Prom
 
 export async function getAllPatientEatingLogs(patientId: string): Promise<PatientEatingLogEntry[]> {
   try {
-    const q = query(collection(db, 'food_logs'), where('patientId', '==', patientId));
-    const snap = await getDocs(q);
+    let rawDocs: any[] = [];
+
+    // 1. Try backend API first (guaranteed server admin auth)
+    try {
+      const res = await fetch(getApiUrl(`/api/patient/food-logs/${encodeURIComponent(patientId)}`));
+      if (res.ok) {
+        const json = await res.json();
+        if (json.logs && Array.isArray(json.logs)) {
+          rawDocs = json.logs;
+        }
+      }
+    } catch (apiErr) {
+      // fallback to direct Firestore query
+    }
+
+    // 2. Direct Firestore fallback
+    if (rawDocs.length === 0) {
+      try {
+        const q = query(collection(db, 'food_logs'), where('patientId', '==', patientId));
+        const snap = await getDocs(q);
+        rawDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (fsErr) {
+        console.warn('getAllPatientEatingLogs direct Firestore query failed:', fsErr);
+      }
+    }
+
     const rawEntries: PatientEatingLogEntry[] = [];
 
-    snap.docs.forEach(docSnap => {
-      const data = docSnap.data();
+    rawDocs.forEach(data => {
       if (data.type === 'checklist') {
         const rawItems = data.items;
         const items = (Array.isArray(rawItems) ? rawItems : Object.values(rawItems || {})) as ChecklistMealItem[];
         items.filter(i => i.completed).forEach(item => {
           const isExtra = item.isExtra || item.mealType?.toLowerCase().includes('extra') || item.mealType === 'CUSTOM DIETARY NOTE';
           rawEntries.push({
-            id: `${docSnap.id}_${item.id}`,
+            id: `${data.id || 'chk'}_${item.id}`,
             date: data.date,
             type: isExtra ? 'extra' : 'assigned',
             mealType: isExtra ? 'Extra Food' : item.mealType,
@@ -1482,7 +1505,7 @@ export async function getAllPatientEatingLogs(patientId: string): Promise<Patien
       } else {
         const isExtra = data.mealType?.toLowerCase().includes('extra') || data.isExtra || data.source === 'quick_log';
         rawEntries.push({
-          id: docSnap.id,
+          id: data.id,
           date: data.date,
           type: isExtra ? 'extra' : (data.imageUrl ? 'scanned' : 'assigned'),
           mealType: isExtra ? 'Extra Food' : (data.mealType || 'Meal'),
@@ -1505,14 +1528,15 @@ export async function getAllPatientEatingLogs(patientId: string): Promise<Patien
     const entries: PatientEatingLogEntry[] = [];
     rawEntries.forEach(entry => {
       const cleanName = (entry.name || '').replace(/^Extra:\s*/i, '').trim().toLowerCase();
-      const key = `${entry.date}_${cleanName}_${entry.portion || ''}`;
+      const key = `${entry.date}_${entry.mealType}_${cleanName}_${entry.portion || ''}`;
       if (!seen.has(key)) {
         seen.add(key);
         entries.push(entry);
       }
     });
 
-    return entries;
+    // Sort by date descending (and then by completedAt descending)
+    return entries.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   } catch (err) {
     console.warn('getAllPatientEatingLogs error:', err);
     return [];

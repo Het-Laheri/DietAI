@@ -2,12 +2,18 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   getPatientProfile, 
-  getAllFoodLogsForPatient, 
   getMealPlans, 
+  getPatientChecklist,
+  getPatientWeekPlan,
+  getAllPatientEatingLogs,
   PatientProfile, 
-  FoodLog, 
-  MealPlan 
+  MealPlan,
+  PatientWeekPlan,
+  ChecklistMealItem,
+  PatientEatingLogEntry
 } from '../../services/db';
+import { db } from '../../services/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { 
   Target, 
@@ -15,7 +21,6 @@ import {
   Award, 
   Flame, 
   Calendar, 
-  PlusCircle, 
   Utensils, 
   Sparkles, 
   Camera, 
@@ -23,7 +28,8 @@ import {
   Dna,
   Wheat,
   Droplet,
-  Clock
+  Clock,
+  Check
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -31,51 +37,169 @@ export default function Progress() {
   const { profile } = useAuth();
   const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
   const [mealPlan, setMealPlan] = useState<MealPlan | null>(null);
-  const [foodLogs, setFoodLogs] = useState<FoodLog[]>([]);
+  const [, setWeekPlan] = useState<PatientWeekPlan | null>(null);
+  const [todayChecklist, setTodayChecklist] = useState<ChecklistMealItem[]>([]);
+  const [eatingLogs, setEatingLogs] = useState<PatientEatingLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
-    async function load() {
-      if (profile?.uid) {
-        const [pData, plansData, logsData] = await Promise.all([
-          getPatientProfile(profile.uid),
-          getMealPlans(profile.uid),
-          getAllFoodLogsForPatient(profile.uid)
+    if (!profile?.uid) return;
+
+    let isMounted = true;
+
+    async function loadData() {
+      try {
+        const [pData, plansData, wpData, checklistData, allLogs] = await Promise.all([
+          getPatientProfile(profile!.uid),
+          getMealPlans(profile!.uid),
+          getPatientWeekPlan(profile!.uid),
+          getPatientChecklist(profile!.uid, todayStr),
+          getAllPatientEatingLogs(profile!.uid)
         ]);
+
+        if (!isMounted) return;
+
         setPatientProfile(pData);
         const activePlan = plansData.find(p => p.status === 'published') || plansData[0] || null;
         setMealPlan(activePlan);
-        setFoodLogs(logsData);
+        setWeekPlan(wpData);
+        setTodayChecklist(checklistData || []);
+        setEatingLogs(allLogs || []);
+      } catch (err) {
+        console.warn('Progress load data note:', err);
+      } finally {
+        if (isMounted) setLoading(false);
       }
-      setLoading(false);
     }
-    load();
-  }, [profile]);
+
+    loadData();
+
+    // 1. Real-time Firestore listener for today's checklist doc (instant checkmark & extra food updates)
+    const checklistRef = doc(db, 'food_logs', `checklist_${profile.uid}_${todayStr}`);
+    const unsubChecklist = onSnapshot(checklistRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const raw = docSnap.data().items;
+        const items = (Array.isArray(raw) ? raw : Object.values(raw || {})) as ChecklistMealItem[];
+        setTodayChecklist(items);
+        getAllPatientEatingLogs(profile.uid).then(logs => {
+          if (isMounted) setEatingLogs(logs);
+        });
+      }
+    }, (err) => {
+      console.warn('Real-time checklist listener note:', err);
+    });
+
+    // 2. Custom window event from MealNotepad / quick log
+    const handleChecklistUpdated = () => {
+      getPatientChecklist(profile.uid, todayStr).then(items => {
+        if (isMounted) setTodayChecklist(items);
+      });
+      getAllPatientEatingLogs(profile.uid).then(logs => {
+        if (isMounted) setEatingLogs(logs);
+      });
+    };
+    window.addEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
+
+    return () => {
+      isMounted = false;
+      unsubChecklist();
+      window.removeEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
+    };
+  }, [profile, todayStr]);
 
   if (loading) {
     return <div className="p-8 max-w-4xl mx-auto text-stone-500 font-medium">Loading your nutrition progress profile...</div>;
   }
 
-  // Calculate today's logged nutrition vs target
-  const todayLogs = foodLogs.filter(l => l.date === todayStr);
-  const todayCalories = todayLogs.reduce((sum, l) => sum + (Number(l.nutrition?.calories) || 0), 0);
-  const todayProtein = todayLogs.reduce((sum, l) => sum + (Number(l.nutrition?.protein) || 0), 0);
-  const todayCarbs = todayLogs.reduce((sum, l) => sum + (Number(l.nutrition?.carbs) || 0), 0);
-  const todayFat = todayLogs.reduce((sum, l) => sum + (Number(l.nutrition?.fat) || 0), 0);
+  // ─── TARGET & COMPLIANCE CALCULATIONS ──────────────────────────────────────
+  // 1. Prescribed / Assigned Meals planned for today
+  const assignedPrescribedItems = todayChecklist.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
+  const plannedDailyCalories = assignedPrescribedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+  const plannedDailyProtein = assignedPrescribedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
+  const plannedDailyCarbs = assignedPrescribedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
+  const plannedDailyFat = assignedPrescribedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
 
-  const targetCalories = mealPlan?.targets?.calories || 2000;
-  const targetProtein = mealPlan?.targets?.protein || 90;
-  const targetCarbs = mealPlan?.targets?.carbs || 220;
-  const targetFat = mealPlan?.targets?.fat || 60;
+  // Fallback to active meal plan targets if planned meals aren't yet populated
+  const targetCalories = plannedDailyCalories > 0 ? plannedDailyCalories : (mealPlan?.targets?.calories || 2000);
+  const targetProtein = plannedDailyProtein > 0 ? plannedDailyProtein : (mealPlan?.targets?.protein || 68);
+  const targetCarbs = plannedDailyCarbs > 0 ? plannedDailyCarbs : (mealPlan?.targets?.carbs || 130);
+  const targetFat = plannedDailyFat > 0 ? plannedDailyFat : (mealPlan?.targets?.fat || 54);
 
-  const caloriePct = Math.min(100, Math.round((todayCalories / targetCalories) * 100));
+  // 2. Completed checklist items for today (both assigned meals and extra items)
+  const completedChecklist = todayChecklist.filter(i => i.completed);
+  const assignedCompleted = completedChecklist.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
+  const extraCompleted = completedChecklist.filter(i => i.isExtra || i.mealType?.toLowerCase().includes('extra'));
+
+  const assignedCalories = assignedCompleted.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+  const extraCalories = extraCompleted.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+  const checklistProtein = completedChecklist.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
+  const checklistCarbs = completedChecklist.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
+  const checklistFat = completedChecklist.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
+
+  // 3. Genuine scanned logs for today from eatingLogs (type === 'scanned')
+  const todayScanned = eatingLogs.filter(l => l.date === todayStr && l.type === 'scanned');
+  const scanCalories = todayScanned.reduce((sum, l) => sum + (Number(l.calories) || 0), 0);
+  const scanProtein = todayScanned.reduce((sum, l) => sum + (Number(l.protein) || 0), 0);
+  const scanCarbs = todayScanned.reduce((sum, l) => sum + (Number(l.carbs) || 0), 0);
+  const scanFat = todayScanned.reduce((sum, l) => sum + (Number(l.fat) || 0), 0);
+
+  // Grand totals consumed today
+  const todayCalories = assignedCalories + extraCalories + scanCalories;
+  const todayProtein = checklistProtein + scanProtein;
+  const todayCarbs = checklistCarbs + scanCarbs;
+  const todayFat = checklistFat + scanFat;
+  const totalItemsConsumedToday = completedChecklist.length + todayScanned.length;
+
+  // Percentage & bar scaling
+  const scaleMax = Math.max(targetCalories, todayCalories);
+  const caloriePct = Math.round((todayCalories / targetCalories) * 100);
   const remainingCalories = Math.max(0, targetCalories - todayCalories);
+  const isOverTarget = todayCalories > targetCalories;
 
-  // Overall metrics
-  const totalMealsLogged = foodLogs.length;
-  const uniqueLoggedDates = Array.from(new Set(foodLogs.map(l => l.date)));
+  const assignedProgressPercent = Math.min(100, Math.round((assignedCalories / scaleMax) * 100));
+  const extraProgressPercent = Math.min(
+    100 - assignedProgressPercent,
+    Math.round(((extraCalories + scanCalories) / scaleMax) * 100)
+  );
+
+  // ─── OVERALL METRICS & TIMELINE ──────────────────────────────────────────
+  // Merge eating logs with today's completed checklist items to ensure 100% synchronization
+  const allCompletedMap = new Map<string, PatientEatingLogEntry>();
+
+  eatingLogs.forEach(entry => {
+    allCompletedMap.set(entry.id, entry);
+  });
+
+  completedChecklist.forEach(item => {
+    const isExtra = item.isExtra || item.mealType?.toLowerCase().includes('extra');
+    const itemId = `chk_${item.id}`;
+    if (!allCompletedMap.has(itemId)) {
+      allCompletedMap.set(itemId, {
+        id: itemId,
+        date: todayStr,
+        type: isExtra ? 'extra' : 'assigned',
+        mealType: isExtra ? 'Extra Food' : item.mealType,
+        name: item.name,
+        portion: item.portion || '1 serving',
+        calories: Number(item.calories) || 0,
+        protein: Number(item.protein) || 0,
+        carbs: Number(item.carbs) || 0,
+        fat: Number(item.fat) || 0,
+        completedAt: item.completedAt || 'Completed',
+        notes: item.notes,
+        isExtra
+      });
+    }
+  });
+
+  const allCompletedItems = Array.from(allCompletedMap.values()).sort(
+    (a, b) => (b.date || '').localeCompare(a.date || '')
+  );
+
+  const totalMealsLogged = allCompletedItems.length;
+  const uniqueLoggedDates = Array.from(new Set(allCompletedItems.map(l => l.date)));
   const daysLoggedCount = uniqueLoggedDates.length;
 
   // Real 7-day consistency calculation
@@ -92,10 +216,10 @@ export default function Progress() {
 
   // Generate weekly trend data from actual recorded logs
   const weeklyTrendData = hasLogs ? [
-    { week: 'Week 1', adherence: Math.min(100, Math.round((totalMealsLogged / 7) * 30)) },
-    { week: 'Week 2', adherence: Math.min(100, Math.round((totalMealsLogged / 14) * 60)) },
+    { week: 'Week 1', adherence: Math.min(100, Math.round((totalMealsLogged / 7) * 35)) },
+    { week: 'Week 2', adherence: Math.min(100, Math.round((totalMealsLogged / 14) * 65)) },
     { week: 'Week 3', adherence: Math.min(100, Math.round((totalMealsLogged / 21) * 85)) },
-    { week: 'Current', adherence: Math.max(mealPlanConsistency, 20) },
+    { week: 'Current', adherence: Math.max(mealPlanConsistency, caloriePct > 0 ? Math.min(100, caloriePct) : 20) },
   ] : [];
 
   return (
@@ -126,7 +250,7 @@ export default function Progress() {
             </span>
             <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Daily Calorie Consumption Goal</h2>
             <p className="text-xs text-stone-500">
-              {todayLogs.length} {todayLogs.length === 1 ? 'meal' : 'meals'} logged today ({todayStr})
+              {totalItemsConsumedToday} {totalItemsConsumedToday === 1 ? 'meal' : 'meals'} logged today ({todayStr})
             </p>
           </div>
 
@@ -135,12 +259,16 @@ export default function Progress() {
               {todayCalories} <span className="text-sm font-normal text-stone-400 font-sans">/ {targetCalories} kcal</span>
             </div>
             <p className="text-xs text-stone-500 mt-0.5">
-              {remainingCalories > 0 ? `${remainingCalories} kcal remaining today` : 'Target reached for today! 🎉'}
+              {remainingCalories > 0 
+                ? `${remainingCalories} kcal remaining today` 
+                : isOverTarget 
+                  ? `Goal achieved (+${todayCalories - targetCalories} kcal extra) 🎉` 
+                  : 'Target reached for today! 🎉'}
             </p>
           </div>
         </div>
 
-        {/* Calorie Progress Bar */}
+        {/* Calorie Dual-Segment Progress Bar */}
         <div className="my-6">
           <div className="flex justify-between text-xs font-semibold mb-2">
             <span className="text-stone-700 font-medium">Daily Calorie Goal Adherence</span>
@@ -148,13 +276,46 @@ export default function Progress() {
               {caloriePct}%
             </span>
           </div>
-          <div className="w-full bg-stone-100 h-3 rounded-full overflow-hidden p-0.5 border border-stone-200">
+
+          <div className="w-full bg-stone-100 h-3 rounded-full overflow-hidden p-0.5 border border-stone-200 flex">
+            {/* Prescribed meals portion (emerald) */}
             <div 
-              className={`h-full rounded-full transition-all duration-700 ${
-                todayCalories > targetCalories ? 'bg-amber-600' : 'bg-brand-600'
+              className={`bg-emerald-600 h-full rounded-l-full transition-all duration-500 ${
+                extraProgressPercent === 0 && assignedProgressPercent >= 100 ? 'rounded-r-full' : ''
               }`}
-              style={{ width: `${Math.min(caloriePct, 100)}%` }}
+              style={{ width: `${assignedProgressPercent}%` }}
+              title={`Prescribed Meals: ${assignedCalories} kcal`}
             />
+            {/* Extra food portion (amber) */}
+            {extraProgressPercent > 0 && (
+              <div 
+                className={`bg-amber-500 h-full transition-all duration-500 ${
+                  assignedProgressPercent === 0 ? 'rounded-l-full' : ''
+                } ${(assignedProgressPercent + extraProgressPercent) >= 100 ? 'rounded-r-full' : ''}`}
+                style={{ width: `${extraProgressPercent}%` }}
+                title={`Extra Food & Scans: ${extraCalories + scanCalories} kcal`}
+              />
+            )}
+          </div>
+
+          {/* Bar legend tags */}
+          <div className="flex flex-wrap items-center justify-between text-[11px] text-stone-500 mt-2 gap-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 font-medium text-emerald-800">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block" />
+                Prescribed: <strong className="text-stone-900">{assignedCalories} kcal</strong>
+              </span>
+              {(extraCalories + scanCalories) > 0 && (
+                <span className="inline-flex items-center gap-1.5 font-medium text-amber-800">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
+                  Extra Food: <strong className="text-stone-900">{extraCalories + scanCalories} kcal</strong>
+                </span>
+              )}
+            </div>
+            <span className="font-semibold text-stone-700">
+              {targetCalories} kcal (Target)
+              {isOverTarget && ` • ${todayCalories} kcal total`}
+            </span>
           </div>
         </div>
 
@@ -166,7 +327,7 @@ export default function Progress() {
               <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
                 <Dna className="w-3.5 h-3.5 text-emerald-700" /> Protein
               </span>
-              <span className="text-[11px] font-mono text-emerald-700 font-medium">{todayProtein}g / {targetProtein}g</span>
+              <span className="text-[11px] font-mono text-emerald-800 font-bold">{todayProtein}g / {targetProtein}g</span>
             </div>
             <div className="w-full bg-emerald-100/80 h-1.5 rounded-full overflow-hidden mt-2">
               <div 
@@ -182,7 +343,7 @@ export default function Progress() {
               <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
                 <Wheat className="w-3.5 h-3.5 text-amber-700" /> Carbs
               </span>
-              <span className="text-[11px] font-mono text-amber-700 font-medium">{todayCarbs}g / {targetCarbs}g</span>
+              <span className="text-[11px] font-mono text-amber-800 font-bold">{todayCarbs}g / {targetCarbs}g</span>
             </div>
             <div className="w-full bg-amber-100/80 h-1.5 rounded-full overflow-hidden mt-2">
               <div 
@@ -198,7 +359,7 @@ export default function Progress() {
               <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
                 <Droplet className="w-3.5 h-3.5 text-rose-700" /> Fats
               </span>
-              <span className="text-[11px] font-mono text-rose-700 font-medium">{todayFat}g / {targetFat}g</span>
+              <span className="text-[11px] font-mono text-rose-800 font-bold">{todayFat}g / {targetFat}g</span>
             </div>
             <div className="w-full bg-rose-100/80 h-1.5 rounded-full overflow-hidden mt-2">
               <div 
@@ -260,7 +421,7 @@ export default function Progress() {
             <Calendar className="w-5 h-5 text-stone-400" />
           </div>
           <p className="text-3xl font-serif font-bold text-stone-900">{totalMealsLogged}</p>
-          <p className="text-xs text-stone-500 mt-1">{daysLoggedCount} unique recording days</p>
+          <p className="text-xs text-stone-500 mt-1">{daysLoggedCount} unique recording {daysLoggedCount === 1 ? 'day' : 'days'}</p>
         </div>
       </div>
 
@@ -272,7 +433,9 @@ export default function Progress() {
               <Utensils className="w-5 h-5 text-brand-700" />
               Recorded Meals & Scanned Food Logs
             </h2>
-            <p className="text-xs text-stone-500">History of all meals logged via Food Scanner and Today Plan</p>
+            <p className="text-xs text-stone-500">
+              Complete history of meals completed in your Daily Notepad and Food Scanner
+            </p>
           </div>
           <Link 
             to="/patient/scanner"
@@ -282,87 +445,101 @@ export default function Progress() {
           </Link>
         </div>
 
-        {foodLogs.length === 0 ? (
+        {allCompletedItems.length === 0 ? (
           <div className="py-12 px-4 border border-dashed border-stone-200 text-center bg-stone-50/50">
             <Camera className="w-10 h-10 text-stone-300 mx-auto mb-3" />
             <h3 className="text-base font-bold text-stone-900 mb-1">No Food Logs Recorded Yet</h3>
             <p className="text-xs text-stone-500 max-w-sm mx-auto mb-6">
-              Use the AI Food Scanner to snap a picture of your meal or log directly from your daily meal plan.
+              Check off meals in your Today's Meals plan or use the AI Food Scanner to snap a picture.
             </p>
             <Link 
-              to="/patient/scanner"
-              className="px-6 py-2.5 bg-stone-900 text-white text-xs uppercase font-bold tracking-widest hover:bg-stone-800 transition-colors inline-flex items-center gap-2"
+              to="/patient/meals"
+              className="px-6 py-2.5 bg-brand-700 text-white text-xs uppercase font-bold tracking-widest hover:bg-brand-800 transition-colors inline-flex items-center gap-2"
             >
-              <Camera className="w-4 h-4" /> Open Food Scanner
+              <Utensils className="w-4 h-4" /> Go to Today's Meals
             </Link>
           </div>
         ) : (
           <div className="space-y-4 divide-y divide-stone-100">
-            {foodLogs.map((log) => (
-              <div key={log.id} className="pt-4 first:pt-0">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    {/* Thumbnail or Icon */}
-                    {log.imageUrl ? (
-                      <div className="w-14 h-14 bg-stone-100 border border-stone-200 overflow-hidden shrink-0">
-                        <img src={log.imageUrl} alt="Meal" className="w-full h-full object-cover" />
-                      </div>
-                    ) : (
-                      <div className="w-11 h-11 bg-brand-50 border border-brand-200 text-brand-700 flex items-center justify-center shrink-0">
-                        <Utensils className="w-5 h-5" />
-                      </div>
-                    )}
+            {allCompletedItems.map((log) => {
+              const isExtra = log.isExtra || log.type === 'extra';
+              const isScanned = log.type === 'scanned';
 
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="px-2 py-0.5 bg-stone-100 border border-stone-200 text-stone-800 text-[10px] font-bold uppercase tracking-wider">
-                          {log.mealType || 'Meal'}
-                        </span>
-                        {log.source === 'scanner' && (
-                          <span className="px-2 py-0.5 bg-brand-50 text-brand-800 border border-brand-200 text-[10px] font-bold uppercase tracking-wider flex items-center gap-0.5">
-                            <Sparkles className="w-2.5 h-2.5" /> AI Scan
-                          </span>
-                        )}
-                        <span className="text-[11px] text-stone-400 font-medium flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> {log.date}
-                        </span>
-                      </div>
-
-                      <h4 className="font-bold text-stone-900 text-sm">{log.description}</h4>
-
-                      {log.userNotes && (
-                        <p className="text-xs text-stone-600 bg-stone-50 p-2 border border-stone-200 mt-1.5 italic">
-                          <strong>Patient Note:</strong> "{log.userNotes}"
-                        </p>
-                      )}
-
-                      {/* Itemized Plate breakdown if available */}
-                      {log.items && log.items.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {log.items.map((item, i) => (
-                            <span key={i} className="text-[11px] px-2 py-0.5 bg-white border border-stone-200 text-stone-700">
-                              {item.name} <strong className="text-stone-900">({item.portion})</strong> • {item.calories} kcal
-                            </span>
-                          ))}
+              return (
+                <div key={log.id} className="pt-4 first:pt-0">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      {/* Thumbnail or Icon */}
+                      {log.imageUrl ? (
+                        <div className="w-14 h-14 bg-stone-100 border border-stone-200 overflow-hidden shrink-0 rounded-sm">
+                          <img src={log.imageUrl} alt="Meal" className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className={`w-11 h-11 border flex items-center justify-center shrink-0 rounded-sm ${
+                          isExtra ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                        }`}>
+                          <Utensils className="w-5 h-5" />
                         </div>
                       )}
-                    </div>
-                  </div>
 
-                  {/* Nutrition pills */}
-                  <div className="text-right shrink-0">
-                    <span className="px-3 py-1 bg-stone-900 text-white font-bold text-xs rounded-sm inline-block">
-                      {log.nutrition?.calories || 0} kcal
-                    </span>
-                    <div className="flex items-center gap-2 text-[11px] text-stone-500 mt-1.5 justify-end">
-                      <span>P: <strong className="text-stone-800">{log.nutrition?.protein || 0}g</strong></span>
-                      <span>C: <strong className="text-stone-800">{log.nutrition?.carbs || 0}g</strong></span>
-                      <span>F: <strong className="text-stone-800">{log.nutrition?.fat || 0}g</strong></span>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <span className="px-2 py-0.5 bg-stone-100 border border-stone-200 text-stone-800 text-[10px] font-bold uppercase tracking-wider">
+                            {log.mealType || 'Meal'}
+                          </span>
+
+                          {isExtra ? (
+                            <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold uppercase tracking-wider">
+                              Extra Food
+                            </span>
+                          ) : isScanned ? (
+                            <span className="px-2 py-0.5 bg-brand-50 text-brand-800 border border-brand-200 text-[10px] font-bold uppercase tracking-wider flex items-center gap-0.5">
+                              <Sparkles className="w-2.5 h-2.5" /> AI Scan
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold uppercase tracking-wider flex items-center gap-0.5">
+                              <Check className="w-2.5 h-2.5" /> Prescribed Meal
+                            </span>
+                          )}
+
+                          <span className="text-[11px] text-stone-400 font-medium flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> {log.completedAt || log.date}
+                          </span>
+                        </div>
+
+                        <h4 className="font-bold text-stone-900 text-sm">{log.name}</h4>
+
+                        {log.portion && (
+                          <p className="text-xs text-stone-500 mt-0.5">
+                            Portion: <strong className="text-stone-700">{log.portion}</strong>
+                          </p>
+                        )}
+
+                        {log.notes && (
+                          <p className="text-xs text-stone-600 bg-stone-50 p-2 border border-stone-200 mt-1.5 italic">
+                            <strong>Note:</strong> "{log.notes}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Nutrition pills */}
+                    <div className="text-right shrink-0">
+                      <span className={`px-3 py-1 font-bold text-xs rounded-sm inline-block ${
+                        isExtra ? 'bg-amber-600 text-white' : 'bg-stone-900 text-white'
+                      }`}>
+                        {log.calories} kcal
+                      </span>
+                      <div className="flex items-center gap-2 text-[11px] text-stone-500 mt-1.5 justify-end">
+                        <span>P: <strong className="text-stone-800">{log.protein || 0}g</strong></span>
+                        <span>C: <strong className="text-stone-800">{log.carbs || 0}g</strong></span>
+                        <span>F: <strong className="text-stone-800">{log.fat || 0}g</strong></span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -393,4 +570,3 @@ export default function Progress() {
     </div>
   );
 }
-

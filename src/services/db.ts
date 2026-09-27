@@ -1907,3 +1907,218 @@ export async function getAllPatientEatingLogs(patientId: string): Promise<Patien
     return [];
   }
 }
+
+// ─── CHRONOLOGICAL PATIENT TIMELINE & ADHERENCE ENGINE ───────────────────────
+
+export interface ChronologicalDayProgress {
+  dayNumber: number; // 1, 2, ... 10
+  date: string; // YYYY-MM-DD
+  displayDate: string; // "Sep 18"
+  fullDate: string; // "Wed, Sep 18, 2026"
+  isToday: boolean;
+  caloriesConsumed: number;
+  caloriesTarget: number;
+  proteinConsumed: number;
+  carbsConsumed: number;
+  fatConsumed: number;
+  mealsLogged: number;
+  assignedCount: number;
+  extraCount: number;
+  adherencePercentage: number;
+}
+
+export interface PatientProgramTimeline {
+  startDate: string; // YYYY-MM-DD
+  startDateFormatted: string; // "Sep 18, 2026"
+  totalDays: number; // e.g. 10
+  currentDayNumber: number; // e.g. 10
+  days: ChronologicalDayProgress[];
+  overallAdherence: number; // 0-100%
+  loggedDaysCount: number; // e.g. 8
+  consistencyPercentage: number; // (8 / 10) * 100 = 80%
+}
+
+export function calculatePatientProgramTimeline(
+  profile?: PatientProfile | null,
+  mealPlan?: MealPlan | null,
+  eatingLogs: PatientEatingLogEntry[] = [],
+  todayChecklist: ChecklistMealItem[] = []
+): PatientProgramTimeline {
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
+  // 1. Determine patient program start date chronologically
+  let startDateObj: Date | null = null;
+
+  // Check profile.createdAt
+  if (profile?.createdAt) {
+    if (typeof profile.createdAt.toDate === 'function') {
+      startDateObj = profile.createdAt.toDate();
+    } else if (profile.createdAt.seconds) {
+      startDateObj = new Date(profile.createdAt.seconds * 1000);
+    } else if (typeof profile.createdAt === 'string' || typeof profile.createdAt === 'number') {
+      const parsed = new Date(profile.createdAt);
+      if (!isNaN(parsed.getTime())) startDateObj = parsed;
+    }
+  }
+
+  // Check mealPlan.startDate
+  if (!startDateObj && mealPlan?.startDate) {
+    const planStart = new Date(mealPlan.startDate + 'T00:00:00');
+    if (!isNaN(planStart.getTime())) startDateObj = planStart;
+  }
+
+  // Check earliest eating log date
+  if (eatingLogs.length > 0) {
+    const logDates = eatingLogs
+      .map(l => l.date)
+      .filter((d): d is string => Boolean(d) && /^\d{4}-\d{2}-\d{2}$/.test(d))
+      .sort();
+    if (logDates.length > 0) {
+      const earliestLog = new Date(logDates[0] + 'T00:00:00');
+      if (!isNaN(earliestLog.getTime())) {
+        if (!startDateObj || earliestLog.getTime() < startDateObj.getTime()) {
+          startDateObj = earliestLog;
+        }
+      }
+    }
+  }
+
+  // Fallback to today if no earlier record exists
+  if (!startDateObj || isNaN(startDateObj.getTime())) {
+    startDateObj = new Date();
+  }
+
+  // Normalize startDateObj to midnight local date string YYYY-MM-DD
+  let startYear = startDateObj.getFullYear();
+  let startMonth = String(startDateObj.getMonth() + 1).padStart(2, '0');
+  let startDay = String(startDateObj.getDate()).padStart(2, '0');
+  let startDateStr = `${startYear}-${startMonth}-${startDay}`;
+
+  // If start date is in the future (due to device clock skew), clamp to today
+  if (startDateStr > todayStr) {
+    startDateStr = todayStr;
+  }
+
+  const startMidnight = new Date(startDateStr + 'T00:00:00');
+  const todayMidnight = new Date(todayStr + 'T00:00:00');
+
+  // Exact calendar days on program (Day 1 through Day totalDays, e.g. Sep 18 to Sep 27 = 10 days)
+  const diffTime = Math.max(0, todayMidnight.getTime() - startMidnight.getTime());
+  const totalDays = Math.max(1, Math.round(diffTime / 86400000) + 1);
+
+  // Merge today's completed checklist items into log pool if not already in eatingLogs
+  const allLogs = [...eatingLogs];
+  const completedTodayChecklist = todayChecklist.filter(i => i.completed);
+  completedTodayChecklist.forEach(chk => {
+    const cleanName = (chk.name || '').replace(/^Extra:\s*/i, '').trim().toLowerCase();
+    const alreadyLogged = allLogs.some(
+      l => l.date === todayStr && (l.id === `chk_${chk.id}` || (l.name || '').replace(/^Extra:\s*/i, '').trim().toLowerCase() === cleanName)
+    );
+    if (!alreadyLogged) {
+      const isExtra = chk.isExtra || chk.mealType?.toLowerCase().includes('extra');
+      allLogs.push({
+        id: `chk_${chk.id}`,
+        date: todayStr,
+        type: isExtra ? 'extra' : 'assigned',
+        mealType: isExtra ? 'Extra Food' : chk.mealType,
+        name: chk.name,
+        portion: chk.portion || '1 serving',
+        calories: Number(chk.calories) || 0,
+        protein: Number(chk.protein) || 0,
+        carbs: Number(chk.carbs) || 0,
+        fat: Number(chk.fat) || 0,
+        completedAt: chk.completedAt || 'Today',
+        notes: chk.notes,
+        isExtra
+      });
+    }
+  });
+
+  const targetCalsBase = mealPlan?.targets?.calories || 2000;
+  const days: ChronologicalDayProgress[] = [];
+
+  for (let i = 0; i < totalDays; i++) {
+    const dayNumber = i + 1;
+    const currentDayDate = new Date(startMidnight.getTime() + i * 86400000);
+    const dateStr = currentDayDate.toISOString().split('T')[0];
+    const isToday = dateStr === todayStr;
+
+    // Filter all food logs for this exact date
+    const dayLogs = allLogs.filter(l => l.date === dateStr);
+
+    const caloriesConsumed = dayLogs.reduce((sum, l) => sum + (Number(l.calories) || 0), 0);
+    const proteinConsumed = dayLogs.reduce((sum, l) => sum + (Number(l.protein) || 0), 0);
+    const carbsConsumed = dayLogs.reduce((sum, l) => sum + (Number(l.carbs) || 0), 0);
+    const fatConsumed = dayLogs.reduce((sum, l) => sum + (Number(l.fat) || 0), 0);
+    const assignedCount = dayLogs.filter(l => l.type === 'assigned').length;
+    const extraCount = dayLogs.filter(l => l.type === 'extra' || l.isExtra).length;
+    const mealsLogged = dayLogs.length;
+
+    // Determine target calories for this day
+    let caloriesTarget = targetCalsBase;
+    let plannedMealCount = 4;
+    if (mealPlan?.days && mealPlan.days.length > 0) {
+      const planDayIdx = i % mealPlan.days.length;
+      const planDay = mealPlan.days[planDayIdx];
+      if (planDay?.meals && planDay.meals.length > 0) {
+        plannedMealCount = planDay.meals.length;
+        const planCals = planDay.meals.reduce((sum, m) => sum + (Number(m.calories) || 0), 0);
+        if (planCals > 0) caloriesTarget = planCals;
+      }
+    }
+
+    // Accurate Adherence Percentage
+    let adherencePercentage = 0;
+    if (mealsLogged > 0) {
+      const calRatio = caloriesTarget > 0 ? caloriesConsumed / caloriesTarget : 1;
+      const calAdh = Math.max(0, Math.min(100, Math.round(calRatio * 100)));
+      const mealAdh = Math.min(100, Math.round((assignedCount / plannedMealCount) * 100));
+      adherencePercentage = Math.min(100, Math.round((calAdh * 0.5) + (Math.min(100, mealAdh > 0 ? mealAdh : calAdh) * 0.5)));
+    }
+
+    days.push({
+      dayNumber,
+      date: dateStr,
+      displayDate: currentDayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      fullDate: currentDayDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+      isToday,
+      caloriesConsumed,
+      caloriesTarget,
+      proteinConsumed,
+      carbsConsumed,
+      fatConsumed,
+      mealsLogged,
+      assignedCount,
+      extraCount,
+      adherencePercentage
+    });
+  }
+
+  // Summary Metrics across the exact patient program days
+  const loggedDays = days.filter(d => d.mealsLogged > 0);
+  const loggedDaysCount = loggedDays.length;
+  const consistencyPercentage = Math.round((loggedDaysCount / totalDays) * 100);
+
+  // Overall adherence is the average across active days, or calculated proportionally
+  const overallAdherence = loggedDays.length > 0
+    ? Math.round(loggedDays.reduce((sum, d) => sum + d.adherencePercentage, 0) / loggedDays.length)
+    : 0;
+
+  const startDateFormatted = startMidnight.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
+
+  return {
+    startDate: startDateStr,
+    startDateFormatted,
+    totalDays,
+    currentDayNumber: totalDays,
+    days,
+    overallAdherence,
+    loggedDaysCount,
+    consistencyPercentage
+  };
+}

@@ -27,8 +27,10 @@ import {
   ClinicalNote,
   RecipeDBItem,
   buildClinicalMealPlanFromRecipes,
-  filterRecipesForPatient
+  filterRecipesForPatient,
+  calculatePatientProgramTimeline
 } from '../../services/db';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { 
   ChevronLeft, 
   Calendar, 
@@ -368,10 +370,11 @@ export default function PatientProfileView() {
 
   // Sort dates descending
   const groupedDates = Object.keys(groupedLogs).sort((a, b) => b.localeCompare(a));
-  const assignedTotalCount = combinedEatingLogs.filter(e => e.type === 'assigned').length;
-  const extraTotalCount = combinedEatingLogs.filter(e => e.type === 'extra').length;
-
-  const adherence = profile.adherencePercentage ?? (profile.needsAttention ? 52 : 84);
+  // Chronological day-by-day program timeline (e.g. 10 days if enrolled 10 days ago)
+  const timeline = calculatePatientProgramTimeline(profile, activePlan, combinedEatingLogs);
+  const adherence = timeline.overallAdherence > 0
+    ? timeline.overallAdherence
+    : (profile.adherencePercentage ?? (profile.needsAttention ? 52 : 84));
 
   // Height & Clinical Anthropometrics
   const heightM = (profile.heightCm || 170) / 100;
@@ -584,6 +587,12 @@ export default function PatientProfileView() {
                   <span className="text-stone-400 font-medium">Adherence: </span>
                   <span className={`font-bold ${adherence >= 80 ? 'text-emerald-600' : adherence >= 60 ? 'text-amber-600' : 'text-rose-600'}`}>
                     {adherence}%
+                  </span>
+                </div>
+                <div>
+                  <span className="text-stone-400 font-medium">Care Plan: </span>
+                  <span className="font-bold text-orange-700 bg-orange-50 px-2 py-0.5 rounded text-[11px] border border-orange-200">
+                    Day {timeline.totalDays} ({timeline.totalDays} {timeline.totalDays === 1 ? 'day' : 'days'})
                   </span>
                 </div>
               </div>
@@ -948,6 +957,8 @@ export default function PatientProfileView() {
                   year: 'numeric'
                 });
 
+                const dayInfo = timeline.days.find(d => d.date === dateKey);
+
                 return (
                   <div key={dateKey} className="rounded-xl border border-stone-200/90 overflow-hidden shadow-2xs">
                     {/* Day & Date Header Bar */}
@@ -955,6 +966,7 @@ export default function PatientProfileView() {
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-orange-600" />
                         <h4 className="font-bold text-stone-900 text-sm">
+                          {dayInfo ? <span className="text-orange-700 font-bold mr-1">Day {dayInfo.dayNumber} •</span> : null}
                           {dateLabel}
                         </h4>
                         {isToday && (
@@ -1244,9 +1256,13 @@ export default function PatientProfileView() {
               <p className="text-xs text-emerald-600 font-semibold mt-1">Goal: {profile.targetWeightKg} kg</p>
             </div>
             <div className="p-4 bg-stone-50 rounded-lg border border-stone-200/80">
-              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Estimated 30-Day Adherence</span>
+              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">{timeline.totalDays}-Day Program Adherence</span>
               <p className="text-2xl font-serif font-bold text-stone-900 mt-1">{adherence}%</p>
-              <p className="text-xs text-stone-500 mt-1">Based on logged meals vs plan</p>
+              <p className="text-xs text-stone-500 mt-1">
+                {timeline.loggedDaysCount > 0 
+                  ? `Logged ${timeline.loggedDaysCount} of ${timeline.totalDays} ${timeline.totalDays === 1 ? 'day' : 'days'} (${timeline.consistencyPercentage}% consistency)` 
+                  : 'Based on logged meals vs plan'}
+              </p>
             </div>
             <div className="p-4 bg-stone-50 rounded-lg border border-stone-200/80">
               <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">BMI Status</span>
@@ -1255,8 +1271,75 @@ export default function PatientProfileView() {
             </div>
           </div>
 
+          {/* Daily Adherence Progress Line Chart (Day 1 to Day N) */}
+          <div className="bg-stone-50/70 rounded-xl border border-stone-200/80 p-5 mt-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+              <div>
+                <h4 className="text-sm font-serif font-bold text-stone-900">
+                  Daily Nutrition Adherence (Day 1 – Day {timeline.totalDays})
+                </h4>
+                <p className="text-xs text-stone-500">
+                  Calculated chronologically across {profile.name}'s {timeline.totalDays} {timeline.totalDays === 1 ? 'day' : 'days'} on care plan (Enrolled {timeline.startDateFormatted})
+                </p>
+              </div>
+              <span className="text-xs font-mono font-bold px-2.5 py-1 bg-white border border-stone-200 rounded-md text-stone-800">
+                Avg: {adherence}%
+              </span>
+            </div>
+
+            {timeline.loggedDaysCount > 0 ? (
+              <div className="h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={timeline.days.map(d => ({
+                    day: `Day ${d.dayNumber}`,
+                    shortDate: d.displayDate,
+                    fullDate: d.fullDate,
+                    adherence: d.adherencePercentage,
+                    calories: d.caloriesConsumed,
+                    targetCalories: d.caloriesTarget,
+                    mealsLogged: d.mealsLogged
+                  }))} margin={{ top: 10, right: 15, bottom: 5, left: -15 }}>
+                    <Line 
+                      type="monotone" 
+                      dataKey="adherence" 
+                      stroke="#ea580c" 
+                      strokeWidth={2.5} 
+                      dot={{ r: 3.5, fill: '#ea580c' }}
+                      activeDot={{ r: 6, fill: '#1c1917' }} 
+                    />
+                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" vertical={false} />
+                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                    <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} unit="%" />
+                    <Tooltip 
+                      cursor={{ stroke: '#cbd5e1', strokeWidth: 1.5, strokeDasharray: '3 3' }}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-white p-2.5 rounded-lg border border-stone-200 shadow-sm text-xs">
+                              <p className="font-bold text-stone-900">{data.day} • {data.shortDate}</p>
+                              <p className="text-[10px] text-stone-400 mb-1">{data.fullDate}</p>
+                              <p className="text-orange-700 font-bold">Adherence: {data.adherence}%</p>
+                              <p className="text-stone-600">Calories: {data.calories} / {data.targetCalories} kcal</p>
+                              <p className="text-stone-500">Meals: {data.mealsLogged}</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="py-8 text-center text-xs text-stone-400">
+                Patient has not completed meal logs yet. As logs are recorded, daily adherence from Day 1 to Day {timeline.totalDays} will appear here.
+              </div>
+            )}
+          </div>
+
           {progressRecords.length === 0 ? (
-            <div className="text-center py-8 text-xs text-stone-400">
+            <div className="text-center py-6 text-xs text-stone-400">
               No historical biometric progress entries recorded yet. Weight will automatically track as meals are logged.
             </div>
           ) : (

@@ -8,7 +8,8 @@ import {
   PatientProfile, 
   Query, 
   FoodLog,
-  MealPlan 
+  MealPlan,
+  calculatePatientProgramTimeline 
 } from '../../services/db';
 import { 
   Users, 
@@ -112,14 +113,15 @@ export default function Overview() {
 
   // 2. Low adherence or needs attention clients
   patients.forEach(p => {
-    const adherence = p.adherencePercentage ?? (p.needsAttention ? 45 : 82);
+    const timeline = calculatePatientProgramTimeline(p);
+    const adherence = timeline.overallAdherence > 0 ? timeline.overallAdherence : (p.adherencePercentage ?? (p.needsAttention ? 45 : 82));
     if (adherence < 60 || p.needsAttention) {
       alerts.push({
         id: `adh_${p.id}`,
         type: 'low_adherence',
         patientId: p.id,
         patientName: p.name,
-        message: `Low 7-day adherence (${adherence}%). Skipped recent meal logs or reported symptoms.`,
+        message: `Low adherence (${adherence}% over Day 1–${timeline.totalDays}). Skipped recent meal logs or reported symptoms.`,
         severity: 'medium',
         actionUrl: `/dietician/patients/${p.id}`,
         actionText: 'Open Patient Profile'
@@ -139,8 +141,11 @@ export default function Overview() {
   // Average practice adherence
   const avgAdherence = patients.length > 0
     ? Math.round(
-        patients.reduce((acc, p) => acc + (p.adherencePercentage ?? (p.needsAttention ? 50 : 85)), 0) /
-          patients.length
+        patients.reduce((acc, p) => {
+          const t = calculatePatientProgramTimeline(p);
+          const val = t.overallAdherence > 0 ? t.overallAdherence : (p.adherencePercentage ?? (p.needsAttention ? 50 : 85));
+          return acc + val;
+        }, 0) / patients.length
       )
     : 80;
 
@@ -304,7 +309,7 @@ export default function Overview() {
                 <h2 className="text-sm font-bold text-stone-900 uppercase tracking-wider">
                   Active Client Caseload
                 </h2>
-                <p className="text-xs text-stone-500">Track 7-day adherence, goals, and active nutritional regimens</p>
+                <p className="text-xs text-stone-500">Track active program adherence, goals, and clinical nutritional regimens</p>
               </div>
 
               {/* Filter Tabs */}
@@ -336,14 +341,16 @@ export default function Overview() {
             <div className="divide-y divide-stone-100">
               {patients
                 .filter(p => {
-                  const adh = p.adherencePercentage ?? (p.needsAttention ? 45 : 82);
+                  const t = calculatePatientProgramTimeline(p);
+                  const adh = t.overallAdherence > 0 ? t.overallAdherence : (p.adherencePercentage ?? (p.needsAttention ? 45 : 82));
                   if (filterAdherence === 'attention') return adh < 70 || p.needsAttention;
                   if (filterAdherence === 'optimal') return adh >= 70 && !p.needsAttention;
                   return true;
                 })
                 .slice(0, 6)
                 .map(patient => {
-                  const adh = patient.adherencePercentage ?? (patient.needsAttention ? 48 : 84);
+                  const timeline = calculatePatientProgramTimeline(patient);
+                  const adh = timeline.overallAdherence > 0 ? timeline.overallAdherence : (patient.adherencePercentage ?? (patient.needsAttention ? 48 : 84));
                   return (
                     <div key={patient.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-stone-50/70 px-2 rounded-lg transition-colors">
                       <div className="flex items-center gap-3">
@@ -363,7 +370,7 @@ export default function Overview() {
                             </span>
                           </div>
                           <p className="text-[11px] text-stone-500 mt-0.5">
-                            {patient.goals?.[0] || 'General Nutrition'} • Target: {patient.targetWeightKg}kg
+                            Day {timeline.totalDays} on Care Plan • Target: {patient.targetWeightKg}kg
                           </p>
                         </div>
                       </div>
@@ -372,7 +379,7 @@ export default function Overview() {
                       <div className="flex items-center gap-4">
                         <div className="w-28 text-right">
                           <div className="flex items-center justify-end gap-1.5 text-xs font-semibold">
-                            <span className="text-stone-400 text-[11px]">Adherence:</span>
+                            <span className="text-stone-400 text-[11px]">Day 1–{timeline.totalDays}:</span>
                             <span className={adh >= 80 ? 'text-emerald-700' : adh >= 60 ? 'text-amber-700' : 'text-rose-700'}>
                               {adh}%
                             </span>

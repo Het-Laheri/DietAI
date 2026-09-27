@@ -8,6 +8,7 @@ import {
   getAllPatientEatingLogs,
   getProgressRecords,
   ProgressRecord,
+  calculatePatientProgramTimeline,
   PatientProfile, 
   MealPlan,
   PatientWeekPlan,
@@ -252,27 +253,27 @@ export default function Progress() {
 
   const totalMealsLogged = allCompletedItems.length;
   const uniqueLoggedDates = Array.from(new Set(allCompletedItems.map(l => l.date)));
-  const daysLoggedCount = uniqueLoggedDates.length;
+  // Chronological day-by-day program timeline (e.g. reflects 10 days if enrolled 10 days ago, not arbitrary weeks)
+  const timeline = calculatePatientProgramTimeline(
+    patientProfile,
+    mealPlan,
+    eatingLogs,
+    todayChecklist
+  );
 
-  // Real 7-day consistency calculation
-  const today = new Date();
-  const past7DaysStr = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    return d.toISOString().split('T')[0];
-  });
-  const loggedDaysPast7 = past7DaysStr.filter(dateStr => uniqueLoggedDates.includes(dateStr)).length;
-  const mealPlanConsistency = Math.round((loggedDaysPast7 / 7) * 100);
+  const hasLogs = totalMealsLogged > 0 || timeline.loggedDaysCount > 0;
 
-  const hasLogs = totalMealsLogged > 0;
-
-  // Generate weekly trend data from actual recorded logs
-  const weeklyTrendData = hasLogs ? [
-    { week: 'Week 1', adherence: Math.min(100, Math.round((totalMealsLogged / 7) * 35)) },
-    { week: 'Week 2', adherence: Math.min(100, Math.round((totalMealsLogged / 14) * 65)) },
-    { week: 'Week 3', adherence: Math.min(100, Math.round((totalMealsLogged / 21) * 85)) },
-    { week: 'Current', adherence: Math.max(mealPlanConsistency, caloriePct > 0 ? Math.min(100, caloriePct) : 20) },
-  ] : [];
+  // Chronological chart data: reflects Day 1 through Day N
+  const dailyChartData = timeline.days.map(d => ({
+    day: `Day ${d.dayNumber}`,
+    dayNum: d.dayNumber,
+    shortDate: d.displayDate,
+    fullDate: d.fullDate,
+    adherence: d.adherencePercentage,
+    calories: d.caloriesConsumed,
+    targetCalories: d.caloriesTarget,
+    mealsLogged: d.mealsLogged
+  }));
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto pb-24 md:pb-8">
@@ -280,9 +281,14 @@ export default function Progress() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-2xl md:text-3xl font-serif font-bold text-stone-900 tracking-tight">Your Nutrition & Goal Progress</h1>
-          <p className="text-stone-500 text-xs md:text-sm mt-1">
-            Real-time daily calorie intake tracking, macronutrient targets, and AI meal logs.
-          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+              Day {timeline.totalDays} of Care Plan
+            </span>
+            <span className="text-stone-500 text-xs">
+              Enrolled {timeline.startDateFormatted} • Chronological Daily Analytics
+            </span>
+          </div>
         </div>
         <Link 
           to="/patient/scanner"
@@ -529,31 +535,37 @@ export default function Progress() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-white p-6 border border-stone-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs uppercase tracking-widest font-bold text-stone-500">Meal Plan Consistency</span>
+            <span className="text-xs uppercase tracking-widest font-bold text-stone-500">Program Consistency</span>
             <Flame className="w-5 h-5 text-amber-500" />
           </div>
-          <p className="text-3xl font-serif font-bold text-stone-900">{mealPlanConsistency}%</p>
+          <p className="text-3xl font-serif font-bold text-stone-900">{timeline.consistencyPercentage}%</p>
           <p className="text-xs text-stone-500 mt-1">
-            {hasLogs ? `Logged ${loggedDaysPast7}/7 days this week` : 'No logs recorded yet'}
+            {timeline.loggedDaysCount > 0 
+              ? `Logged ${timeline.loggedDaysCount} of ${timeline.totalDays} ${timeline.totalDays === 1 ? 'day' : 'days'} on program` 
+              : 'No logs recorded yet'}
           </p>
         </div>
 
         <div className="bg-white p-6 border border-stone-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs uppercase tracking-widest font-bold text-stone-500">Dietary Type</span>
-            <Award className="w-5 h-5 text-brand-600" />
+            <span className="text-xs uppercase tracking-widest font-bold text-stone-500">Program Duration</span>
+            <Calendar className="w-5 h-5 text-brand-600" />
           </div>
-          <p className="text-2xl font-serif font-bold text-stone-900">{patientProfile?.dietaryType || 'Vegetarian'}</p>
-          <p className="text-xs text-stone-500 mt-1">Assigned by clinical team</p>
+          <p className="text-3xl font-serif font-bold text-stone-900">Day {timeline.totalDays}</p>
+          <p className="text-xs text-stone-500 mt-1">
+            Enrolled {timeline.startDateFormatted}
+          </p>
         </div>
 
         <div className="bg-white p-6 border border-stone-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs uppercase tracking-widest font-bold text-stone-500">Total Logged Meals</span>
-            <Calendar className="w-5 h-5 text-stone-400" />
+            <Award className="w-5 h-5 text-amber-500" />
           </div>
           <p className="text-3xl font-serif font-bold text-stone-900">{totalMealsLogged}</p>
-          <p className="text-xs text-stone-500 mt-1">{daysLoggedCount} unique recording {daysLoggedCount === 1 ? 'day' : 'days'}</p>
+          <p className="text-xs text-stone-500 mt-1">
+            {uniqueLoggedDates.length} unique recording {uniqueLoggedDates.length === 1 ? 'day' : 'days'}
+          </p>
         </div>
       </div>
 
@@ -596,6 +608,7 @@ export default function Progress() {
             {allCompletedItems.map((log) => {
               const isExtra = log.isExtra || log.type === 'extra';
               const isScanned = log.type === 'scanned';
+              const dayInfo = timeline.days.find(d => d.date === log.date);
 
               return (
                 <div key={log.id} className="pt-4 first:pt-0">
@@ -634,8 +647,10 @@ export default function Progress() {
                             </span>
                           )}
 
-                          <span className="text-[11px] text-stone-400 font-medium flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> {log.completedAt || log.date}
+                          <span className="text-[11px] text-stone-500 font-medium flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-stone-400" />
+                            {dayInfo ? <strong className="text-orange-700 font-bold">Day {dayInfo.dayNumber} • </strong> : null}
+                            {log.completedAt || log.date}
                           </span>
                         </div>
 
@@ -676,26 +691,85 @@ export default function Progress() {
         )}
       </div>
 
-      {/* ─── ADHERENCE TREND CHART ────────────────────────────────────────── */}
+      {/* ─── CHRONOLOGICAL DAILY ADHERENCE TREND CHART ────────────────────── */}
       <div className="bg-white p-6 border border-stone-200 shadow-sm">
-        <h2 className="text-lg font-serif font-bold text-stone-900 mb-1">Weekly Nutrition Adherence (%)</h2>
-        <p className="text-xs text-stone-500 mb-6">Real-time progress generated from your daily logged food intake</p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+          <div>
+            <h2 className="text-lg font-serif font-bold text-stone-900 mb-0.5">
+              Daily Nutrition Adherence (Day 1 – Day {timeline.totalDays})
+            </h2>
+            <p className="text-xs text-stone-500">
+              Chronological daily adherence calculated across your {timeline.totalDays} {timeline.totalDays === 1 ? 'day' : 'days'} on the program (Started {timeline.startDateFormatted})
+            </p>
+          </div>
+          <div className="flex items-center gap-3 text-xs font-semibold">
+            <span className="inline-flex items-center gap-1.5 text-stone-600">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#46655a]" /> Daily Adherence (%)
+            </span>
+            <span className="px-2.5 py-1 bg-stone-100 rounded-md font-mono text-stone-800">
+              Avg: {timeline.overallAdherence}%
+            </span>
+          </div>
+        </div>
         
-        {hasLogs ? (
+        {timeline.loggedDaysCount > 0 ? (
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={weeklyTrendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                <Line type="monotone" dataKey="adherence" stroke="#46655a" strokeWidth={3} activeDot={{ r: 8 }} />
+              <LineChart data={dailyChartData} margin={{ top: 10, right: 20, bottom: 5, left: -10 }}>
+                <Line 
+                  type="monotone" 
+                  dataKey="adherence" 
+                  stroke="#46655a" 
+                  strokeWidth={3} 
+                  dot={{ r: 4, fill: '#46655a' }}
+                  activeDot={{ r: 7, fill: '#f97316' }} 
+                />
                 <CartesianGrid stroke="#f1f5f9" strokeDasharray="5 5" vertical={false} />
-                <XAxis dataKey="week" axisLine={false} tickLine={false} tick={{fill: '#94a3b8'}} />
-                <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{fill: '#94a3b8'}} />
-                <Tooltip cursor={{stroke: '#e2e8f0', strokeWidth: 2}} contentStyle={{borderRadius: '4px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)'}} />
+                <XAxis 
+                  dataKey="day" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#64748b', fontSize: 11 }} 
+                />
+                <YAxis 
+                  domain={[0, 100]} 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#94a3b8', fontSize: 11 }} 
+                  unit="%"
+                />
+                <Tooltip 
+                  cursor={{ stroke: '#cbd5e1', strokeWidth: 1.5, strokeDasharray: '3 3' }} 
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-white p-3 rounded-lg border border-stone-200 shadow-md text-xs">
+                          <p className="font-bold text-stone-900">{data.day} • {data.shortDate}</p>
+                          <p className="text-[11px] text-stone-400 mb-1.5">{data.fullDate}</p>
+                          <div className="space-y-1">
+                            <p className="text-brand-800 font-bold">
+                              Adherence: <span className="font-mono">{data.adherence}%</span>
+                            </p>
+                            <p className="text-stone-600">
+                              Intake: <span className="font-mono font-bold text-stone-800">{data.calories}</span> / {data.targetCalories} kcal
+                            </p>
+                            <p className="text-stone-500">
+                              Meals Logged: <strong className="text-stone-700">{data.mealsLogged}</strong>
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="py-8 text-center text-stone-400 text-xs">
-            Start logging your meals to see your weekly adherence curve.
+          <div className="py-12 text-center text-stone-400 text-xs">
+            Start checking off meals in your Notepad to see your daily adherence curve across your {timeline.totalDays} {timeline.totalDays === 1 ? 'day' : 'days'}.
           </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getMealPlans, getFoodLogs, getQueries, getPatientProfile, getPatientWeekPlan, getPatientChecklist, ChecklistMealItem, MealPlan, FoodLog, Query, PatientProfile, PatientWeekPlan } from '../../services/db';
+import { getMealPlans, getFoodLogs, getQueries, getPatientProfile, getPatientWeekPlan, getPatientChecklist, calculatePatientProgramTimeline, ChecklistMealItem, MealPlan, FoodLog, Query, PatientProfile, PatientWeekPlan } from '../../services/db';
 import { isPatientSubscribed, getLocalSubscription } from '../../services/subscription';
 import { 
   Home, 
@@ -131,6 +131,9 @@ export default function PatientOverview() {
   // Get checked items count
   const checkedItemsCount = completedChecklist.length;
 
+  // Chronological program timeline
+  const timeline = calculatePatientProgramTimeline(patientData || profile, activePlan);
+
   const totalAssignedMeals = (() => {
     const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const todayDay = DAYS_OF_WEEK[new Date().getDay()];
@@ -139,13 +142,7 @@ export default function PatientOverview() {
       if (todaysEntries.length > 0) return todaysEntries.length;
     }
     if (activePlan && activePlan.status === 'published' && activePlan.days && activePlan.days.length > 0) {
-      let dayIndex = 0;
-      if (activePlan.startDate) {
-        const start = new Date(activePlan.startDate).getTime();
-        const now = new Date(todayStr).getTime();
-        const diffDays = Math.max(0, Math.floor((now - start) / 86400000));
-        dayIndex = Math.min(diffDays % activePlan.days.length, activePlan.days.length - 1);
-      }
+      const dayIndex = (timeline.totalDays - 1) % activePlan.days.length;
       return activePlan.days[dayIndex]?.meals?.length || activePlan.days[0]?.meals?.length || 0;
     }
     return 0;
@@ -162,9 +159,14 @@ export default function PatientOverview() {
       {/* Top Welcome Banner */}
       <div className="bg-white rounded-xl border border-stone-200/90 p-6 md:p-7 shadow-xs relative flex flex-col md:flex-row md:items-center justify-between gap-5">
         <div>
-          <span className="text-[11px] font-semibold text-stone-500 bg-stone-100 border border-stone-200 px-2.5 py-0.5 rounded-md inline-block mb-2">
-            {formattedDate}
-          </span>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="text-[11px] font-semibold text-stone-500 bg-stone-100 border border-stone-200 px-2.5 py-0.5 rounded-md inline-block">
+              {formattedDate}
+            </span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-orange-800 bg-orange-100 border border-orange-200 px-2.5 py-0.5 rounded-md inline-block">
+              Day {timeline.totalDays} of Care Plan
+            </span>
+          </div>
           <h1 className="text-xl md:text-2xl font-serif font-bold text-stone-900 tracking-tight">
             Welcome back, {profile?.name.split(' ')[0] || 'Patient'}
           </h1>

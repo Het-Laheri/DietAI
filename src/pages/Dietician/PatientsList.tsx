@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getPatients, PatientProfile } from '../../services/db';
+import { getPatients, PatientProfile, calculatePatientProgramTimeline } from '../../services/db';
 import { Link } from 'react-router-dom';
 import { 
   Search, 
@@ -144,14 +144,15 @@ export default function PatientsList() {
                 <th className="px-6 py-4">Client Name & Contact</th>
                 <th className="px-6 py-4">Diet & Clinical Goals</th>
                 <th className="px-6 py-4">Current Weight / BMI</th>
-                <th className="px-6 py-4">7-Day Adherence</th>
+                <th className="px-6 py-4">Program Adherence</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100 text-xs">
               {filtered.map(p => {
-                const adh = p.adherencePercentage ?? (p.needsAttention ? 48 : 84);
+                const timeline = calculatePatientProgramTimeline(p);
+                const adh = timeline.overallAdherence > 0 ? timeline.overallAdherence : (p.adherencePercentage ?? (p.needsAttention ? 48 : 84));
                 const heightM = (p.heightCm || 170) / 100;
                 const currentW = p.currentWeightKg || 70;
                 const bmi = (currentW / (heightM * heightM)).toFixed(1);
@@ -171,6 +172,9 @@ export default function PatientsList() {
                             {p.name}
                           </Link>
                           <div className="text-[11px] text-stone-400 mt-0.5">{p.email}</div>
+                          <div className="text-[10px] text-orange-700 font-semibold mt-0.5">
+                            Day {timeline.totalDays} on Care Plan
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -199,11 +203,16 @@ export default function PatientsList() {
                             style={{ width: `${adh}%` }}
                           />
                         </div>
-                        <span className={`font-bold ${
-                          adh >= 80 ? 'text-emerald-600' : adh >= 60 ? 'text-amber-600' : 'text-red-600'
-                        }`}>
-                          {adh}%
-                        </span>
+                        <div>
+                          <span className={`font-bold ${
+                            adh >= 80 ? 'text-emerald-600' : adh >= 60 ? 'text-amber-600' : 'text-red-600'
+                          }`}>
+                            {adh}%
+                          </span>
+                          <div className="text-[10px] text-stone-400 font-medium">
+                            Day 1–{timeline.totalDays}
+                          </div>
+                        </div>
                       </div>
                     </td>
 

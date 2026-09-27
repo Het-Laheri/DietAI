@@ -14,7 +14,8 @@ import {
   deleteFoodLog,
   PatientWeekPlan, 
   RecipeDBItem, 
-  WeekDay 
+  WeekDay,
+  calculatePatientProgramTimeline
 } from '../../services/db';
 import { isPatientSubscribed } from '../../services/subscription';
 import SubscriptionPaywall from '../../components/SubscriptionPaywall';
@@ -140,13 +141,8 @@ export default function MealNotepad() {
 
         // 2. If no week entries, check published standard MealPlan assigned by Dietician
         if (initialList.length === 0 && published && published.days && published.days.length > 0) {
-          let dayIndex = 0;
-          if (published.startDate) {
-            const start = new Date(published.startDate).getTime();
-            const now = new Date(todayStr).getTime();
-            const diffDays = Math.max(0, Math.floor((now - start) / 86400000));
-            dayIndex = Math.min(diffDays % published.days.length, published.days.length - 1);
-          }
+          const timeline = calculatePatientProgramTimeline(profile, published);
+          const dayIndex = (timeline.totalDays - 1) % published.days.length;
           const dayPlan = published.days[dayIndex] || published.days[0];
           initialList = dayPlan.meals.map((m, idx) => {
             const cleanType = m.type.toLowerCase().replace(/\s+/g, '_');
@@ -441,6 +437,7 @@ export default function MealNotepad() {
 
   const completedCount = completedItems.length;
   const isOverTarget = totalCaloriesTracked > targetCalories;
+  const timeline = calculatePatientProgramTimeline(profile, activePlan);
 
   const formattedDate = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -477,12 +474,16 @@ export default function MealNotepad() {
               <CheckSquare className="w-4 h-4" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[10px] font-mono tracking-wider text-orange-400 uppercase font-semibold">
                   CLINICAL NUTRITION SCHEDULE
                 </span>
                 <span className="text-stone-500 text-[10px]">•</span>
                 <span className="text-stone-300 text-[11px] font-mono">{formattedDate}</span>
+                <span className="text-stone-500 text-[10px]">•</span>
+                <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/40 text-[10px] font-bold uppercase tracking-wider">
+                  Day {timeline.totalDays} of Care Plan
+                </span>
               </div>
               <h1 className="text-base md:text-lg font-bold text-white tracking-tight">
                 Today's Assigned Meal To-Do Checklist

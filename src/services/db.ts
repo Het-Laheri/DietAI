@@ -1,4 +1,5 @@
 import { collection, doc, getDoc, getDocs, setDoc, addDoc, query, where, updateDoc, orderBy, serverTimestamp, deleteDoc } from 'firebase/firestore';
+export { db, auth } from './firebase';
 import { db, auth } from './firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 
@@ -1317,6 +1318,24 @@ export interface ChecklistMealItem {
   ingredients?: string[];
   completed: boolean;
   completedAt?: string;
+  isExtra?: boolean;
+}
+
+export interface PatientEatingLogEntry {
+  id: string;
+  date: string;
+  type: 'assigned' | 'extra' | 'scanned';
+  mealType: string;
+  name: string;
+  portion: string;
+  calories: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  completedAt?: string;
+  imageUrl?: string;
+  notes?: string;
+  isExtra?: boolean;
 }
 
 export async function savePatientChecklist(patientId: string, date: string, items: ChecklistMealItem[]) {
@@ -1340,4 +1359,60 @@ export async function getPatientChecklist(patientId: string, date: string): Prom
     console.warn('Notice: getPatientChecklist failed:', err);
   }
   return [];
+}
+
+export async function getAllPatientEatingLogs(patientId: string): Promise<PatientEatingLogEntry[]> {
+  try {
+    const q = query(collection(db, 'food_logs'), where('patientId', '==', patientId));
+    const snap = await getDocs(q);
+    const entries: PatientEatingLogEntry[] = [];
+
+    snap.docs.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.type === 'checklist') {
+        const items = (data.items || []) as ChecklistMealItem[];
+        items.filter(i => i.completed).forEach(item => {
+          const isExtra = item.isExtra || item.mealType?.toLowerCase().includes('extra') || item.mealType === 'CUSTOM DIETARY NOTE';
+          entries.push({
+            id: `${docSnap.id}_${item.id}`,
+            date: data.date,
+            type: isExtra ? 'extra' : 'assigned',
+            mealType: isExtra ? 'Extra Food' : item.mealType,
+            name: item.name,
+            portion: item.portion || '1 serving',
+            calories: Number(item.calories) || 0,
+            protein: Number(item.protein) || 0,
+            carbs: Number(item.carbs) || 0,
+            fat: Number(item.fat) || 0,
+            completedAt: item.completedAt || 'Completed',
+            notes: item.notes,
+            isExtra
+          });
+        });
+      } else {
+        const isExtra = data.mealType?.toLowerCase().includes('extra') || data.isExtra || data.source === 'quick_log';
+        entries.push({
+          id: docSnap.id,
+          date: data.date,
+          type: isExtra ? 'extra' : (data.imageUrl ? 'scanned' : 'assigned'),
+          mealType: isExtra ? 'Extra Food' : (data.mealType || 'Meal'),
+          name: data.description || data.items?.[0]?.name || 'Logged Food',
+          portion: data.items?.[0]?.portion || data.userNotes || '1 serving',
+          calories: Number(data.nutrition?.calories) || 0,
+          protein: Number(data.nutrition?.protein) || 0,
+          carbs: Number(data.nutrition?.carbs) || 0,
+          fat: Number(data.nutrition?.fat) || 0,
+          completedAt: data.completedAt || (data.createdAt?.toDate ? data.createdAt.toDate().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : undefined),
+          imageUrl: data.imageUrl,
+          notes: data.userNotes,
+          isExtra
+        });
+      }
+    });
+
+    return entries;
+  } catch (err) {
+    console.warn('getAllPatientEatingLogs error:', err);
+    return [];
+  }
 }

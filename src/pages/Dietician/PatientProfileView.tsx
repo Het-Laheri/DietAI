@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { collection, doc, query, where, onSnapshot } from 'firebase/firestore';
 import {
+  db,
   getPatientProfile, 
   getMealPlans, 
   saveMealPlan, 
@@ -12,7 +14,10 @@ import {
   addClinicalNote,
   getClinicalNotes,
   deleteClinicalNote,
-  getStoredRecipesFromDB, getPatientChecklist, ChecklistMealItem,
+  getStoredRecipesFromDB, 
+  getPatientChecklist, 
+  ChecklistMealItem,
+  PatientEatingLogEntry,
   PatientProfile, 
   MealPlan, 
   Meal,
@@ -58,7 +63,8 @@ import {
   Wand2,
   Scale,
   Stethoscope,
-  Briefcase
+  Briefcase,
+  Camera
 } from 'lucide-react';
 
 type ActiveTab = 'overview' | 'food_logs' | 'meal_plans' | 'progress' | 'chat' | 'notes' | 'reports';
@@ -72,6 +78,7 @@ export default function PatientProfileView() {
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
   const [foodLogs, setFoodLogs] = useState<FoodLog[]>([]);
   const [todayChecklist, setTodayChecklist] = useState<ChecklistMealItem[]>([]);
+  const [allEatingLogs, setAllEatingLogs] = useState<PatientEatingLogEntry[]>([]);
   const [progressRecords, setProgressRecords] = useState<ProgressRecord[]>([]);
   const [queries, setQueries] = useState<Query[]>([]);
   const [clinicalNotes, setClinicalNotes] = useState<ClinicalNote[]>([]);
@@ -97,20 +104,22 @@ export default function PatientProfileView() {
   // Progress time filter
   const [progressTimeframe, setProgressTimeframe] = useState<'7d' | '30d' | 'all'>('30d');
 
-  // Load all client data as the Single Source of Truth
+  // Load all client data & setup Real-time Listeners
   useEffect(() => {
+    if (!id) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+
     async function loadAllClientData() {
-      if (!id) return;
       setLoading(true);
       try {
         const [p, plans, logs, prog, qs, notes, checklist] = await Promise.all([
-          getPatientProfile(id),
-          getMealPlans(id),
-          getAllFoodLogsForPatient(id),
-          getProgressRecords(id),
-          getQueries(undefined, id),
-          getClinicalNotes(id),
-          getPatientChecklist(id, new Date().toISOString().split('T')[0])
+          getPatientProfile(id!),
+          getMealPlans(id!),
+          getAllFoodLogsForPatient(id!),
+          getProgressRecords(id!),
+          getQueries(undefined, id!),
+          getClinicalNotes(id!),
+          getPatientChecklist(id!, todayStr)
         ]);
 
         setProfile(p);
@@ -119,7 +128,7 @@ export default function PatientProfileView() {
         setProgressRecords(prog);
         setQueries(qs);
         setClinicalNotes(notes);
-        setTodayChecklist(checklist || []); // arguments[0] is the Promise.all result array
+        setTodayChecklist(checklist || []);
       } catch (err: any) {
         console.error('Failed to load complete patient profile dossier:', err);
         setLoadError(err.message || String(err));
@@ -130,11 +139,85 @@ export default function PatientProfileView() {
 
     loadAllClientData();
 
+    // 1. Real-time checklist listener for today (instant checkmarks & extra food sync)
+    const checklistRef = doc(db, 'food_logs', `checklist_${id}_${todayStr}`);
+    const unsubChecklist = onSnapshot(checklistRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const items = (docSnap.data().items || []) as ChecklistMealItem[];
+        setTodayChecklist(items);
+      }
+    }, (err) => {
+      console.warn('Real-time checklist listener note:', err);
+    });
+
+    // 2. Real-time food logs listener (all logs & extra items across history)
+    const foodLogsQuery = query(collection(db, 'food_logs'), where('patientId', '==', id));
+    const unsubFoodLogs = onSnapshot(foodLogsQuery, (snap) => {
+      const logs = snap.docs
+        .filter(d => d.data().type !== 'checklist')
+        .map(d => ({ ...d.data(), id: d.id } as FoodLog))
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      setFoodLogs(logs);
+
+      // Compile chronological eating logs
+      const compiled: PatientEatingLogEntry[] = [];
+      snap.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.type === 'checklist') {
+          const items = (data.items || []) as ChecklistMealItem[];
+          items.filter(i => i.completed).forEach(item => {
+            const isExtra = item.isExtra || item.mealType?.toLowerCase().includes('extra') || item.mealType === 'CUSTOM DIETARY NOTE';
+            compiled.push({
+              id: `${docSnap.id}_${item.id}`,
+              date: data.date,
+              type: isExtra ? 'extra' : 'assigned',
+              mealType: isExtra ? 'Extra Food' : item.mealType,
+              name: item.name,
+              portion: item.portion || '1 serving',
+              calories: Number(item.calories) || 0,
+              protein: Number(item.protein) || 0,
+              carbs: Number(item.carbs) || 0,
+              fat: Number(item.fat) || 0,
+              completedAt: item.completedAt || 'Completed',
+              notes: item.notes,
+              isExtra
+            });
+          });
+        } else {
+          const isExtra = data.mealType?.toLowerCase().includes('extra') || data.isExtra || data.source === 'quick_log';
+          compiled.push({
+            id: docSnap.id,
+            date: data.date,
+            type: isExtra ? 'extra' : (data.imageUrl ? 'scanned' : 'assigned'),
+            mealType: isExtra ? 'Extra Food' : (data.mealType || 'Meal'),
+            name: data.description || data.items?.[0]?.name || 'Logged Food',
+            portion: data.items?.[0]?.portion || data.userNotes || '1 serving',
+            calories: Number(data.nutrition?.calories) || 0,
+            protein: Number(data.nutrition?.protein) || 0,
+            carbs: Number(data.nutrition?.carbs) || 0,
+            fat: Number(data.nutrition?.fat) || 0,
+            completedAt: data.completedAt || (data.createdAt?.toDate ? data.createdAt.toDate().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : undefined),
+            imageUrl: data.imageUrl,
+            notes: data.userNotes,
+            isExtra
+          });
+        }
+      });
+      setAllEatingLogs(compiled);
+    }, (err) => {
+      console.warn('Real-time food logs listener note:', err);
+    });
+
     const handleNotesEvent = () => {
       if (id) getClinicalNotes(id).then(setClinicalNotes);
     };
     window.addEventListener('nutrisnap:notes_change', handleNotesEvent);
-    return () => window.removeEventListener('nutrisnap:notes_change', handleNotesEvent);
+
+    return () => {
+      unsubChecklist();
+      unsubFoodLogs();
+      window.removeEventListener('nutrisnap:notes_change', handleNotesEvent);
+    };
   }, [id]);
 
   if (loading) {
@@ -162,7 +245,7 @@ export default function PatientProfileView() {
     );
   }
 
-  // Clinical Computations
+  // Clinical Computations & Real-Time Sync Calculations
   const activePlan = mealPlans.find(p => p.status === 'published') || mealPlans[0];
   const targetCalories = activePlan?.targets?.calories || 2000;
   const targetProtein = activePlan?.targets?.protein || 90;
@@ -170,11 +253,74 @@ export default function PatientProfileView() {
   const targetFat = activePlan?.targets?.fat || 55;
 
   const todayStr = new Date().toISOString().split('T')[0];
+
+  // 1. Completed checklist items for today (both assigned meals and extra items)
+  const completedChecklist = todayChecklist.filter(i => i.completed);
+  const checklistCalories = completedChecklist.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+  const checklistProtein = completedChecklist.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
+  const checklistCarbs = completedChecklist.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
+  const checklistFat = completedChecklist.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
+
+  const assignedCompleted = completedChecklist.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
+  const extraCompleted = completedChecklist.filter(i => i.isExtra || i.mealType?.toLowerCase().includes('extra'));
+  const assignedCalories = assignedCompleted.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+  const extraCalories = extraCompleted.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+
+  // 2. Today's scanned logs (deduplicated against checklist items)
   const todayLogs = foodLogs.filter(l => l.date === todayStr);
-  const todayCalories = todayLogs.reduce((sum, l) => sum + (l.nutrition?.calories || 0), 0);
-  const todayProtein = todayLogs.reduce((sum, l) => sum + (l.nutrition?.protein || 0), 0);
-  const todayCarbs = todayLogs.reduce((sum, l) => sum + (l.nutrition?.carbs || 0), 0);
-  const todayFat = todayLogs.reduce((sum, l) => sum + (l.nutrition?.fat || 0), 0);
+  const uniqueScannedLogs = todayLogs.filter(l => 
+    !completedChecklist.some(c => c.name.toLowerCase() === (l.description || '').toLowerCase())
+  );
+  const scanCalories = uniqueScannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.calories) || 0), 0);
+  const scanProtein = uniqueScannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.protein) || 0), 0);
+  const scanCarbs = uniqueScannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.carbs) || 0), 0);
+  const scanFat = uniqueScannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.fat) || 0), 0);
+
+  // Grand total today consumed
+  const todayCalories = checklistCalories + scanCalories;
+  const todayProtein = checklistProtein + scanProtein;
+  const todayCarbs = checklistCarbs + scanCarbs;
+  const todayFat = checklistFat + scanFat;
+  const totalItemsConsumedToday = completedChecklist.length + uniqueScannedLogs.length;
+
+  // Group eating logs chronologically by date
+  const combinedEatingLogs: PatientEatingLogEntry[] = [...allEatingLogs];
+  
+  // Make sure today's completed checklist items are included in combinedEatingLogs
+  completedChecklist.forEach(item => {
+    const isExtra = item.isExtra || item.mealType?.toLowerCase().includes('extra') || item.mealType === 'CUSTOM DIETARY NOTE';
+    const entryId = `today_checklist_${item.id}`;
+    if (!combinedEatingLogs.some(e => e.date === todayStr && (e.name.toLowerCase() === item.name.toLowerCase() || e.id.includes(item.id)))) {
+      combinedEatingLogs.push({
+        id: entryId,
+        date: todayStr,
+        type: isExtra ? 'extra' : 'assigned',
+        mealType: isExtra ? 'Extra Food' : item.mealType,
+        name: item.name,
+        portion: item.portion || '1 serving',
+        calories: Number(item.calories) || 0,
+        protein: Number(item.protein) || 0,
+        carbs: Number(item.carbs) || 0,
+        fat: Number(item.fat) || 0,
+        completedAt: item.completedAt || 'Completed',
+        notes: item.notes,
+        isExtra
+      });
+    }
+  });
+
+  // Group by date
+  const groupedLogs: Record<string, PatientEatingLogEntry[]> = {};
+  combinedEatingLogs.forEach(entry => {
+    const d = entry.date || todayStr;
+    if (!groupedLogs[d]) groupedLogs[d] = [];
+    groupedLogs[d].push(entry);
+  });
+
+  // Sort dates descending
+  const groupedDates = Object.keys(groupedLogs).sort((a, b) => b.localeCompare(a));
+  const assignedTotalCount = combinedEatingLogs.filter(e => e.type === 'assigned').length;
+  const extraTotalCount = combinedEatingLogs.filter(e => e.type === 'extra').length;
 
   const adherence = profile.adherencePercentage ?? (profile.needsAttention ? 52 : 84);
 
@@ -430,7 +576,7 @@ export default function PatientProfileView() {
         <div className="flex items-center gap-1.5 overflow-x-auto mt-5 pt-3 border-t border-stone-100 scrollbar-none">
           {[
             { id: 'overview', label: 'Overview', icon: User },
-            { id: 'food_logs', label: `Food Logs (${foodLogs.length})`, icon: Utensils },
+            { id: 'food_logs', label: `Food Logs (${allEatingLogs.length || foodLogs.length})`, icon: Utensils },
             { id: 'meal_plans', label: `Meal Plans (${mealPlans.length})`, icon: ChefHat },
             { id: 'progress', label: 'Progress & Trends', icon: Activity },
             { id: 'chat', label: `Consultation (${queries.length})`, icon: MessageSquare },
@@ -572,43 +718,71 @@ export default function PatientProfileView() {
             </div>
           </div>
 
-          {/* 3. Calorie & Macro Target Compliance */}
+          {/* 3. Real-Time Caloric & Macro Target Compliance */}
           <div className="bg-white rounded-xl border border-stone-200/90 p-5 shadow-xs space-y-4">
-            <h3 className="font-serif font-bold text-stone-900 text-sm flex items-center gap-2">
-              <Target className="w-4 h-4 text-orange-600" />
-              Today's Caloric & Macro Compliance
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif font-bold text-stone-900 text-sm flex items-center gap-2">
+                <Target className="w-4 h-4 text-orange-600" />
+                Today's Caloric & Macro Compliance
+              </h3>
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Sync
+              </span>
+            </div>
 
             <div>
               <div className="flex justify-between items-baseline mb-1.5 text-xs">
-                <span className="font-bold text-stone-800">{todayCalories} kcal consumed</span>
-                <span className="text-stone-400">Target: {targetCalories} kcal</span>
+                <div>
+                  <span className="font-bold text-stone-900 text-sm font-mono">{todayCalories} kcal</span>
+                  <span className="text-stone-500 ml-1">consumed</span>
+                </div>
+                <span className="text-stone-400 font-medium">Target: {targetCalories} kcal</span>
               </div>
-              <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
+
+              {/* Segmented Dual Bar */}
+              <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden flex border border-stone-200/70 p-0.5">
                 <div 
-                  className="bg-orange-500 h-full rounded-full transition-all"
-                  style={{ width: `${Math.min(100, Math.round((todayCalories / targetCalories) * 100))}%` }}
+                  className="bg-emerald-500 h-full rounded-l-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.round((assignedCalories / targetCalories) * 100))}%` }}
+                  title={`Assigned Meals: ${assignedCalories} kcal`}
                 />
+                <div 
+                  className="bg-amber-500 h-full transition-all duration-500 rounded-r-full"
+                  style={{ width: `${Math.min(100 - Math.min(100, Math.round((assignedCalories / targetCalories) * 100)), Math.round((extraCalories / targetCalories) * 100))}%` }}
+                  title={`Extra Food: ${extraCalories} kcal`}
+                />
+              </div>
+
+              {/* Breakdown tags */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[10px]">
+                <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                  {assignedCompleted.length} Prescribed ({assignedCalories} kcal)
+                </span>
+                <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 font-medium">
+                  {extraCompleted.length} Extra Food ({extraCalories} kcal)
+                </span>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
               <div className="p-2.5 bg-stone-50 rounded-lg border border-stone-200/60">
                 <p className="text-[10px] font-bold text-stone-400 uppercase">Protein</p>
-                <p className="font-bold text-stone-900 mt-0.5">{todayProtein}g / {targetProtein}g</p>
+                <p className="font-bold text-stone-900 mt-0.5 font-mono">{todayProtein}g / {targetProtein}g</p>
               </div>
               <div className="p-2.5 bg-stone-50 rounded-lg border border-stone-200/60">
                 <p className="text-[10px] font-bold text-stone-400 uppercase">Carbs</p>
-                <p className="font-bold text-stone-900 mt-0.5">{todayCarbs}g / {targetCarbs}g</p>
+                <p className="font-bold text-stone-900 mt-0.5 font-mono">{todayCarbs}g / {targetCarbs}g</p>
               </div>
               <div className="p-2.5 bg-stone-50 rounded-lg border border-stone-200/60">
                 <p className="text-[10px] font-bold text-stone-400 uppercase">Fat</p>
-                <p className="font-bold text-stone-900 mt-0.5">{todayFat}g / {targetFat}g</p>
+                <p className="font-bold text-stone-900 mt-0.5 font-mono">{todayFat}g / {targetFat}g</p>
               </div>
             </div>
 
-            <p className="text-[11px] text-stone-500">
-              {todayLogs.length} food logs submitted today by patient.
+            <p className="text-[11px] text-stone-500 flex items-center justify-between">
+              <span>{totalItemsConsumedToday} total items recorded today by patient.</span>
+              <span className="text-[10px] font-semibold text-emerald-600">Updated in real-time</span>
             </p>
           </div>
 
@@ -667,110 +841,208 @@ export default function PatientProfileView() {
         <div className="bg-white rounded-xl border border-stone-200/90 p-5 md:p-6 shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-100">
             <div>
-              <h3 className="font-serif font-bold text-stone-900 text-base">
-                Client Food Journal & Photo Logs
-              </h3>
-              <p className="text-xs text-stone-500">
-                Detailed record of all meals, photo evidence, and AI nutrient detections submitted by {profile.name}
+              <div className="flex items-center gap-2">
+                <h3 className="font-serif font-bold text-stone-900 text-base">
+                  Client Food Journal & Eating Habits
+                </h3>
+                <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live Sync
+                </span>
+              </div>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Chronological daily breakdown of assigned meal completion and patient-logged extra foods with timestamps
               </p>
             </div>
-            <span className="text-xs font-semibold bg-stone-100 text-stone-700 px-3 py-1 rounded-md border border-stone-200">
-              {foodLogs.length} Total Meals Logged
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold bg-emerald-50 text-emerald-800 px-3 py-1 rounded-md border border-emerald-200">
+                {assignedTotalCount} Assigned Completed
+              </span>
+              <span className="text-xs font-semibold bg-amber-50 text-amber-900 px-3 py-1 rounded-md border border-amber-200">
+                {extraTotalCount} Extra Foods Logged
+              </span>
+            </div>
           </div>
 
-          {foodLogs.length === 0 ? (
-            <div className="text-center py-12 text-stone-400 text-xs">
-              No meal logs have been recorded by this client yet.
+          {/* Chronologically Grouped Food Logs by Day & Date */}
+          {groupedDates.length === 0 ? (
+            <div className="text-center py-16 text-stone-400 text-xs space-y-2">
+              <Utensils className="w-8 h-8 text-stone-300 mx-auto" />
+              <p className="font-medium text-stone-600">No eating logs or meal records yet for this client.</p>
+              <p className="text-[11px] text-stone-400">As the patient completes prescribed meals or logs extra food, entries will appear here chronologically in real-time.</p>
             </div>
           ) : (
-            <>
-          {/* Today's Live Checklist Section */}
-          <div className="bg-amber-50/40 rounded-lg border border-amber-200/60 p-4 mb-6">
-            <h4 className="font-bold text-stone-900 text-xs uppercase tracking-wider mb-3 flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              Today's Live Meal Checklist (Real-time)
-            </h4>
-            {todayChecklist.length === 0 ? (
-              <p className="text-xs text-stone-500">No checklist items synced for today yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {todayChecklist.map(item => (
-                  <div key={item.id} className={`p-3 rounded-lg flex items-start gap-3 transition-colors ${item.completed ? 'bg-emerald-50/70 border border-emerald-200/60' : 'bg-white border border-stone-200'}`}>
-                    {item.completed ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                    ) : (
-                      <div className="w-4 h-4 rounded border border-stone-300 flex-shrink-0 mt-0.5" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start">
-                        <span className="text-xs font-bold text-stone-900">{item.name}</span>
-                        {item.completedAt && (
-                          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded whitespace-nowrap">
-                            <Clock className="w-3 h-3 inline mr-1" /> {item.completedAt}
+            <div className="space-y-6">
+              {groupedDates.map(dateKey => {
+                const dayEntries = groupedLogs[dateKey];
+                const dayTotalCals = dayEntries.reduce((s, e) => s + (e.calories || 0), 0);
+                const dayTotalP = dayEntries.reduce((s, e) => s + (e.protein || 0), 0);
+                const dayTotalC = dayEntries.reduce((s, e) => s + (e.carbs || 0), 0);
+                const dayTotalF = dayEntries.reduce((s, e) => s + (e.fat || 0), 0);
+                const dayAssigned = dayEntries.filter(e => e.type === 'assigned');
+                const dayExtra = dayEntries.filter(e => e.type === 'extra');
+
+                // Nicely formatted date label
+                const isToday = dateKey === todayStr;
+                const dateObj = new Date(dateKey + 'T12:00:00');
+                const dateLabel = dateObj.toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric'
+                });
+
+                return (
+                  <div key={dateKey} className="rounded-xl border border-stone-200/90 overflow-hidden shadow-2xs">
+                    {/* Day & Date Header Bar */}
+                    <div className="bg-stone-50 px-4 py-3 border-b border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-orange-600" />
+                        <h4 className="font-bold text-stone-900 text-sm">
+                          {dateLabel}
+                        </h4>
+                        {isToday && (
+                          <span className="text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-800 border border-orange-200 px-2 py-0.5 rounded-full">
+                            Today
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-stone-500 mt-0.5">
-                        {item.mealType} • {item.portion} {item.calories ? `• ${item.calories} kcal` : ''}
+
+                      {/* Day summary badges */}
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-bold text-stone-900 font-mono bg-white px-2.5 py-1 rounded-md border border-stone-200">
+                          {dayTotalCals} kcal
+                        </span>
+                        <span className="text-stone-500 font-mono text-[11px] bg-white px-2 py-1 rounded-md border border-stone-200">
+                          P: {dayTotalP}g • C: {dayTotalC}g • F: {dayTotalF}g
+                        </span>
+                        <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200">
+                          {dayAssigned.length} Assigned
+                        </span>
+                        {dayExtra.length > 0 && (
+                          <span className="text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-1 rounded-md border border-amber-200 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-amber-600" />
+                            {dayExtra.length} Extra
+                          </span>
+                        )}
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
 
-          <h4 className="font-bold text-stone-900 text-xs uppercase tracking-wider mb-3">Historical Food Logs</h4>
-          <div className="divide-y divide-stone-100 space-y-4">
-              {foodLogs.map(log => (
-                <div key={log.id} className="pt-4 first:pt-0 flex flex-col md:flex-row gap-4 justify-between">
-                  <div className="flex items-start gap-3.5">
-                    {log.imageUrl ? (
-                      <img 
-                        src={log.imageUrl} 
-                        alt="Meal upload" 
-                        className="w-16 h-16 rounded-lg object-cover border border-stone-200 shrink-0 shadow-xs" 
-                      />
-                    ) : (
-                      <div className="w-16 h-16 rounded-lg bg-orange-50 border border-orange-200/60 flex items-center justify-center text-orange-600 shrink-0">
-                        <Utensils className="w-6 h-6" />
-                      </div>
-                    )}
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-bold text-stone-900 text-sm">{log.description}</span>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-stone-100 text-stone-600 border border-stone-200">
-                          {log.mealType}
-                        </span>
-                        <span className="text-xs text-stone-400">• {log.date}</span>
-                      </div>
+                    {/* Timestamped Consumed Entries under Date */}
+                    <div className="p-4 divide-y divide-stone-100 space-y-3 bg-white">
+                      {dayEntries.map((entry, idx) => {
+                        const isExtra = entry.type === 'extra' || entry.isExtra;
+                        const isScanned = entry.type === 'scanned';
 
-                      {log.userNotes && (
-                        <p className="text-xs text-stone-600 italic mb-2">"{log.userNotes}"</p>
-                      )}
+                        return (
+                          <div 
+                            key={entry.id || idx} 
+                            className={`pt-3 first:pt-0 p-3 rounded-xl transition-all ${
+                              isExtra 
+                                ? 'bg-amber-50/40 border border-amber-200/80' 
+                                : isScanned
+                                  ? 'bg-indigo-50/40 border border-indigo-200/80'
+                                  : 'bg-emerald-50/20 border border-emerald-100/60'
+                            }`}
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-start gap-3">
+                                {/* Visual Distinction Indicator */}
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                                  isExtra 
+                                    ? 'bg-amber-100 text-amber-700 border border-amber-300' 
+                                    : isScanned
+                                      ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
+                                      : 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                }`}>
+                                  {isExtra ? (
+                                    <Sparkles className="w-4 h-4 text-amber-600" />
+                                  ) : isScanned ? (
+                                    <Camera className="w-4 h-4 text-indigo-600" />
+                                  ) : (
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                  )}
+                                </div>
 
-                      {/* Macronutrient chips */}
-                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
-                        <span className="font-bold bg-orange-50 text-orange-800 border border-orange-200/60 px-2 py-0.5 rounded">
-                          {log.nutrition?.calories || 0} kcal
-                        </span>
-                        <span className="text-stone-600 bg-stone-100 border border-stone-200 px-2 py-0.5 rounded">
-                          P: {log.nutrition?.protein || 0}g
-                        </span>
-                        <span className="text-stone-600 bg-stone-100 border border-stone-200 px-2 py-0.5 rounded">
-                          C: {log.nutrition?.carbs || 0}g
-                        </span>
-                        <span className="text-stone-600 bg-stone-100 border border-stone-200 px-2 py-0.5 rounded">
-                          F: {log.nutrition?.fat || 0}g
-                        </span>
-                      </div>
+                                <div className="space-y-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    {/* Visual Distinction Badge */}
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                      isExtra 
+                                        ? 'bg-amber-100 text-amber-900 border border-amber-300 font-semibold' 
+                                        : isScanned
+                                          ? 'bg-indigo-100 text-indigo-900 border border-indigo-200 font-semibold'
+                                          : 'bg-emerald-100 text-emerald-900 border border-emerald-200 font-semibold'
+                                    }`}>
+                                      {isExtra ? 'EXTRA FOOD (PATIENT LOGGED)' : isScanned ? 'AI PHOTO SCAN' : 'ASSIGNED MEAL'}
+                                    </span>
+
+                                    {/* Meal Slot */}
+                                    <span className="text-xs font-bold text-stone-700">
+                                      {entry.mealType}
+                                    </span>
+
+                                    {/* Exact Completion Timestamp */}
+                                    {entry.completedAt && (
+                                      <span className="text-[11px] font-semibold text-stone-600 bg-stone-100 px-2 py-0.5 rounded flex items-center gap-1 border border-stone-200">
+                                        <Clock className="w-3 h-3 text-stone-500" />
+                                        {entry.completedAt}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Item Name */}
+                                  <h5 className="text-sm font-bold text-stone-900">
+                                    {isExtra ? `Extra: ${entry.name}` : entry.name}
+                                  </h5>
+
+                                  {entry.notes && (
+                                    <p className="text-xs text-stone-500 italic">"{entry.notes}"</p>
+                                  )}
+
+                                  {/* Portion & Macros Chips */}
+                                  <div className="flex flex-wrap items-center gap-2 text-xs text-stone-500 mt-1">
+                                    <span>Portion: <strong className="text-stone-700">{entry.portion}</strong></span>
+                                    <span>•</span>
+                                    <span className={`font-mono font-bold ${isExtra ? 'text-amber-800' : 'text-orange-600'}`}>
+                                      {entry.calories} kcal
+                                    </span>
+                                    {entry.protein !== undefined && (
+                                      <span className="text-[11px] font-mono text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded">
+                                        P: {entry.protein}g
+                                      </span>
+                                    )}
+                                    {entry.carbs !== undefined && (
+                                      <span className="text-[11px] font-mono text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded">
+                                        C: {entry.carbs}g
+                                      </span>
+                                    )}
+                                    {entry.fat !== undefined && (
+                                      <span className="text-[11px] font-mono text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded">
+                                        F: {entry.fat}g
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Photo thumbnail if available */}
+                              {entry.imageUrl && (
+                                <img 
+                                  src={entry.imageUrl} 
+                                  alt={entry.name}
+                                  className="w-16 h-16 rounded-lg object-cover border border-stone-200 shadow-2xs shrink-0 self-start sm:self-center"
+                                />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-          </>
           )}
         </div>
       )}

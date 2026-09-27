@@ -565,6 +565,94 @@ JSON Array format:
     }
   });
 
+  // AI-Powered Food Estimation (Calories & Macros for Extra Foods)
+  app.post(['/api/ai/estimate-food', '/ai/estimate-food'], async (req: express.Request, res: express.Response): Promise<any> => {
+    try {
+      const { foodItem, portionSize, foodDesc } = req.body;
+      const queryItem = (foodItem || foodDesc || '').trim();
+      const queryPortion = (portionSize || '1 standard portion').trim();
+
+      if (!queryItem) {
+        return res.status(400).json({ error: 'Food item description is required' });
+      }
+
+      const prompt = `You are a clinical dietitian and nutrition estimation engine.
+A patient has logged eating an extra food item:
+Food Item: "${queryItem}"
+Portion / Quantity: "${queryPortion}"
+
+Estimate the approximate nutritional content for this food and portion.
+Return ONLY a valid JSON object with the following exact keys:
+{
+  "name": "Clean display name of the food (e.g. Chocolate Brownie Cake)",
+  "portion": "Clean portion descriptor (e.g. 1 slice (120g))",
+  "calories": 420,
+  "protein": 5,
+  "carbs": 58,
+  "fat": 19
+}
+Ensure calories, protein, carbs, and fat are realistic non-negative integers.`;
+
+      let parsed: any = null;
+      try {
+        const aiText = await generateAIResponse({
+          systemInstruction: 'You are an accurate nutritional estimation API. Respond with a valid JSON object only. Do not wrap in markdown quotes or code blocks.',
+          userPrompt: prompt,
+          jsonMode: true
+        });
+
+        const cleaned = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        parsed = JSON.parse(cleaned);
+      } catch (aiErr) {
+        console.warn('AI Estimation generation warning, using nutrition heuristic:', aiErr);
+      }
+
+      // Robust fallback heuristic if AI fails or returns non-numeric values
+      if (!parsed || typeof parsed.calories !== 'number') {
+        const lower = queryItem.toLowerCase();
+        let cal = 250;
+        let p = 6;
+        let c = 30;
+        let f = 10;
+
+        if (lower.includes('brownie') || lower.includes('cake') || lower.includes('pastry') || lower.includes('cookie')) {
+          cal = 380; p = 5; c = 52; f = 18;
+        } else if (lower.includes('bagel') || lower.includes('bread') || lower.includes('toast')) {
+          cal = 290; p = 9; c = 48; f = 6;
+        } else if (lower.includes('pizza') || lower.includes('burger')) {
+          cal = 550; p = 22; c = 50; f = 28;
+        } else if (lower.includes('salad') || lower.includes('fruit') || lower.includes('apple')) {
+          cal = 120; p = 2; c = 24; f = 2;
+        } else if (lower.includes('coffee') || lower.includes('latte') || lower.includes('tea')) {
+          cal = 160; p = 6; c = 18; f = 7;
+        } else if (lower.includes('chicken') || lower.includes('meat') || lower.includes('egg')) {
+          cal = 320; p = 30; c = 4; f = 16;
+        }
+
+        parsed = {
+          name: queryItem.charAt(0).toUpperCase() + queryItem.slice(1),
+          portion: queryPortion || '1 serving',
+          calories: cal,
+          protein: p,
+          carbs: c,
+          fat: f
+        };
+      }
+
+      res.json({
+        name: parsed.name || queryItem,
+        portion: parsed.portion || queryPortion || '1 serving',
+        calories: Math.max(0, Math.round(Number(parsed.calories) || 0)),
+        protein: Math.max(0, Math.round(Number(parsed.protein) || 0)),
+        carbs: Math.max(0, Math.round(Number(parsed.carbs) || 0)),
+        fat: Math.max(0, Math.round(Number(parsed.fat) || 0))
+      });
+    } catch (error: any) {
+      console.error('Error in /api/ai/estimate-food:', error);
+      res.status(500).json({ error: error.message || 'Failed to estimate food nutrition' });
+    }
+  });
+
   // Gemini Multimodal AI Food Scanner
   app.post(['/api/ai/scan-food', '/ai/scan-food'], aiRateLimitMiddleware, async (req: express.Request, res: express.Response): Promise<any> => {
     try {

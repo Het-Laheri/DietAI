@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getMealPlans, getFoodLogs, getQueries, getPatientProfile, getPatientWeekPlan, MealPlan, FoodLog, Query, PatientProfile, PatientWeekPlan } from '../../services/db';
+import { getMealPlans, getFoodLogs, getQueries, getPatientProfile, getPatientWeekPlan, getPatientChecklist, ChecklistMealItem, MealPlan, FoodLog, Query, PatientProfile, PatientWeekPlan } from '../../services/db';
 import { isPatientSubscribed, getLocalSubscription } from '../../services/subscription';
 import { 
   Home, 
@@ -27,6 +27,7 @@ export default function PatientOverview() {
   const [activePlan, setActivePlan] = useState<MealPlan | null>(null);
   const [patientData, setPatientData] = useState<PatientProfile | null>(null);
   const [todayLogs, setTodayLogs] = useState<FoodLog[]>([]);
+  const [checklistItems, setChecklistItems] = useState<ChecklistMealItem[]>([]);
   const [recentQuery, setRecentQuery] = useState<Query | null>(null);
   const [waterGlasses, setWaterGlasses] = useState<number>(() => {
     if (typeof window === 'undefined') return 3;
@@ -53,12 +54,13 @@ export default function PatientOverview() {
     async function loadDashboardData() {
       if (!profile) return;
       try {
-        const [plans, logs, queries, pData, wp] = await Promise.all([
+        const [plans, logs, queries, pData, wp, checklist] = await Promise.all([
           getMealPlans(profile.uid),
           getFoodLogs(profile.uid, todayStr),
           getQueries(undefined, profile.uid),
           getPatientProfile(profile.uid),
-          getPatientWeekPlan(profile.uid)
+          getPatientWeekPlan(profile.uid),
+          getPatientChecklist(profile.uid, todayStr)
         ]);
 
         const published = plans.find(p => p.status === 'published');
@@ -66,6 +68,7 @@ export default function PatientOverview() {
         setTodayLogs(logs);
         setPatientData(pData);
         setWeekPlan(wp);
+        setChecklistItems(checklist || []);
 
         if (queries && queries.length > 0) {
           setRecentQuery(queries[0]);
@@ -77,6 +80,12 @@ export default function PatientOverview() {
       }
     }
     loadDashboardData();
+
+    const handleChecklistUpdated = () => {
+      if (profile) getPatientChecklist(profile.uid, todayStr).then(setChecklistItems);
+    };
+    window.addEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
+    return () => window.removeEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
   }, [profile, todayStr]);
 
   const toggleWater = (index: number) => {
@@ -87,23 +96,19 @@ export default function PatientOverview() {
     }
   };
 
-  const totalCalories = todayLogs.reduce((sum, l) => sum + (l.nutrition?.calories || 0), 0);
+  const completedChecklist = checklistItems.filter(i => i.completed);
+  const checklistCals = completedChecklist.reduce((sum, i) => sum + (i.calories || 0), 0);
+  const scannedCals = todayLogs
+    .filter(l => !completedChecklist.some(c => c.name.toLowerCase() === (l.description || '').toLowerCase()))
+    .reduce((sum, l) => sum + (l.nutrition?.calories || 0), 0);
+  const totalCalories = checklistCals + scannedCals;
+
   const targetCalories = activePlan?.targets?.calories || 2000;
   const targetProtein = activePlan?.targets?.protein || 100;
-  const loggedProtein = todayLogs.reduce((sum, l) => sum + (l.nutrition?.protein || 0), 0);
+  const loggedProtein = completedChecklist.reduce((sum, i) => sum + (i.protein || 0), 0) + todayLogs.reduce((sum, l) => sum + (l.nutrition?.protein || 0), 0);
 
-  // Get checked items count from localStorage
-  const checkedItemsCount = (() => {
-    if (typeof window === 'undefined' || !profile?.uid) return 0;
-    try {
-      const raw = localStorage.getItem(`nutrisnap_meals_checklist_${profile.uid}_${todayStr}`);
-      if (!raw) return 0;
-      const checkedMap = JSON.parse(raw);
-      return Object.values(checkedMap).filter(Boolean).length;
-    } catch {
-      return 0;
-    }
-  })();
+  // Get checked items count
+  const checkedItemsCount = completedChecklist.length;
 
   const totalAssignedMeals = (() => {
     const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

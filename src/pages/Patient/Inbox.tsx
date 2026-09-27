@@ -120,6 +120,18 @@ export default function Inbox() {
         setQueries(prev => prev.map(q => q.id === tempId ? { ...q, id: realId } : q));
       }
 
+      // Notify dietician of new clinical question
+      createNotification({
+        recipientRole: 'dietician',
+        type: 'QUERY_SUBMITTED',
+        title: 'New Patient Inquiry 💬',
+        patientId: patientUid,
+        patientName: patientName,
+        message: `${patientName} asked: "${questionText.slice(0, 65)}${questionText.length > 65 ? '...' : ''}"`,
+        link: '/dietician/inbox',
+        read: false
+      }).catch(console.warn);
+
       setSuccessToast(true);
       setTimeout(() => setSuccessToast(false), 3500);
     } catch (err: any) {

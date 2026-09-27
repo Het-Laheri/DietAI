@@ -2,8 +2,31 @@ import { useEffect, useState } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
-import { Home, ClipboardList, Camera, Activity, MessageCircle, LogOut, CreditCard, Lock } from 'lucide-react';
+import { 
+  Home, 
+  ClipboardList, 
+  Camera, 
+  Activity, 
+  MessageCircle, 
+  LogOut, 
+  CreditCard, 
+  Lock,
+  Bell,
+  CheckCheck,
+  Utensils,
+  MessageSquare,
+  Sparkles,
+  Clock,
+  X,
+  ChevronRight
+} from 'lucide-react';
 import { isPatientSubscribed } from '../services/subscription';
+import { 
+  subscribeToNotifications, 
+  markNotificationRead, 
+  markAllNotificationsRead, 
+  Notification 
+} from '../services/db';
 import PatientOverview from './Patient/PatientOverview';
 import MealNotepad from './Patient/MealNotepad';
 import FoodScanner from './Patient/FoodScanner';
@@ -11,11 +34,34 @@ import Progress from './Patient/Progress';
 import Inbox from './Patient/Inbox';
 import SubscriptionPage from './Patient/SubscriptionPage';
 
+function formatRelativeTime(createdAt: any): string {
+  if (!createdAt) return 'Just now';
+  let date: Date;
+  if (createdAt?.toDate && typeof createdAt.toDate === 'function') {
+    date = createdAt.toDate();
+  } else if (createdAt?.seconds) {
+    date = new Date(createdAt.seconds * 1000);
+  } else if (typeof createdAt === 'string' || typeof createdAt === 'number') {
+    date = new Date(createdAt);
+  } else {
+    return 'Just now';
+  }
+
+  const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (isNaN(diffSec) || diffSec < 60) return 'Just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  if (diffSec < 172800) return 'Yesterday';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 export default function PatientDashboard() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isSubscribed, setIsSubscribed] = useState(() => isPatientSubscribed(profile));
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     setIsSubscribed(isPatientSubscribed(profile));
@@ -23,6 +69,36 @@ export default function PatientDashboard() {
     window.addEventListener('nutrisnap:subscription_change', handleSubChange);
     return () => window.removeEventListener('nutrisnap:subscription_change', handleSubChange);
   }, [profile]);
+
+  // Subscribe to real-time notifications for this patient
+  useEffect(() => {
+    const unsub = subscribeToNotifications('patient', profile?.uid, (notifs) => {
+      setNotifications(notifs);
+    });
+    return () => unsub();
+  }, [profile?.uid]);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const handleNotificationClick = async (n: Notification) => {
+    if (n.id) {
+      await markNotificationRead(n.id);
+    }
+    setShowNotifications(false);
+    if (n.link) {
+      navigate(n.link);
+    } else {
+      navigate('/patient/meals');
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    if (profile?.uid) {
+      await markAllNotificationsRead('patient', profile.uid);
+    } else {
+      await markAllNotificationsRead('patient');
+    }
+  };
 
   const handleLogout = async () => {
     await auth.signOut();
@@ -47,7 +123,7 @@ export default function PatientDashboard() {
           <h2 className="text-lg font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500">NutriSnap</h2>
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Link to="/patient/subscription">
             {isSubscribed ? (
               <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -59,6 +135,21 @@ export default function PatientDashboard() {
               </span>
             )}
           </Link>
+
+          {/* Mobile Bell Button */}
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="relative p-1.5 text-stone-600 hover:text-orange-500 hover:bg-orange-50/60 rounded-lg transition-colors focus:outline-none"
+            aria-label="Notifications"
+          >
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 bg-gradient-to-r from-orange-500 to-pink-500 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white shadow-xs">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold text-xs shadow-xs">
             {profile?.name?.charAt(0) || 'P'}
           </div>
@@ -82,7 +173,7 @@ export default function PatientDashboard() {
           <p className="text-[10px] uppercase tracking-widest text-orange-600 font-bold mt-1">Patient Portal</p>
         </div>
         
-        <nav className="flex-1 px-4 py-8 flex flex-col space-y-1">
+        <nav className="flex-1 px-4 py-6 flex flex-col space-y-1">
           {navItems.map(item => {
             const active = location.pathname === item.path;
             const Icon = item.icon;
@@ -90,7 +181,7 @@ export default function PatientDashboard() {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center justify-start gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all ${
+                className={`flex items-center justify-start gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
                   active 
                     ? 'bg-orange-50 text-orange-600 shadow-sm border border-orange-200' 
                     : 'text-stone-500 hover:text-orange-500 hover:bg-orange-50/50'
@@ -104,6 +195,24 @@ export default function PatientDashboard() {
               </Link>
             );
           })}
+
+          {/* Desktop Sidebar Notification Button */}
+          <button
+            onClick={() => setShowNotifications(true)}
+            className="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold text-stone-500 hover:text-orange-500 hover:bg-orange-50/50 transition-all text-left mt-2"
+          >
+            <div className="flex items-center gap-3">
+              <Bell className="w-4 h-4 text-stone-400" />
+              <span>Notifications</span>
+            </div>
+            {unreadCount > 0 ? (
+              <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-xs">
+                {unreadCount}
+              </span>
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-stone-200" />
+            )}
+          </button>
         </nav>
 
         <div className="p-6 border-t border-stone-100">
@@ -140,7 +249,7 @@ export default function PatientDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto pb-24 md:pb-8 bg-[#FAFAFA]">
+      <main className="flex-1 overflow-auto pb-24 md:pb-8 bg-[#FAFAFA] relative">
         <Routes>
           <Route path="/" element={<PatientOverview />} />
           <Route path="/meals" element={<MealNotepad />} />
@@ -178,6 +287,118 @@ export default function PatientDashboard() {
           );
         })}
       </nav>
+
+      {/* Interactive Notification Slide-Over Modal */}
+      {showNotifications && (
+        <div className="fixed inset-0 z-50 flex items-start justify-end p-0 md:p-6 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div 
+            className="fixed inset-0" 
+            onClick={() => setShowNotifications(false)}
+          />
+          <div className="relative w-full md:max-w-md bg-white h-full md:h-[620px] rounded-none md:rounded-2xl shadow-2xl flex flex-col z-10 overflow-hidden border border-stone-200 animate-in slide-in-from-right duration-200">
+            {/* Header */}
+            <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/70 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+                  <Bell className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-stone-900 text-sm">Notifications</h3>
+                  <p className="text-[10px] text-stone-500">
+                    {unreadCount > 0 ? `${unreadCount} unread update${unreadCount > 1 ? 's' : ''}` : 'All caught up'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <button
+                    onClick={handleMarkAllRead}
+                    className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 transition-colors hover:underline mr-1"
+                  >
+                    <CheckCheck className="w-3.5 h-3.5" />
+                    Mark all read
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowNotifications(false)}
+                  className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto divide-y divide-stone-100">
+              {notifications.length === 0 ? (
+                <div className="p-12 text-center flex flex-col items-center justify-center h-full">
+                  <div className="w-14 h-14 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center mb-3 text-orange-500">
+                    <Bell className="w-6 h-6" />
+                  </div>
+                  <h4 className="font-bold text-stone-800 text-sm">No notifications yet</h4>
+                  <p className="text-xs text-stone-500 mt-1 max-w-xs">
+                    When your dietician publishes your weekly meal plans or answers your consultations, you'll see them right here.
+                  </p>
+                </div>
+              ) : (
+                notifications.map(n => {
+                  let IconComp = Bell;
+                  let iconColor = 'text-stone-600 bg-stone-100';
+
+                  if (n.type === 'MEAL_PLAN_PUBLISHED') {
+                    IconComp = Utensils;
+                    iconColor = 'text-orange-600 bg-orange-50';
+                  } else if (n.type === 'QUERY_ANSWERED') {
+                    IconComp = MessageSquare;
+                    iconColor = 'text-sky-600 bg-sky-50';
+                  } else if (n.type === 'CLINICAL_NOTE' || n.type === 'TARGET_UPDATED') {
+                    IconComp = Sparkles;
+                    iconColor = 'text-emerald-600 bg-emerald-50';
+                  } else if (n.type === 'SUBSCRIPTION_UPGRADE') {
+                    IconComp = CreditCard;
+                    iconColor = 'text-purple-600 bg-purple-50';
+                  }
+
+                  return (
+                    <button
+                      key={n.id}
+                      onClick={() => handleNotificationClick(n)}
+                      className={`w-full text-left p-4 flex items-start gap-3.5 hover:bg-stone-50/80 transition-colors ${!n.read ? 'bg-orange-50/30' : ''}`}
+                    >
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${iconColor} mt-0.5`}>
+                        <IconComp className="w-4.5 h-4.5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <p className={`text-xs truncate ${!n.read ? 'font-bold text-stone-900' : 'font-semibold text-stone-700'}`}>
+                            {n.title || 'Dietician Update'}
+                          </p>
+                          <span className="text-[10px] text-stone-400 shrink-0 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {formatRelativeTime(n.createdAt)}
+                          </span>
+                        </div>
+                        <p className={`text-xs leading-relaxed ${!n.read ? 'text-stone-800' : 'text-stone-500'}`}>
+                          {n.message}
+                        </p>
+                        {n.link && (
+                          <div className="mt-2 flex items-center gap-1 text-[11px] font-bold text-orange-600">
+                            <span>View details</span>
+                            <ChevronRight className="w-3 h-3" />
+                          </div>
+                        )}
+                      </div>
+                      {!n.read && (
+                        <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0 mt-2" />
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

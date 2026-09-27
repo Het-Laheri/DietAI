@@ -2,8 +2,30 @@ import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext';
 import { auth, db } from '../services/firebase';
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { getNotifications, markNotificationRead, Notification } from '../services/db';
-import { LayoutDashboard, Users, MessageSquare, LogOut, Bell, Wand2, BookOpen, Bot, ShieldCheck, Menu, X } from 'lucide-react';
+import { 
+  subscribeToNotifications, 
+  markNotificationRead, 
+  markAllNotificationsRead, 
+  Notification 
+} from '../services/db';
+import { 
+  LayoutDashboard, 
+  Users, 
+  MessageSquare, 
+  LogOut, 
+  Bell, 
+  Wand2, 
+  BookOpen, 
+  Bot, 
+  ShieldCheck, 
+  Menu, 
+  X,
+  CheckCheck,
+  Utensils,
+  CreditCard,
+  Sparkles,
+  Clock
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Overview from './Dietician/Overview';
 import PatientsList from './Dietician/PatientsList';
@@ -14,35 +36,43 @@ import AiAssistant from './Dietician/AiAssistant';
 import KnowledgeBase from './Dietician/KnowledgeBase';
 import MealPlanGenerator from './Dietician/MealPlanGenerator';
 
-export default function DieticianDashboard() {
+function formatRelativeTime(createdAt: any): string {
+  if (!createdAt) return 'Just now';
+  let date: Date;
+  if (createdAt?.toDate && typeof createdAt.toDate === 'function') {
+    date = createdAt.toDate();
+  } else if (createdAt?.seconds) {
+    date = new Date(createdAt.seconds * 1000);
+  } else if (typeof createdAt === 'string' || typeof createdAt === 'number') {
+    date = new Date(createdAt);
+  } else {
+    return 'Just now';
+  }
 
+  const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (isNaN(diffSec) || diffSec < 60) return 'Just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  if (diffSec < 172800) return 'Yesterday';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+export default function DieticianDashboard() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
-
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Live real-time listener on queries collection for consultation notifications & badge
+  // Live real-time listener on queries collection for consultation badge
   useEffect(() => {
     const q = query(collection(db, 'queries'));
     const unsubscribe = onSnapshot(q, (snap) => {
       const items = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
       const pending = items.filter(i => i.status === 'pending');
       setPendingApprovalsCount(pending.length);
-
-      // Convert recent queries into notification cards
-      const notifCards = items.slice(0, 15).map(item => ({
-        id: item.id,
-        type: 'SYSTEM',
-        read: item.status === 'answered',
-        message: `${item.patientName || 'Patient'}: "${(item.question || '').slice(0, 50)}..."`,
-        date: item.date || 'Recently',
-        status: item.status
-      }));
-      setNotifications(notifCards);
     }, (err) => {
       console.warn('Dietician queries stream note:', err);
     });
@@ -50,9 +80,30 @@ export default function DieticianDashboard() {
     return () => unsubscribe();
   }, []);
 
-  const handleNotificationClick = async (n: any) => {
-    navigate('/dietician/inbox');
+  // Real-time listener for dietician notifications
+  useEffect(() => {
+    const unsubscribe = subscribeToNotifications('dietician', undefined, (notifs) => {
+      setNotifications(notifs);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const handleNotificationClick = async (n: Notification) => {
+    if (n.id) {
+      await markNotificationRead(n.id);
+    }
     setShowNotifications(false);
+    if (n.link) {
+      navigate(n.link);
+    } else {
+      navigate('/dietician/inbox');
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    await markAllNotificationsRead('dietician');
   };
 
   const handleLogout = async () => {
@@ -164,40 +215,107 @@ export default function DieticianDashboard() {
           <div className="relative">
             <button 
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 text-stone-500 hover:text-orange-500 transition-colors focus:outline-none"
+              className="relative p-2.5 text-stone-600 hover:text-orange-500 hover:bg-orange-50/60 rounded-xl transition-all focus:outline-none"
+              aria-label="View notifications"
             >
               <Bell className="w-5 h-5" />
-              {notifications.some(n => !n.read) && (
-                <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-orange-500 border-2 border-white shadow-sm"></span>
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 bg-gradient-to-r from-orange-500 to-pink-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white shadow-xs animate-in zoom-in">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
               )}
             </button>
             
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-white border border-stone-200 shadow-lg z-50 rounded-md overflow-hidden">
-                <div className="p-4 border-b border-stone-100 flex justify-between items-center bg-stone-50">
-                  <h3 className="font-bold text-stone-900 text-sm">Notifications</h3>
-                </div>
-                <div className="max-h-96 overflow-y-auto">
-                  {notifications.length === 0 ? (
-                    <div className="p-8 text-center text-stone-500 text-sm">No notifications yet.</div>
-                  ) : (
-                    notifications.map(n => (
-                      <button 
-                        key={n.id}
-                        onClick={() => handleNotificationClick(n)}
-                        className={`w-full text-left p-4 border-b border-stone-100 hover:bg-stone-50 transition-colors ${!n.read ? 'bg-blue-50/30' : ''}`}
-                      >
-                        <p className={`text-sm ${!n.read ? 'font-bold text-stone-900' : 'font-medium text-stone-600'}`}>
-                          {n.message}
-                        </p>
-                        <span className="text-xs text-stone-400 mt-1 block">
-                          {n.createdAt?.toDate ? n.createdAt.toDate().toLocaleTimeString() : 'Just now'}
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setShowNotifications(false)}
+                />
+                <div className="absolute right-0 mt-2 w-84 sm:w-96 bg-white border border-stone-200/80 shadow-2xl z-50 rounded-2xl overflow-hidden animate-in fade-in-50 zoom-in-95">
+                  <div className="p-4 border-b border-stone-100 flex justify-between items-center bg-stone-50/70">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-stone-900 text-sm">Notifications</h3>
+                      {unreadCount > 0 ? (
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+                          {unreadCount} unread
                         </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-stone-100 text-stone-500">
+                          All caught up
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 transition-colors hover:underline"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        Mark all read
                       </button>
-                    ))
-                  )}
+                    )}
+                  </div>
+
+                  <div className="max-h-[380px] overflow-y-auto divide-y divide-stone-100">
+                    {notifications.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center mx-auto mb-2 text-stone-400">
+                          <Bell className="w-5 h-5" />
+                        </div>
+                        <p className="text-xs font-bold text-stone-700">No notifications yet</p>
+                        <p className="text-[11px] text-stone-400 mt-0.5">Clinical events and patient questions will appear here.</p>
+                      </div>
+                    ) : (
+                      notifications.map(n => {
+                        let IconComp = Bell;
+                        let iconColor = 'text-stone-600 bg-stone-100';
+                        if (n.type === 'NEW_PATIENT') {
+                          IconComp = Users;
+                          iconColor = 'text-emerald-600 bg-emerald-50';
+                        } else if (n.type === 'QUERY_SUBMITTED') {
+                          IconComp = MessageSquare;
+                          iconColor = 'text-sky-600 bg-sky-50';
+                        } else if (n.type === 'MEAL_LOGGED') {
+                          IconComp = Utensils;
+                          iconColor = 'text-orange-600 bg-orange-50';
+                        } else if (n.type === 'SUBSCRIPTION_UPGRADE') {
+                          IconComp = CreditCard;
+                          iconColor = 'text-purple-600 bg-purple-50';
+                        }
+
+                        return (
+                          <button 
+                            key={n.id}
+                            onClick={() => handleNotificationClick(n)}
+                            className={`w-full text-left p-3.5 flex items-start gap-3 hover:bg-stone-50 transition-colors ${!n.read ? 'bg-orange-50/30' : ''}`}
+                          >
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconColor} mt-0.5`}>
+                              <IconComp className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1">
+                                <p className={`text-xs truncate ${!n.read ? 'font-bold text-stone-900' : 'font-semibold text-stone-700'}`}>
+                                  {n.title || (n.patientName ? `Update from ${n.patientName}` : 'Clinical Alert')}
+                                </p>
+                                <span className="text-[10px] text-stone-400 shrink-0">
+                                  {formatRelativeTime(n.createdAt)}
+                                </span>
+                              </div>
+                              <p className={`text-xs mt-0.5 line-clamp-2 ${!n.read ? 'text-stone-800' : 'text-stone-500'}`}>
+                                {n.message}
+                              </p>
+                            </div>
+                            {!n.read && (
+                              <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0 mt-1.5" />
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
         </header>

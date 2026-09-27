@@ -1,6 +1,6 @@
-import { collection, doc, getDoc, getDocs, setDoc, addDoc, query, where, updateDoc, orderBy, serverTimestamp, deleteDoc } from 'firebase/firestore';
-export { db, auth } from './firebase';
+import { collection, doc, getDoc, getDocs, setDoc, addDoc, query, where, updateDoc, orderBy, serverTimestamp, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db, auth } from './firebase';
+export { db, auth };
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 
 export function getApiUrl(endpoint: string): string {
@@ -74,6 +74,7 @@ export interface PatientProfile {
 export interface ClinicalNote {
   id?: string;
   patientId: string;
+  title?: string;
   category: 'Consultation' | 'Nutrition' | 'Behaviour' | 'Follow-up' | 'Meal plan' | 'General';
   content: string;
   authorName: string;
@@ -83,6 +84,7 @@ export interface ClinicalNote {
 
 export interface MealPlan {
   id?: string;
+  title?: string;
   patientId: string;
   startDate: string;
   endDate: string;
@@ -177,10 +179,25 @@ export interface ProgressRecord {
 
 export interface Notification {
   id?: string;
-  type: 'NEW_PATIENT' | 'PATIENT_LOGIN' | 'SYSTEM' | 'AI_COACH_MESSAGE';
+  recipientRole?: 'dietician' | 'patient' | 'all';
+  recipientId?: string; // patientId if for patient, dieticianId if for dietician
+  type: 
+    | 'NEW_PATIENT' 
+    | 'PATIENT_LOGIN' 
+    | 'SYSTEM' 
+    | 'AI_COACH_MESSAGE'
+    | 'MEAL_PLAN_PUBLISHED'
+    | 'QUERY_SUBMITTED'
+    | 'QUERY_ANSWERED'
+    | 'MEAL_LOGGED'
+    | 'TARGET_UPDATED'
+    | 'CLINICAL_NOTE'
+    | 'SUBSCRIPTION_UPGRADE';
+  title?: string;
   patientId?: string;
   patientName?: string;
   message: string;
+  link?: string;
   read: boolean;
   createdAt?: any;
 }
@@ -583,6 +600,21 @@ export async function createPatientProfile(dieticianId: string, data: Partial<Pa
 
   await setDoc(doc(db, 'patient_profiles', uid), profile);
 
+  try {
+    await createNotification({
+      recipientRole: 'dietician',
+      type: 'NEW_PATIENT',
+      title: 'New Patient Onboarded',
+      patientId: uid,
+      patientName: data.name || 'New Patient',
+      message: `${data.name || 'A new patient'} has been registered to your clinical caseload.`,
+      link: `/dietician/patients/${uid}`,
+      read: false
+    });
+  } catch (e) {
+    // non-blocking
+  }
+
   return { uid, email, tempPassword };
 }
 
@@ -597,14 +629,33 @@ export async function saveMealPlan(plan: MealPlan, authorRole?: string) {
     throw new Error('Unauthorized: Only licensed dieticians can send or assign meal plans.');
   }
   const sanitized = cleanFirestoreData(plan);
+  let savedId = plan.id;
   if (plan.id) {
     const ref = doc(db, 'meal_plans', plan.id);
     await updateDoc(ref, { ...sanitized });
-    return plan.id;
   } else {
     const ref = await addDoc(collection(db, 'meal_plans'), { ...sanitized, createdAt: serverTimestamp() });
-    return ref.id;
+    savedId = ref.id;
   }
+
+  if (plan.patientId) {
+    try {
+      await createNotification({
+        recipientRole: 'patient',
+        recipientId: plan.patientId,
+        type: 'MEAL_PLAN_PUBLISHED',
+        title: 'New Meal Plan Assigned',
+        patientId: plan.patientId,
+        message: `Your dietician has updated your meal plan (${plan.title || 'Weekly Clinical Plan'}). Check your daily recommendations.`,
+        link: '/patient/meals',
+        read: false
+      });
+    } catch (e) {
+      // non-blocking
+    }
+  }
+
+  return savedId;
 }
 
 export function cleanFirestoreData<T extends Record<string, any>>(data: T): any {
@@ -656,6 +707,22 @@ export async function logMeal(log: FoodLog): Promise<string> {
 
   // 2. Direct Firestore fallback
   const ref = await addDoc(collection(db, 'food_logs'), { ...sanitized, createdAt: serverTimestamp() });
+
+  try {
+    await createNotification({
+      recipientRole: 'dietician',
+      type: 'MEAL_LOGGED',
+      title: 'Meal Logged',
+      patientId: log.patientId,
+      patientName: log.patientName || 'Patient',
+      message: `${log.patientName || 'A patient'} logged ${log.mealType || 'a meal'}: ${log.description || 'Nutrition intake'}.`,
+      link: `/dietician/patients/${log.patientId}`,
+      read: false
+    });
+  } catch (e) {
+    // non-blocking
+  }
+
   return ref.id;
 }
 
@@ -881,29 +948,193 @@ export async function deleteQuery(id: string) {
   }
 }
 
-export async function createNotification(data: Notification) {
-  try {
-    await addDoc(collection(db, 'notifications'), { ...data, createdAt: serverTimestamp() });
-  } catch (err) {
-    console.warn('Notice: Background notification not written to Firestore:', err);
-  }
-}
+// ─── NOTIFICATIONS ENGINE (PATIENT & DIETICIAN) ──────────────────────────────
+const LOCAL_NOTIFS_KEY = 'nutrisnap_notifications';
 
-export async function getNotifications(): Promise<Notification[]> {
+export function getLocalNotifications(): Notification[] {
   try {
-    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ ...d.data(), id: d.id } as Notification));
+    const raw = localStorage.getItem(LOCAL_NOTIFS_KEY);
+    return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
 }
 
+export function saveLocalNotifications(notifs: Notification[]) {
+  try {
+    localStorage.setItem(LOCAL_NOTIFS_KEY, JSON.stringify(notifs.slice(0, 50)));
+    window.dispatchEvent(new CustomEvent('nutrisnap:notification_change'));
+  } catch (err) {
+    console.warn('saveLocalNotifications error:', err);
+  }
+}
+
+export async function createNotification(data: Notification) {
+  const notifId = data.id || `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const notifObj: Notification = {
+    ...data,
+    id: notifId,
+    recipientRole: data.recipientRole || (data.recipientId ? 'patient' : 'dietician'),
+    read: false,
+    createdAt: new Date().toISOString()
+  };
+
+  // 1. Save to local storage for instant responsiveness
+  const current = getLocalNotifications();
+  saveLocalNotifications([notifObj, ...current.filter(n => n.id !== notifId)]);
+
+  // 2. Persist to Firestore
+  try {
+    await setDoc(doc(db, 'notifications', notifId), {
+      ...notifObj,
+      createdAt: serverTimestamp()
+    });
+  } catch (err) {
+    console.warn('Notice: Background notification not written to Firestore, cached locally:', err);
+  }
+}
+
+export async function getNotifications(role?: 'dietician' | 'patient', userId?: string): Promise<Notification[]> {
+  try {
+    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    const remote = snap.docs.map(d => ({ ...d.data(), id: d.id } as Notification));
+
+    // Merge with local
+    const local = getLocalNotifications();
+    const map = new Map<string, Notification>();
+    remote.forEach(n => { if (n.id) map.set(n.id, n); });
+    local.forEach(n => { if (n.id && !map.has(n.id)) map.set(n.id, n); });
+
+    const all = Array.from(map.values());
+    if (!role) return all;
+
+    return all.filter(n => {
+      if (role === 'dietician') {
+        return n.recipientRole === 'dietician' || n.recipientRole === 'all' || !n.recipientRole;
+      }
+      if (role === 'patient') {
+        const matchesRole = n.recipientRole === 'patient' || n.recipientRole === 'all';
+        const matchesUser = !n.recipientId || !userId || n.recipientId === userId;
+        return matchesRole && matchesUser;
+      }
+      return true;
+    });
+  } catch {
+    const local = getLocalNotifications();
+    if (!role) return local;
+    return local.filter(n => {
+      if (role === 'dietician') {
+        return n.recipientRole === 'dietician' || n.recipientRole === 'all' || !n.recipientRole;
+      }
+      if (role === 'patient') {
+        return (n.recipientRole === 'patient' || n.recipientRole === 'all') &&
+          (!n.recipientId || !userId || n.recipientId === userId);
+      }
+      return true;
+    });
+  }
+}
+
+export function subscribeToNotifications(
+  role: 'dietician' | 'patient',
+  userId: string | undefined,
+  onUpdate: (notifs: Notification[]) => void
+) {
+  const filterList = (items: Notification[]) => {
+    return items.filter(n => {
+      if (role === 'dietician') {
+        return n.recipientRole === 'dietician' || n.recipientRole === 'all' || !n.recipientRole;
+      }
+      if (role === 'patient') {
+        const matchesRole = n.recipientRole === 'patient' || n.recipientRole === 'all';
+        const matchesUser = !n.recipientId || !userId || n.recipientId === userId;
+        return matchesRole && matchesUser;
+      }
+      return true;
+    });
+  };
+
+  const notifyMerged = (remoteItems: Notification[] = []) => {
+    const local = getLocalNotifications();
+    const map = new Map<string, Notification>();
+    remoteItems.forEach(n => { if (n.id) map.set(n.id, n); });
+    local.forEach(n => { if (n.id && !map.has(n.id)) map.set(n.id, n); });
+    const all = Array.from(map.values());
+    onUpdate(filterList(all));
+  };
+
+  // Immediate callback from cache
+  notifyMerged([]);
+
+  // Listen to Firestore
+  let unsubFirestore = () => {};
+  try {
+    const q = query(collection(db, 'notifications'));
+    unsubFirestore = onSnapshot(q, (snap) => {
+      const items = snap.docs.map(d => ({ ...d.data(), id: d.id } as Notification));
+      notifyMerged(items);
+    }, (err) => {
+      console.warn('Notifications stream notice:', err);
+    });
+  } catch (e) {
+    console.warn('Firestore snapshot failed, listening to local:', e);
+  }
+
+  // Listen to local changes
+  const handleLocalChange = () => notifyMerged([]);
+  window.addEventListener('nutrisnap:notification_change', handleLocalChange);
+
+  return () => {
+    unsubFirestore();
+    window.removeEventListener('nutrisnap:notification_change', handleLocalChange);
+  };
+}
+
 export async function markNotificationRead(id: string) {
+  // Local update
+  const local = getLocalNotifications();
+  const updated = local.map(n => n.id === id ? { ...n, read: true } : n);
+  saveLocalNotifications(updated);
+
+  // Firestore update
   try {
     await updateDoc(doc(db, 'notifications', id), { read: true });
   } catch (err) {
-    console.warn('Notice: markNotificationRead failed:', err);
+    console.warn('Notice: markNotificationRead remote failed:', err);
+  }
+}
+
+export async function markAllNotificationsRead(role: 'dietician' | 'patient', userId?: string) {
+  const local = getLocalNotifications();
+  const updated = local.map(n => {
+    const matchesRole = role === 'dietician' 
+      ? (n.recipientRole === 'dietician' || !n.recipientRole)
+      : ((n.recipientRole === 'patient' || n.recipientRole === 'all') && (!n.recipientId || !userId || n.recipientId === userId));
+    return matchesRole ? { ...n, read: true } : n;
+  });
+  saveLocalNotifications(updated);
+
+  // Batch update remote if possible
+  try {
+    const notifs = await getNotifications(role, userId);
+    for (const n of notifs) {
+      if (!n.read && n.id) {
+        updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.warn('markAllNotificationsRead remote failed:', e);
+  }
+}
+
+export async function clearNotification(id: string) {
+  const local = getLocalNotifications();
+  saveLocalNotifications(local.filter(n => n.id !== id));
+  try {
+    await deleteDoc(doc(db, 'notifications', id));
+  } catch (e) {
+    console.warn('clearNotification remote failed:', e);
   }
 }
 
@@ -937,9 +1168,35 @@ export async function addClinicalNote(note: ClinicalNote): Promise<string> {
       ...note,
       createdAt: serverTimestamp()
     });
+
+    if (note.patientId) {
+      createNotification({
+        recipientRole: 'patient',
+        recipientId: note.patientId,
+        type: 'CLINICAL_NOTE',
+        title: 'New Clinical Guidance',
+        patientId: note.patientId,
+        message: note.title ? `Dietician added: "${note.title}"` : 'Your dietician has posted new clinical guidance notes.',
+        link: '/patient',
+        read: false
+      }).catch(() => {});
+    }
+
     return docRef.id;
   } catch (e) {
     console.warn('Notice: Clinical note saved to client cache:', e);
+    if (note.patientId) {
+      createNotification({
+        recipientRole: 'patient',
+        recipientId: note.patientId,
+        type: 'CLINICAL_NOTE',
+        title: 'New Clinical Guidance',
+        patientId: note.patientId,
+        message: note.title ? `Dietician added: "${note.title}"` : 'Your dietician has posted new clinical guidance notes.',
+        link: '/patient',
+        read: false
+      }).catch(() => {});
+    }
     return noteId;
   }
 }

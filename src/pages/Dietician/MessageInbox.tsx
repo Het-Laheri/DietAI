@@ -12,6 +12,7 @@ import {
   deleteQuery, 
   getPatients, 
   getLocalQueries,
+  createNotification,
   Query as PatientQuery, 
   PatientProfile 
 } from '../../services/db';
@@ -167,6 +168,22 @@ export default function MessageInbox() {
         reply: finalAnswer,
         status: 'answered'
       });
+
+      // Notify the patient that their inquiry was answered
+      if (q.patientId) {
+        createNotification({
+          recipientRole: 'patient',
+          recipientId: q.patientId,
+          patientId: q.patientId,
+          patientName: q.patientName,
+          type: 'QUERY_ANSWERED',
+          title: 'Dietician Answered Your Query 🩺',
+          message: `Your dietician answered: "${finalAnswer.slice(0, 65)}${finalAnswer.length > 65 ? '...' : ''}"`,
+          link: '/patient/inbox',
+          read: false
+        }).catch(console.warn);
+      }
+
       showToast(`Answer approved and sent directly to ${q.patientName}!`);
     } catch (e) {
       console.error('Failed to send reply:', e);

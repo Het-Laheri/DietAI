@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getPatients, PatientProfile, MealPlan, saveMealPlan, getStoredRecipesFromDB, RecipeDBItem,
   savePatientWeekPlan, getAllDraftWeekPlans, PatientWeekPlan, WeekDay, MealSlot, WeekPlanEntry,
-  buildClinicalMealPlanFromRecipes, filterRecipesForPatient
+  buildClinicalMealPlanFromRecipes, filterRecipesForPatient, createNotification
 } from '../../services/db';
 import { 
   Loader2, Wand2, Save, BookOpen, Utensils, RefreshCw, 
@@ -386,6 +386,18 @@ export default function MealPlanGenerator() {
           createdAt: new Date()
         };
         await saveMealPlan(syncMealPlan, 'dietician');
+
+        createNotification({
+          recipientRole: 'patient',
+          recipientId: selectedPatientId,
+          patientId: selectedPatientId,
+          patientName: selectedPatient?.name || 'Patient',
+          type: 'MEAL_PLAN_PUBLISHED',
+          title: 'New Meal Plan Published 🥗',
+          message: `Your dietician published your personalized weekly meal plan (${targets.calories} kcal/day). Tap to view today's meals!`,
+          link: '/patient/meals',
+          read: false
+        }).catch(console.warn);
       }
 
       alert(`Week plan ${status === 'published' ? 'published to patient!' : 'saved as draft!'}`);
@@ -714,6 +726,21 @@ export default function MealPlanGenerator() {
         createdAt: new Date()
       };
       await saveMealPlan(newPlan, 'dietician');
+
+      if (assignStatus === 'published') {
+        createNotification({
+          recipientRole: 'patient',
+          recipientId: selectedPatientId,
+          patientId: selectedPatientId,
+          patientName: selectedPatient?.name || 'Patient',
+          type: 'MEAL_PLAN_PUBLISHED',
+          title: 'New Meal Plan Published 🥗',
+          message: `Your dietician approved and published your customized meal plan (${targets.calories} kcal/day). Tap to explore your recipes!`,
+          link: '/patient/meals',
+          read: false
+        }).catch(console.warn);
+      }
+
       alert(`Meal plan successfully ${assignStatus === 'published' ? 'approved & published to client!' : 'saved as draft!'}`);
       navigate(`/dietician/patients/${selectedPatientId}`);
     } catch (e) {

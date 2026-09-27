@@ -8,6 +8,7 @@ import {
   initiateRazorpayPayment,
   ActiveSubscription
 } from '../../services/subscription';
+import { createNotification } from '../../services/db';
 import RazorpayCheckoutButton from '../../components/RazorpayCheckoutButton';
 import { 
   ShieldCheck, 
@@ -193,7 +194,32 @@ export default function SubscriptionPage() {
                   const uid = user?.uid || profile?.uid;
                   if (uid) {
                     saveLocalSubscription(uid, sub);
+                    
+                    // Notify patient
+                    createNotification({
+                      recipientRole: 'patient',
+                      recipientId: uid,
+                      type: 'SUBSCRIPTION_UPGRADE',
+                      title: 'Membership Activated',
+                      patientId: uid,
+                      message: `Your ${plan.name} plan is now active! All premium clinical diet features unlocked.`,
+                      link: '/patient/meals',
+                      read: false
+                    }).catch(() => {});
                   }
+                  
+                  // Notify dietician
+                  createNotification({
+                    recipientRole: 'dietician',
+                    type: 'SUBSCRIPTION_UPGRADE',
+                    title: 'Patient Subscribed to Membership',
+                    patientId: uid,
+                    patientName: profile?.name || 'Patient',
+                    message: `${profile?.name || 'Patient'} purchased ${plan.name} (${plan.displayPrice}).`,
+                    link: uid ? `/dietician/patients/${uid}` : '/dietician/patients',
+                    read: false
+                  }).catch(() => {});
+
                   setActiveSub(sub);
                 }}
                 onError={(err) => {

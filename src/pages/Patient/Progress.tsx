@@ -6,6 +6,8 @@ import {
   getPatientChecklist,
   getPatientWeekPlan,
   getAllPatientEatingLogs,
+  getProgressRecords,
+  ProgressRecord,
   PatientProfile, 
   MealPlan,
   PatientWeekPlan,
@@ -13,7 +15,7 @@ import {
   PatientEatingLogEntry
 } from '../../services/db';
 import { db } from '../../services/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where } from 'firebase/firestore';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { 
   Target, 
@@ -29,9 +31,13 @@ import {
   Wheat,
   Droplet,
   Clock,
-  Check
+  Check,
+  Scale,
+  Edit3,
+  TrendingDown
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import PatientProfileModal from '../../components/PatientProfileModal';
 
 export default function Progress() {
   const { profile } = useAuth();
@@ -40,6 +46,8 @@ export default function Progress() {
   const [, setWeekPlan] = useState<PatientWeekPlan | null>(null);
   const [todayChecklist, setTodayChecklist] = useState<ChecklistMealItem[]>([]);
   const [eatingLogs, setEatingLogs] = useState<PatientEatingLogEntry[]>([]);
+  const [progressRecords, setProgressRecords] = useState<ProgressRecord[]>([]);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -51,12 +59,13 @@ export default function Progress() {
 
     async function loadData() {
       try {
-        const [pData, plansData, wpData, checklistData, allLogs] = await Promise.all([
+        const [pData, plansData, wpData, checklistData, allLogs, progData] = await Promise.all([
           getPatientProfile(profile!.uid),
           getMealPlans(profile!.uid),
           getPatientWeekPlan(profile!.uid),
           getPatientChecklist(profile!.uid, todayStr),
-          getAllPatientEatingLogs(profile!.uid)
+          getAllPatientEatingLogs(profile!.uid),
+          getProgressRecords(profile!.uid)
         ]);
 
         if (!isMounted) return;
@@ -67,6 +76,7 @@ export default function Progress() {
         setWeekPlan(wpData);
         setTodayChecklist(checklistData || []);
         setEatingLogs(allLogs || []);
+        setProgressRecords(progData || []);
       } catch (err) {
         console.warn('Progress load data note:', err);
       } finally {
@@ -91,7 +101,30 @@ export default function Progress() {
       console.warn('Real-time checklist listener note:', err);
     });
 
-    // 2. Custom window event from MealNotepad / quick log
+    // 2. Real-time patient profile listener (instant weight, goals, BMI updates)
+    const profileRef = doc(db, 'patient_profiles', profile.uid);
+    const unsubProfile = onSnapshot(profileRef, (docSnap) => {
+      if (docSnap.exists() && isMounted) {
+        setPatientProfile(docSnap.data() as PatientProfile);
+      }
+    }, (err) => {
+      console.warn('Real-time profile listener note:', err);
+    });
+
+    // 3. Real-time progress records listener (instant weigh-in log sync)
+    const progQuery = query(collection(db, 'progress_records'), where('patientId', '==', profile.uid));
+    const unsubProg = onSnapshot(progQuery, (snap) => {
+      if (isMounted) {
+        const records = snap.docs
+          .map(d => ({ ...d.data(), id: d.id } as ProgressRecord))
+          .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        setProgressRecords(records);
+      }
+    }, (err) => {
+      console.warn('Real-time progress records listener note:', err);
+    });
+
+    // 4. Custom window events from MealNotepad and Profile Modal
     const handleChecklistUpdated = () => {
       getPatientChecklist(profile.uid, todayStr).then(items => {
         if (isMounted) setTodayChecklist(items);
@@ -100,12 +133,31 @@ export default function Progress() {
         if (isMounted) setEatingLogs(logs);
       });
     };
+
+    const handleProfileUpdated = () => {
+      getPatientProfile(profile.uid).then(p => {
+        if (isMounted && p) setPatientProfile(p);
+      });
+    };
+
+    const handleProgUpdated = () => {
+      getProgressRecords(profile.uid).then(records => {
+        if (isMounted) setProgressRecords(records);
+      });
+    };
+
     window.addEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
+    window.addEventListener('nutrisnap:profile_updated', handleProfileUpdated);
+    window.addEventListener('nutrisnap:progress_record_updated', handleProgUpdated);
 
     return () => {
       isMounted = false;
       unsubChecklist();
+      unsubProfile();
+      unsubProg();
       window.removeEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
+      window.removeEventListener('nutrisnap:profile_updated', handleProfileUpdated);
+      window.removeEventListener('nutrisnap:progress_record_updated', handleProgUpdated);
     };
   }, [profile, todayStr]);
 
@@ -373,10 +425,18 @@ export default function Progress() {
 
       {/* ─── ACTIVE CLINICAL GOALS BADGES ─────────────────────────────────── */}
       <div className="bg-white p-6 border border-stone-200 mb-8 shadow-sm">
-        <h2 className="text-xs uppercase tracking-widest font-bold text-stone-500 mb-4 flex items-center gap-2">
-          <Target className="w-4 h-4 text-brand-700" />
-          Active Health & Clinical Goals
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xs uppercase tracking-widest font-bold text-stone-500 flex items-center gap-2">
+            <Target className="w-4 h-4 text-brand-700" />
+            Active Health & Clinical Goals
+          </h2>
+          <button
+            onClick={() => setIsProfileModalOpen(true)}
+            className="text-[11px] font-bold text-brand-700 hover:text-brand-900 uppercase tracking-wider flex items-center gap-1"
+          >
+            <Edit3 className="w-3 h-3" /> Edit Goals
+          </button>
+        </div>
         {patientProfile?.goals && patientProfile.goals.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {patientProfile.goals.map((goal, idx) => (
@@ -389,6 +449,78 @@ export default function Progress() {
         ) : (
           <div className="text-sm text-stone-600 bg-stone-50 p-3 border border-stone-200">
             Primary Goal: <span className="font-semibold text-stone-900">General Clinical Nutrition & Health Optimization</span>
+          </div>
+        )}
+      </div>
+
+      {/* ─── ANTHROPOMETRICS & CLINICAL WEIGHT MANAGEMENT CARD ───────────── */}
+      <div className="bg-white p-6 border border-stone-200 mb-8 shadow-sm">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-stone-200 mb-4">
+          <div>
+            <h2 className="text-sm uppercase tracking-widest font-bold text-stone-700 flex items-center gap-2">
+              <Scale className="w-4 h-4 text-brand-700" />
+              Anthropometrics & Weight Progress
+            </h2>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Target pace: <strong className="text-stone-800 font-semibold">{patientProfile?.weightManagement?.targetPace || 'Steady & Sustainable (0.5 kg / week)'}</strong>
+            </p>
+          </div>
+
+          <button
+            onClick={() => setIsProfileModalOpen(true)}
+            className="px-3.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+            Alter Metrics / Log Weight
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div className="p-3 bg-stone-50 border border-stone-200/80 rounded-sm">
+            <span className="block text-[10px] text-stone-400 uppercase font-semibold">Current Weight</span>
+            <span className="text-xl font-bold font-serif text-stone-900">{patientProfile?.currentWeightKg || 68} kg</span>
+            <span className="block text-[10px] text-stone-500">Height: {patientProfile?.heightCm || 165} cm</span>
+          </div>
+
+          <div className="p-3 bg-stone-50 border border-stone-200/80 rounded-sm">
+            <span className="block text-[10px] text-stone-400 uppercase font-semibold">Target Goal</span>
+            <span className="text-xl font-bold font-serif text-brand-700">{patientProfile?.targetWeightKg || 60} kg</span>
+            <span className="block text-[10px] text-stone-500">
+              {Number(patientProfile?.currentWeightKg || 68) > Number(patientProfile?.targetWeightKg || 60)
+                ? `${(Number(patientProfile?.currentWeightKg || 68) - Number(patientProfile?.targetWeightKg || 60)).toFixed(1)} kg to lose`
+                : 'Target Reached!'}
+            </span>
+          </div>
+
+          <div className="p-3 bg-stone-50 border border-stone-200/80 rounded-sm">
+            <span className="block text-[10px] text-stone-400 uppercase font-semibold">Clinical BMI</span>
+            <span className="text-xl font-bold font-serif text-stone-900">{patientProfile?.bmi || 25.0}</span>
+            <span className="block text-[10px] text-stone-500">{patientProfile?.bmiClassification || 'Overweight (25 - 29.9)'}</span>
+          </div>
+
+          <div className="p-3 bg-stone-50 border border-stone-200/80 rounded-sm">
+            <span className="block text-[10px] text-stone-400 uppercase font-semibold">Broca Ideal Weight</span>
+            <span className="text-xl font-bold font-serif text-stone-900">~{patientProfile?.idealBodyWeightKg || 60} kg</span>
+            <span className="block text-[10px] text-stone-500">Broca Protocol</span>
+          </div>
+        </div>
+
+        {/* Recent weigh-in history */}
+        {progressRecords.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-stone-100">
+            <h4 className="text-xs font-bold text-stone-700 mb-2 flex items-center gap-1.5">
+              <TrendingDown className="w-3.5 h-3.5 text-brand-600" />
+              Recent Weigh-in Log Records
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {progressRecords.slice(0, 6).map((rec, i) => (
+                <div key={rec.id || i} className="px-3 py-1.5 bg-white border border-stone-200 rounded-sm text-xs flex items-center gap-2">
+                  <span className="text-stone-400 text-[11px]">{rec.date}</span>
+                  <span className="font-bold text-stone-900">{rec.weightKg} kg</span>
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1 rounded-xs font-semibold">Logged</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -567,6 +699,15 @@ export default function Progress() {
           </div>
         )}
       </div>
+
+      {/* Patient Profile & Health Details Modal */}
+      {profile?.uid && (
+        <PatientProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          patientId={profile.uid}
+        />
+      )}
     </div>
   );
 }

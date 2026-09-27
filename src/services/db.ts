@@ -548,8 +548,58 @@ export async function getUserProfile(uid: string): Promise<User | null> {
 }
 
 export async function getPatientProfile(patientId: string): Promise<PatientProfile | null> {
-  const snap = await getDoc(doc(db, 'patient_profiles', patientId));
-  return snap.exists() ? snap.data() as PatientProfile : null;
+  // 1. Try backend API first
+  try {
+    const res = await fetch(getApiUrl(`/api/patient/profile/${encodeURIComponent(patientId)}`));
+    if (res.ok) {
+      const json = await res.json();
+      if (json.profile) return json.profile as PatientProfile;
+    }
+  } catch (apiErr) {
+    // fallback
+  }
+
+  // 2. Direct Firestore fallback
+  try {
+    const snap = await getDoc(doc(db, 'patient_profiles', patientId));
+    return snap.exists() ? snap.data() as PatientProfile : null;
+  } catch (err) {
+    console.warn('getPatientProfile error:', err);
+    return null;
+  }
+}
+
+export async function updatePatientProfile(patientId: string, updates: Partial<PatientProfile>): Promise<boolean> {
+  const sanitized = cleanFirestoreData(updates);
+
+  // 1. Try backend API first (server admin auth)
+  try {
+    const res = await fetch(getApiUrl(`/api/patient/profile/${encodeURIComponent(patientId)}`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sanitized)
+    });
+    if (res.ok) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nutrisnap:profile_updated', { detail: sanitized }));
+      }
+      return true;
+    }
+  } catch (apiErr) {
+    console.warn('API updatePatientProfile note:', apiErr);
+  }
+
+  // 2. Direct Firestore fallback
+  try {
+    await setDoc(doc(db, 'patient_profiles', patientId), sanitized, { merge: true });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nutrisnap:profile_updated', { detail: sanitized }));
+    }
+    return true;
+  } catch (fsErr) {
+    console.warn('Direct Firestore updatePatientProfile error:', fsErr);
+    return false;
+  }
 }
 
 export async function getPatients(): Promise<PatientProfile[]> {
@@ -769,9 +819,67 @@ export async function getAllFoodLogsAcrossAllPatients(): Promise<FoodLog[]> {
 }
 
 export async function getProgressRecords(patientId: string): Promise<ProgressRecord[]> {
-  const q = query(collection(db, 'progress_records'), where('patientId', '==', patientId));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ ...d.data(), id: d.id } as ProgressRecord));
+  // 1. Try backend API first
+  try {
+    const res = await fetch(getApiUrl(`/api/patient/progress-records/${encodeURIComponent(patientId)}`));
+    if (res.ok) {
+      const json = await res.json();
+      if (json.records && Array.isArray(json.records)) {
+        return json.records;
+      }
+    }
+  } catch (apiErr) {
+    // fallback
+  }
+
+  // 2. Direct Firestore fallback
+  try {
+    const q = query(collection(db, 'progress_records'), where('patientId', '==', patientId));
+    const snap = await getDocs(q);
+    return snap.docs
+      .map(d => ({ ...d.data(), id: d.id } as ProgressRecord))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  } catch (err) {
+    console.warn('getProgressRecords error:', err);
+    return [];
+  }
+}
+
+export async function saveProgressRecord(record: ProgressRecord): Promise<string | null> {
+  const sanitized = cleanFirestoreData(record);
+
+  // 1. Try backend API first
+  try {
+    const res = await fetch(getApiUrl('/api/patient/progress-record'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sanitized)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nutrisnap:progress_record_updated', { detail: sanitized }));
+      }
+      return data.id || 'rec_saved';
+    }
+  } catch (apiErr) {
+    console.warn('API saveProgressRecord note:', apiErr);
+  }
+
+  // 2. Direct Firestore fallback
+  try {
+    const ref = await addDoc(collection(db, 'progress_records'), {
+      ...sanitized,
+      createdAt: serverTimestamp()
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nutrisnap:progress_record_updated', { detail: sanitized }));
+    }
+    return ref.id;
+  } catch (fsErr) {
+    console.warn('Direct Firestore saveProgressRecord error:', fsErr);
+    return null;
+  }
 }
 
 const LOCAL_QUERIES_KEY = 'nutrisnap_cached_queries';

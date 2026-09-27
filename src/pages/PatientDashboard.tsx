@@ -33,6 +33,7 @@ import FoodScanner from './Patient/FoodScanner';
 import Progress from './Patient/Progress';
 import Inbox from './Patient/Inbox';
 import SubscriptionPage from './Patient/SubscriptionPage';
+import PatientProfileModal from '../components/PatientProfileModal';
 
 function formatRelativeTime(createdAt: any): string {
   if (!createdAt) return 'Just now';
@@ -62,6 +63,7 @@ export default function PatientDashboard() {
   const [isSubscribed, setIsSubscribed] = useState(() => isPatientSubscribed(profile));
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   useEffect(() => {
     setIsSubscribed(isPatientSubscribed(profile));
@@ -135,7 +137,6 @@ export default function PatientDashboard() {
               </span>
             )}
           </Link>
-
           {/* Mobile Bell Button */}
           <button
             onClick={() => setShowNotifications(!showNotifications)}
@@ -150,9 +151,13 @@ export default function PatientDashboard() {
             )}
           </button>
 
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold text-xs shadow-xs">
+          <button
+            onClick={() => setIsProfileModalOpen(true)}
+            title="Edit Health Profile & Metrics"
+            className="w-7 h-7 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold text-xs shadow-xs hover:scale-105 transition-transform cursor-pointer"
+          >
             {profile?.name?.charAt(0) || 'P'}
-          </div>
+          </button>
           <button
             onClick={handleLogout}
             title="Sign Out"
@@ -216,15 +221,33 @@ export default function PatientDashboard() {
         </nav>
 
         <div className="p-6 border-t border-stone-100">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold text-lg shadow-md">
-              {profile?.name?.charAt(0) || 'P'}
+          {/* Clickable Patient Icon & Name */}
+          <div 
+            onClick={() => setIsProfileModalOpen(true)}
+            role="button"
+            tabIndex={0}
+            title="Click to view & edit your health details, weight target, and clinical goals"
+            className="flex items-center gap-3 mb-6 p-2 -mx-2 rounded-xl hover:bg-stone-100/80 transition-all cursor-pointer group text-left"
+          >
+            <div className="relative shrink-0">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold text-lg shadow-md group-hover:scale-105 transition-transform">
+                {profile?.name?.charAt(0) || 'P'}
+              </div>
+              <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-white rounded-full border border-stone-200 flex items-center justify-center text-[9px] text-stone-600 shadow-2xs group-hover:bg-orange-500 group-hover:text-white transition-colors">
+                ✎
+              </span>
             </div>
-            <div>
-              <p className="text-sm font-bold text-stone-900 truncate max-w-[130px]">{profile?.name || 'Patient'}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-stone-900 truncate group-hover:text-orange-600 transition-colors">
+                {profile?.name || 'Patient'}
+              </p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-xs text-stone-500">Patient</span>
-                <Link to="/patient/subscription" className="hover:opacity-80 transition-opacity">
+                <span className="text-[11px] text-stone-400 group-hover:text-stone-600">Edit Details</span>
+                <Link 
+                  to="/patient/subscription" 
+                  onClick={e => e.stopPropagation()}
+                  className="hover:opacity-80 transition-opacity ml-auto"
+                >
                   {isSubscribed ? (
                     <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
                       ★ Premium
@@ -238,6 +261,7 @@ export default function PatientDashboard() {
               </div>
             </div>
           </div>
+
           <button 
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 w-full text-left rounded-xl text-sm font-bold text-stone-500 hover:text-pink-600 hover:bg-pink-50 transition-colors"
@@ -247,6 +271,15 @@ export default function PatientDashboard() {
           </button>
         </div>
       </aside>
+
+      {/* Patient Profile & Health Details Modal */}
+      {profile?.uid && (
+        <PatientProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          patientId={profile.uid}
+        />
+      )}
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto pb-24 md:pb-8 bg-[#FAFAFA] relative">

@@ -787,6 +787,127 @@ Ensure calories, protein, carbs, and fat are realistic non-negative integers.`;
     }
   });
 
+  // Patient Profile Management
+  app.get('/api/patient/profile/:patientId', async (req: express.Request, res: express.Response): Promise<any> => {
+    try {
+      const { patientId } = req.params;
+      await ensureAdminAuth();
+      const docRef = doc(db, 'patient_profiles', patientId);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        return res.json({ success: true, profile: { id: snap.id, ...snap.data() } });
+      }
+      return res.status(404).json({ error: 'Patient profile not found' });
+    } catch (err: any) {
+      console.error('[Server] Error in GET /api/patient/profile:', err);
+      return res.status(500).json({ error: err.message || 'Failed to fetch patient profile' });
+    }
+  });
+
+  app.post('/api/patient/profile/:patientId', async (req: express.Request, res: express.Response): Promise<any> => {
+    try {
+      const { patientId } = req.params;
+      const updates = req.body;
+      await ensureAdminAuth();
+      const sanitized = cleanFirestoreData(updates);
+      const docRef = doc(db, 'patient_profiles', patientId);
+      await setDoc(docRef, {
+        ...sanitized,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      // If name updated, also update in users collection
+      if (sanitized.name) {
+        try {
+          await setDoc(doc(db, 'users', patientId), { name: sanitized.name }, { merge: true });
+        } catch (uErr) {
+          console.warn('[Server] Note: user name update skipped:', uErr);
+        }
+      }
+
+      console.log(`[Server] Successfully updated profile for patient ${patientId}`);
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error('[Server] Error in POST /api/patient/profile:', err);
+      return res.status(500).json({ error: err.message || 'Failed to update patient profile' });
+    }
+  });
+
+  // Weight & Progress Record Logging
+  app.post('/api/patient/progress-record', async (req: express.Request, res: express.Response): Promise<any> => {
+    try {
+      const record = req.body;
+      if (!record.patientId || !record.date || record.weightKg === undefined) {
+        return res.status(400).json({ error: 'patientId, date, and weightKg are required' });
+      }
+      await ensureAdminAuth();
+      const sanitized = cleanFirestoreData(record);
+
+      const q = query(
+        collection(db, 'progress_records'),
+        where('patientId', '==', record.patientId),
+        where('date', '==', record.date)
+      );
+      const existingSnap = await getDocs(q);
+      let recordId: string;
+      if (!existingSnap.empty) {
+        recordId = existingSnap.docs[0].id;
+        await setDoc(doc(db, 'progress_records', recordId), {
+          ...sanitized,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } else {
+        const docRef = await addDoc(collection(db, 'progress_records'), {
+          ...sanitized,
+          createdAt: serverTimestamp()
+        });
+        recordId = docRef.id;
+      }
+
+      // Sync currentWeightKg and BMI to patient_profiles doc
+      const profileRef = doc(db, 'patient_profiles', record.patientId);
+      const profileSnap = await getDoc(profileRef);
+      if (profileSnap.exists()) {
+        const heightCm = profileSnap.data().heightCm || 165;
+        const newWeight = Number(record.weightKg);
+        const bmi = Number((newWeight / ((heightCm / 100) * (heightCm / 100))).toFixed(1));
+        let bmiClassification = 'Normal (18.5 - 24.9)';
+        if (bmi < 18.5) bmiClassification = 'Underweight (< 18.5)';
+        else if (bmi < 30) bmiClassification = 'Overweight (25 - 29.9)';
+        else bmiClassification = 'Obese (≥ 30)';
+
+        await setDoc(profileRef, {
+          currentWeightKg: newWeight,
+          bmi,
+          bmiClassification,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
+
+      console.log(`[Server] Successfully logged progress record for patient ${record.patientId} (Weight: ${record.weightKg} kg)`);
+      return res.json({ success: true, id: recordId });
+    } catch (err: any) {
+      console.error('[Server] Error in POST /api/patient/progress-record:', err);
+      return res.status(500).json({ error: err.message || 'Failed to save progress record' });
+    }
+  });
+
+  app.get('/api/patient/progress-records/:patientId', async (req: express.Request, res: express.Response): Promise<any> => {
+    try {
+      const { patientId } = req.params;
+      await ensureAdminAuth();
+      const q = query(collection(db, 'progress_records'), where('patientId', '==', patientId));
+      const snap = await getDocs(q);
+      const records = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
+      return res.json({ success: true, records });
+    } catch (err: any) {
+      console.error('[Server] Error in GET /api/patient/progress-records:', err);
+      return res.status(500).json({ error: err.message || 'Failed to get progress records' });
+    }
+  });
+
   // Gemini Multimodal AI Food Scanner
   app.post(['/api/ai/scan-food', '/ai/scan-food'], aiRateLimitMiddleware, async (req: express.Request, res: express.Response): Promise<any> => {
     try {

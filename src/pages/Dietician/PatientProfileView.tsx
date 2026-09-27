@@ -221,6 +221,27 @@ export default function PatientProfileView() {
       console.warn('Real-time food logs listener note:', err);
     });
 
+    // 3. Real-time patient profile listener (instant weight, BMI, target, and goals sync)
+    const profileRef = doc(db, 'patient_profiles', id);
+    const unsubProfile = onSnapshot(profileRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setProfile(docSnap.data() as PatientProfile);
+      }
+    }, (err) => {
+      console.warn('Real-time patient profile listener note:', err);
+    });
+
+    // 4. Real-time progress records listener (instant weigh-in log sync)
+    const progQuery = query(collection(db, 'progress_records'), where('patientId', '==', id));
+    const unsubProg = onSnapshot(progQuery, (snap) => {
+      const records = snap.docs
+        .map(d => ({ ...d.data(), id: d.id } as ProgressRecord))
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      setProgressRecords(records);
+    }, (err) => {
+      console.warn('Real-time progress records listener note:', err);
+    });
+
     const handleNotesEvent = () => {
       if (id) getClinicalNotes(id).then(setClinicalNotes);
     };
@@ -229,6 +250,8 @@ export default function PatientProfileView() {
     return () => {
       unsubChecklist();
       unsubFoodLogs();
+      unsubProfile();
+      unsubProg();
       window.removeEventListener('nutrisnap:notes_change', handleNotesEvent);
     };
   }, [id]);

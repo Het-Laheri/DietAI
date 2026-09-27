@@ -84,8 +84,15 @@ export default function PatientOverview() {
     const handleChecklistUpdated = () => {
       if (profile) getPatientChecklist(profile.uid, todayStr).then(setChecklistItems);
     };
+    const handleProfileUpdated = () => {
+      if (profile) getPatientProfile(profile.uid).then(setPatientData);
+    };
     window.addEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
-    return () => window.removeEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
+    window.addEventListener('nutrisnap:profile_updated', handleProfileUpdated);
+    return () => {
+      window.removeEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
+      window.removeEventListener('nutrisnap:profile_updated', handleProfileUpdated);
+    };
   }, [profile, todayStr]);
 
   const toggleWater = (index: number) => {

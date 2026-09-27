@@ -112,8 +112,13 @@ export default function PatientOverview() {
   const scannedCals = scannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.calories) || 0), 0);
   const totalCalories = assignedCalories + extraCalories + scannedCals;
 
-  const targetCalories = activePlan?.targets?.calories || 2000;
-  const targetProtein = activePlan?.targets?.protein || 100;
+  // Prescribed / Assigned Meals planned for today
+  const assignedPrescribed = checklistItems.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
+  const plannedDailyCalories = assignedPrescribed.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+  const plannedDailyProtein = assignedPrescribed.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
+
+  const targetCalories = plannedDailyCalories > 0 ? plannedDailyCalories : (activePlan?.targets?.calories || 2000);
+  const targetProtein = plannedDailyProtein > 0 ? plannedDailyProtein : (activePlan?.targets?.protein || 90);
   const loggedProtein = completedChecklist.reduce((sum, i) => sum + (Number(i.protein) || 0), 0) + scannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.protein) || 0), 0);
 
   // Get checked items count

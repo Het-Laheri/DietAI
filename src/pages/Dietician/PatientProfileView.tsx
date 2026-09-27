@@ -260,12 +260,20 @@ export default function PatientProfileView() {
 
   // Clinical Computations & Real-Time Sync Calculations
   const activePlan = mealPlans.find(p => p.status === 'published') || mealPlans[0];
-  const targetCalories = activePlan?.targets?.calories || 2000;
-  const targetProtein = activePlan?.targets?.protein || 90;
-  const targetCarbs = activePlan?.targets?.carbs || 180;
-  const targetFat = activePlan?.targets?.fat || 55;
-
   const todayStr = new Date().toISOString().split('T')[0];
+
+  // Prescribed / Assigned Meals planned for today
+  const assignedPrescribedItems = todayChecklist.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
+  const plannedDailyCalories = assignedPrescribedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+  const plannedDailyProtein = assignedPrescribedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
+  const plannedDailyCarbs = assignedPrescribedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
+  const plannedDailyFat = assignedPrescribedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
+
+  // If today has prescribed meals, target is the prescribed meals total; otherwise use plan targets or defaults
+  const targetCalories = plannedDailyCalories > 0 ? plannedDailyCalories : (activePlan?.targets?.calories || 2000);
+  const targetProtein = plannedDailyProtein > 0 ? plannedDailyProtein : (activePlan?.targets?.protein || 90);
+  const targetCarbs = plannedDailyCarbs > 0 ? plannedDailyCarbs : (activePlan?.targets?.carbs || 180);
+  const targetFat = plannedDailyFat > 0 ? plannedDailyFat : (activePlan?.targets?.fat || 55);
 
   // 1. Completed checklist items for today (both assigned meals and extra items)
   const completedChecklist = todayChecklist.filter(i => i.completed);
@@ -755,22 +763,29 @@ export default function PatientProfileView() {
                   <span className="font-bold text-stone-900 text-sm font-mono">{todayCalories} kcal</span>
                   <span className="text-stone-500 ml-1">consumed</span>
                 </div>
-                <span className="text-stone-400 font-medium">Target: {targetCalories} kcal</span>
+                <span className="text-stone-500 font-medium">Target: <strong className="text-stone-800 font-bold">{targetCalories} kcal</strong></span>
               </div>
 
               {/* Segmented Dual Bar */}
-              <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden flex border border-stone-200/70 p-0.5">
-                <div 
-                  className="bg-emerald-500 h-full rounded-l-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.round((assignedCalories / targetCalories) * 100))}%` }}
-                  title={`Assigned Meals: ${assignedCalories} kcal`}
-                />
-                <div 
-                  className="bg-amber-500 h-full transition-all duration-500 rounded-r-full"
-                  style={{ width: `${Math.min(100 - Math.min(100, Math.round((assignedCalories / targetCalories) * 100)), Math.round((extraCalories / targetCalories) * 100))}%` }}
-                  title={`Extra Food: ${extraCalories} kcal`}
-                />
-              </div>
+              {(() => {
+                const scaleMax = Math.max(targetCalories, todayCalories);
+                const bPercent = Math.min(100, Math.round((assignedCalories / scaleMax) * 100));
+                const ePercent = Math.min(100 - bPercent, Math.round((extraCalories / scaleMax) * 100));
+                return (
+                  <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden flex border border-stone-200/70 p-0.5">
+                    <div 
+                      className="bg-emerald-500 h-full rounded-l-full transition-all duration-500"
+                      style={{ width: `${bPercent}%` }}
+                      title={`Assigned Meals: ${assignedCalories} kcal`}
+                    />
+                    <div 
+                      className="bg-amber-500 h-full transition-all duration-500 rounded-r-full"
+                      style={{ width: `${ePercent}%` }}
+                      title={`Extra Food: ${extraCalories} kcal`}
+                    />
+                  </div>
+                );
+              })()}
 
               {/* Breakdown tags */}
               <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[10px]">

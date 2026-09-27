@@ -399,13 +399,25 @@ export default function MealNotepad() {
   }
 
   // CALORIC & COMPLIANCE CALCULATIONS
-  const targetCalories = activePlan?.targets?.calories || 2000;
-
   // 1. Prescribed / Assigned Meals
   const assignedItems = items.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
   const completedAssignedItems = assignedItems.filter(i => i.completed);
   const baselineCaloriesLogged = completedAssignedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
   const baselinePlannedCalories = assignedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+
+  // Target calories: Daily prescribed planned calories, fallback to plan targets or 2000
+  const targetCalories = baselinePlannedCalories > 0 
+    ? baselinePlannedCalories 
+    : (activePlan?.targets?.calories || 2000);
+
+  // Planned target macros for today's prescribed meals
+  const plannedProtein = assignedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
+  const plannedCarbs = assignedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
+  const plannedFat = assignedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
+
+  const targetProtein = plannedProtein > 0 ? plannedProtein : (activePlan?.targets?.protein || 90);
+  const targetCarbs = plannedCarbs > 0 ? plannedCarbs : (activePlan?.targets?.carbs || 180);
+  const targetFat = plannedFat > 0 ? plannedFat : (activePlan?.targets?.fat || 55);
 
   // 2. Extra Food Items Logged
   const extraItems = items.filter(i => i.isExtra || i.mealType?.toLowerCase().includes('extra'));
@@ -422,9 +434,10 @@ export default function MealNotepad() {
   const totalFatTracked = completedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
 
   // Progress Percentages
+  const scaleMax = Math.max(targetCalories, totalCaloriesTracked);
   const calorieProgressPercent = Math.min(100, Math.round((totalCaloriesTracked / targetCalories) * 100));
-  const baselineProgressPercent = Math.min(100, Math.round((baselineCaloriesLogged / targetCalories) * 100));
-  const extraProgressPercent = Math.min(100 - baselineProgressPercent, Math.round((extraCaloriesLogged / targetCalories) * 100));
+  const baselineProgressPercent = Math.min(100, Math.round((baselineCaloriesLogged / scaleMax) * 100));
+  const extraProgressPercent = Math.min(100 - baselineProgressPercent, Math.round((extraCaloriesLogged / scaleMax) * 100));
 
   const completedCount = completedItems.length;
   const isOverTarget = totalCaloriesTracked > targetCalories;
@@ -560,7 +573,7 @@ export default function MealNotepad() {
                 />
                 {/* Extra food items portion (amber/orange) */}
                 <div 
-                  className={`bg-amber-500 h-full transition-all duration-500 ${baselineProgressPercent === 0 ? 'rounded-l-full' : ''} ${calorieProgressPercent >= 100 ? 'rounded-r-full' : ''}`}
+                  className={`bg-amber-500 h-full transition-all duration-500 ${baselineProgressPercent === 0 ? 'rounded-l-full' : ''} ${(baselineProgressPercent + extraProgressPercent) >= 100 ? 'rounded-r-full' : ''}`}
                   style={{ width: `${extraProgressPercent}%` }}
                   title={`Extra Food: ${extraCaloriesLogged} kcal`}
                 />
@@ -568,8 +581,11 @@ export default function MealNotepad() {
 
               <div className="flex items-center justify-between text-[10px] font-medium text-stone-400">
                 <span>0 kcal</span>
-                <span>50%</span>
-                <span className="font-semibold text-stone-600">{targetCalories} kcal (Target)</span>
+                <span>{Math.round(targetCalories / 2)} kcal (50%)</span>
+                <span className="font-semibold text-stone-600">
+                  {targetCalories} kcal (Target)
+                  {isOverTarget && ` • ${totalCaloriesTracked} kcal total`}
+                </span>
               </div>
             </div>
 

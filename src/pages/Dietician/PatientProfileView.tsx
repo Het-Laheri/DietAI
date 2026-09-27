@@ -143,7 +143,8 @@ export default function PatientProfileView() {
     const checklistRef = doc(db, 'food_logs', `checklist_${id}_${todayStr}`);
     const unsubChecklist = onSnapshot(checklistRef, (docSnap) => {
       if (docSnap.exists()) {
-        const items = (docSnap.data().items || []) as ChecklistMealItem[];
+        const raw = docSnap.data().items;
+        const items = (Array.isArray(raw) ? raw : Object.values(raw || {})) as ChecklistMealItem[];
         setTodayChecklist(items);
       }
     }, (err) => {
@@ -164,7 +165,8 @@ export default function PatientProfileView() {
       snap.docs.forEach(docSnap => {
         const data = docSnap.data();
         if (data.type === 'checklist') {
-          const items = (data.items || []) as ChecklistMealItem[];
+          const raw = data.items;
+          const items = (Array.isArray(raw) ? raw : Object.values(raw || {})) as ChecklistMealItem[];
           items.filter(i => i.completed).forEach(item => {
             const isExtra = item.isExtra || item.mealType?.toLowerCase().includes('extra') || item.mealType === 'CUSTOM DIETARY NOTE';
             compiled.push({
@@ -203,7 +205,18 @@ export default function PatientProfileView() {
           });
         }
       });
-      setAllEatingLogs(compiled);
+      // Deduplicate compiled entries
+      const seen = new Set<string>();
+      const deduped: PatientEatingLogEntry[] = [];
+      compiled.forEach(entry => {
+        const cleanName = (entry.name || '').replace(/^Extra:\s*/i, '').trim().toLowerCase();
+        const key = `${entry.date}_${cleanName}_${entry.portion || ''}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(entry);
+        }
+      });
+      setAllEatingLogs(deduped);
     }, (err) => {
       console.warn('Real-time food logs listener note:', err);
     });

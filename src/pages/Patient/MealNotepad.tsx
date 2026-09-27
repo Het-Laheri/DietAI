@@ -11,6 +11,7 @@ import {
   savePatientChecklist, 
   getPatientChecklist,
   logMeal,
+  deleteFoodLog,
   PatientWeekPlan, 
   RecipeDBItem, 
   WeekDay 
@@ -218,7 +219,9 @@ export default function MealNotepad() {
     });
     localStorage.setItem(storageKey, JSON.stringify(stateMap));
     if (profile) {
-      savePatientChecklist(profile.uid, todayStr, updated);
+      savePatientChecklist(profile.uid, todayStr, updated).catch(err => {
+        console.warn('savePatientChecklist error:', err);
+      });
       window.dispatchEvent(new CustomEvent('nutrisnap:checklist_updated'));
     }
   };
@@ -292,15 +295,12 @@ export default function MealNotepad() {
       isExtra: true
     };
 
-    const updated = [...items, newItem];
+    let updated = [...items, newItem];
     setItems(updated);
-
-    // Save to Firestore checklist
-    await savePatientChecklist(profile.uid, todayStr, updated);
 
     // Add to daily food log history (so dietician and analytics see it)
     try {
-      await logMeal({
+      const logId = await logMeal({
         patientId: profile.uid,
         patientName: profile.name,
         date: todayStr,
@@ -323,9 +323,17 @@ export default function MealNotepad() {
         }],
         source: 'quick_log'
       });
+      if (logId) {
+        newItem.logMealId = logId;
+        updated = updated.map(it => it.id === newItem.id ? { ...it, logMealId: logId } : it);
+        setItems(updated);
+      }
     } catch (e) {
       console.warn('Could not add to logMeal:', e);
     }
+
+    // Save to Firestore checklist (server bridge bypasses patient client restrictions)
+    await savePatientChecklist(profile.uid, todayStr, updated);
 
     // Save state map
     const stateMap: Record<string, { completed: boolean; completedAt?: string }> = {};
@@ -350,10 +358,14 @@ export default function MealNotepad() {
   // Remove Extra Item
   const handleRemoveExtraItem = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const itemToRemove = items.find(i => i.id === id);
     const updated = items.filter(i => i.id !== id);
     setItems(updated);
     if (profile) {
       await savePatientChecklist(profile.uid, todayStr, updated);
+      if (itemToRemove?.logMealId) {
+        deleteFoodLog(itemToRemove.logMealId).catch(console.warn);
+      }
       window.dispatchEvent(new CustomEvent('nutrisnap:checklist_updated'));
     }
   };

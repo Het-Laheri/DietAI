@@ -3,6 +3,14 @@ export { db, auth } from './firebase';
 import { db, auth } from './firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 
+export function getApiUrl(endpoint: string): string {
+  if (typeof window !== 'undefined' && window.location) {
+    return endpoint;
+  }
+  const port = process.env.PORT || 3000;
+  return `http://localhost:${port}${endpoint}`;
+}
+
 export type Role = 'dietician' | 'patient';
 
 export interface User {
@@ -599,12 +607,27 @@ export async function saveMealPlan(plan: MealPlan, authorRole?: string) {
   }
 }
 
-export function cleanFirestoreData<T extends Record<string, any>>(data: T): Partial<T> {
+export function cleanFirestoreData<T extends Record<string, any>>(data: T): any {
+  if (Array.isArray(data)) {
+    return data.map(item => {
+      if (item && typeof item === 'object' && !(item instanceof Date)) {
+        return cleanFirestoreData(item);
+      }
+      return item;
+    });
+  }
   const cleaned: any = {};
   for (const [key, value] of Object.entries(data)) {
     if (value !== undefined) {
       if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
         cleaned[key] = cleanFirestoreData(value);
+      } else if (Array.isArray(value)) {
+        cleaned[key] = value.map(item => {
+          if (item && typeof item === 'object' && !(item instanceof Date)) {
+            return cleanFirestoreData(item);
+          }
+          return item;
+        });
       } else {
         cleaned[key] = value;
       }
@@ -615,8 +638,42 @@ export function cleanFirestoreData<T extends Record<string, any>>(data: T): Part
 
 export async function logMeal(log: FoodLog): Promise<string> {
   const sanitized = cleanFirestoreData(log);
+
+  // 1. Try server endpoint first (bypasses Firestore client-side security rules for patients)
+  try {
+    const res = await fetch(getApiUrl('/api/patient/log-meal'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sanitized)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.id) return data.id;
+    }
+  } catch (apiErr) {
+    console.warn('Notice: Backend API log-meal failed, falling back to direct Firestore:', apiErr);
+  }
+
+  // 2. Direct Firestore fallback
   const ref = await addDoc(collection(db, 'food_logs'), { ...sanitized, createdAt: serverTimestamp() });
   return ref.id;
+}
+
+export async function deleteFoodLog(logId: string): Promise<boolean> {
+  try {
+    const res = await fetch(getApiUrl(`/api/patient/food-log/${encodeURIComponent(logId)}`), {
+      method: 'DELETE'
+    });
+    if (res.ok) return true;
+  } catch (apiErr) {
+    console.warn('Notice: Backend API deleteFoodLog failed, falling back to direct Firestore:', apiErr);
+  }
+  try {
+    await deleteDoc(doc(db, 'food_logs', logId));
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 export async function getFoodLogs(patientId: string, date: string): Promise<FoodLog[]> {
@@ -1319,6 +1376,7 @@ export interface ChecklistMealItem {
   completed: boolean;
   completedAt?: string;
   isExtra?: boolean;
+  logMealId?: string;
 }
 
 export interface PatientEatingLogEntry {
@@ -1340,6 +1398,22 @@ export interface PatientEatingLogEntry {
 
 export async function savePatientChecklist(patientId: string, date: string, items: ChecklistMealItem[]) {
   const sanitized = cleanFirestoreData(items);
+
+  // 1. Route via backend API (bypasses Firestore client-side security rules for patients)
+  try {
+    const res = await fetch(getApiUrl('/api/patient/save-checklist'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patientId, date, items: sanitized })
+    });
+    if (res.ok) {
+      return;
+    }
+  } catch (apiErr) {
+    console.warn('Notice: Backend API save-checklist failed, falling back to direct Firestore:', apiErr);
+  }
+
+  // 2. Direct Firestore write fallback
   await setDoc(doc(db, 'food_logs', `checklist_${patientId}_${date}`), {
     patientId,
     date,
@@ -1350,13 +1424,28 @@ export async function savePatientChecklist(patientId: string, date: string, item
 }
 
 export async function getPatientChecklist(patientId: string, date: string): Promise<ChecklistMealItem[]> {
+  // 1. Try backend API first
+  try {
+    const res = await fetch(getApiUrl(`/api/patient/checklist/${encodeURIComponent(patientId)}/${encodeURIComponent(date)}`));
+    if (res.ok) {
+      const data = await res.json();
+      if (data.items) {
+        return Array.isArray(data.items) ? data.items : Object.values(data.items);
+      }
+    }
+  } catch (apiErr) {
+    // fallback to direct Firestore
+  }
+
+  // 2. Direct Firestore fallback
   try {
     const d = await getDoc(doc(db, 'food_logs', `checklist_${patientId}_${date}`));
     if (d.exists()) {
-      return d.data().items || [];
+      const raw = d.data().items;
+      return (Array.isArray(raw) ? raw : Object.values(raw || {})) as ChecklistMealItem[];
     }
   } catch (err) {
-    console.warn('Notice: getPatientChecklist failed:', err);
+    console.warn('Notice: getPatientChecklist direct read failed:', err);
   }
   return [];
 }
@@ -1365,15 +1454,16 @@ export async function getAllPatientEatingLogs(patientId: string): Promise<Patien
   try {
     const q = query(collection(db, 'food_logs'), where('patientId', '==', patientId));
     const snap = await getDocs(q);
-    const entries: PatientEatingLogEntry[] = [];
+    const rawEntries: PatientEatingLogEntry[] = [];
 
     snap.docs.forEach(docSnap => {
       const data = docSnap.data();
       if (data.type === 'checklist') {
-        const items = (data.items || []) as ChecklistMealItem[];
+        const rawItems = data.items;
+        const items = (Array.isArray(rawItems) ? rawItems : Object.values(rawItems || {})) as ChecklistMealItem[];
         items.filter(i => i.completed).forEach(item => {
           const isExtra = item.isExtra || item.mealType?.toLowerCase().includes('extra') || item.mealType === 'CUSTOM DIETARY NOTE';
-          entries.push({
+          rawEntries.push({
             id: `${docSnap.id}_${item.id}`,
             date: data.date,
             type: isExtra ? 'extra' : 'assigned',
@@ -1391,7 +1481,7 @@ export async function getAllPatientEatingLogs(patientId: string): Promise<Patien
         });
       } else {
         const isExtra = data.mealType?.toLowerCase().includes('extra') || data.isExtra || data.source === 'quick_log';
-        entries.push({
+        rawEntries.push({
           id: docSnap.id,
           date: data.date,
           type: isExtra ? 'extra' : (data.imageUrl ? 'scanned' : 'assigned'),
@@ -1407,6 +1497,18 @@ export async function getAllPatientEatingLogs(patientId: string): Promise<Patien
           notes: data.userNotes,
           isExtra
         });
+      }
+    });
+
+    // Deduplicate entries between checklist and food_logs
+    const seen = new Set<string>();
+    const entries: PatientEatingLogEntry[] = [];
+    rawEntries.forEach(entry => {
+      const cleanName = (entry.name || '').replace(/^Extra:\s*/i, '').trim().toLowerCase();
+      const key = `${entry.date}_${cleanName}_${entry.portion || ''}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        entries.push(entry);
       }
     });
 

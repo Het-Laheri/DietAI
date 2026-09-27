@@ -279,18 +279,22 @@ export default function PatientProfileView() {
   const assignedCalories = assignedCompleted.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
   const extraCalories = extraCompleted.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
 
-  // 2. Today's scanned logs (deduplicated against checklist items)
+  // 2. Today's genuine scanned logs (excluding quick_logs and items already recorded in checklist)
   const todayLogs = foodLogs.filter(l => l.date === todayStr);
-  const uniqueScannedLogs = todayLogs.filter(l => 
-    !completedChecklist.some(c => c.name.toLowerCase() === (l.description || '').toLowerCase())
-  );
+  const uniqueScannedLogs = todayLogs.filter(l => {
+    if (l.source === 'quick_log' || l.isExtra || l.mealType?.toLowerCase().includes('extra')) {
+      return false;
+    }
+    const cleanLogName = (l.description || l.items?.[0]?.name || '').replace(/^Extra:\s*/i, '').trim().toLowerCase();
+    return !completedChecklist.some(c => (c.name || '').replace(/^Extra:\s*/i, '').trim().toLowerCase() === cleanLogName);
+  });
   const scanCalories = uniqueScannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.calories) || 0), 0);
   const scanProtein = uniqueScannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.protein) || 0), 0);
   const scanCarbs = uniqueScannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.carbs) || 0), 0);
   const scanFat = uniqueScannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.fat) || 0), 0);
 
-  // Grand total today consumed
-  const todayCalories = checklistCalories + scanCalories;
+  // Grand total today consumed (Prescribed + Extra Food + Independent Scans)
+  const todayCalories = assignedCalories + extraCalories + scanCalories;
   const todayProtein = checklistProtein + scanProtein;
   const todayCarbs = checklistCarbs + scanCarbs;
   const todayFat = checklistFat + scanFat;
@@ -303,7 +307,8 @@ export default function PatientProfileView() {
   completedChecklist.forEach(item => {
     const isExtra = item.isExtra || item.mealType?.toLowerCase().includes('extra') || item.mealType === 'CUSTOM DIETARY NOTE';
     const entryId = `today_checklist_${item.id}`;
-    if (!combinedEatingLogs.some(e => e.date === todayStr && (e.name.toLowerCase() === item.name.toLowerCase() || e.id.includes(item.id)))) {
+    const cleanItemName = (item.name || '').replace(/^Extra:\s*/i, '').trim().toLowerCase();
+    if (!combinedEatingLogs.some(e => e.date === todayStr && ((e.name || '').replace(/^Extra:\s*/i, '').trim().toLowerCase() === cleanItemName || e.id.includes(item.id)))) {
       combinedEatingLogs.push({
         id: entryId,
         date: todayStr,

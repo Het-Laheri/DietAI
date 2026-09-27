@@ -149,36 +149,44 @@ export default function MealNotepad() {
           }
           const dayPlan = published.days[dayIndex] || published.days[0];
           initialList = dayPlan.meals.map((m, idx) => {
-            const itemId = `plan_meal_${idx}_${m.type.toLowerCase()}`;
+            const cleanType = m.type.toLowerCase().replace(/\s+/g, '_');
+            const itemId = `plan_meal_${idx}_${cleanType}`;
+            // Match against savedState by exact id or normalized id
+            const state = savedState[itemId] || 
+                          Object.values(savedState).find(s => s.mealType.toLowerCase().replace(/\s+/g, '_') === cleanType && s.name.toLowerCase() === m.name.toLowerCase());
             return {
               id: itemId,
               mealType: m.type,
               name: m.name,
               portion: m.portion || '1 serving',
-              calories: m.calories,
-              protein: m.protein,
-              carbs: m.carbs,
-              fat: m.fat,
+              calories: Number(m.calories) || 0,
+              protein: Number(m.protein) || 0,
+              carbs: Number(m.carbs) || 0,
+              fat: Number(m.fat) || 0,
               notes: m.notes,
               recipe: Array.isArray(m.recipe) ? m.recipe : (m.recipe ? [m.recipe] : []),
               ingredients: Array.isArray(m.ingredients) ? m.ingredients : (m.ingredients ? [m.ingredients] : []),
-              completed: savedState[itemId]?.completed || false,
-              completedAt: savedState[itemId]?.completedAt,
+              completed: state?.completed || false,
+              completedAt: state?.completedAt,
               isExtra: false
             };
           });
         }
 
         // 3. Append saved extra/custom items from savedStateList
-        const planItemIds = new Set(initialList.map(i => i.id));
         savedStateList.forEach(item => {
-          if (!planItemIds.has(item.id)) {
-            initialList.push(item);
-          } else {
-            const match = initialList.find(i => i.id === item.id);
-            if (match) {
-              match.completed = item.completed;
-              match.completedAt = item.completedAt;
+          const cleanItemType = item.mealType.toLowerCase().replace(/\s+/g, '_');
+          const match = initialList.find(i => 
+            i.id === item.id || 
+            (i.id.replace(/\s+/g, '_') === item.id.replace(/\s+/g, '_')) ||
+            (!item.isExtra && i.mealType.toLowerCase().replace(/\s+/g, '_') === cleanItemType && i.name.toLowerCase() === item.name.toLowerCase())
+          );
+          if (match) {
+            match.completed = item.completed;
+            match.completedAt = item.completedAt;
+          } else if (item.isExtra || item.mealType === 'Extra Food') {
+            if (!initialList.some(i => i.id === item.id)) {
+              initialList.push(item);
             }
           }
         });
@@ -394,23 +402,24 @@ export default function MealNotepad() {
   const targetCalories = activePlan?.targets?.calories || 2000;
 
   // 1. Prescribed / Assigned Meals
-  const assignedItems = items.filter(i => !i.isExtra && i.mealType !== 'Extra Food');
+  const assignedItems = items.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
   const completedAssignedItems = assignedItems.filter(i => i.completed);
-  const baselineCaloriesLogged = completedAssignedItems.reduce((sum, i) => sum + (i.calories || 0), 0);
-  const baselinePlannedCalories = assignedItems.reduce((sum, i) => sum + (i.calories || 0), 0);
+  const baselineCaloriesLogged = completedAssignedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+  const baselinePlannedCalories = assignedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
 
   // 2. Extra Food Items Logged
-  const extraItems = items.filter(i => i.isExtra || i.mealType === 'Extra Food');
-  const extraCaloriesLogged = extraItems.reduce((sum, i) => sum + (i.calories || 0), 0);
+  const extraItems = items.filter(i => i.isExtra || i.mealType?.toLowerCase().includes('extra'));
+  const completedExtraItems = extraItems.filter(i => i.completed);
+  const extraCaloriesLogged = completedExtraItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
 
   // 3. Total Day's Calories (Baseline Meals Logged + Extra AI-Logged Meals)
   const totalCaloriesTracked = baselineCaloriesLogged + extraCaloriesLogged;
 
-  // Macros Total
+  // Macros Total (All Completed Food Items)
   const completedItems = items.filter(i => i.completed);
-  const totalProteinTracked = completedItems.reduce((sum, i) => sum + (i.protein || 0), 0);
-  const totalCarbsTracked = completedItems.reduce((sum, i) => sum + (i.carbs || 0), 0);
-  const totalFatTracked = completedItems.reduce((sum, i) => sum + (i.fat || 0), 0);
+  const totalProteinTracked = completedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
+  const totalCarbsTracked = completedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
+  const totalFatTracked = completedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
 
   // Progress Percentages
   const calorieProgressPercent = Math.min(100, Math.round((totalCaloriesTracked / targetCalories) * 100));

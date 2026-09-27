@@ -97,15 +97,24 @@ export default function PatientOverview() {
   };
 
   const completedChecklist = checklistItems.filter(i => i.completed);
-  const checklistCals = completedChecklist.reduce((sum, i) => sum + (i.calories || 0), 0);
-  const scannedCals = todayLogs
-    .filter(l => !completedChecklist.some(c => c.name.toLowerCase() === (l.description || '').toLowerCase()))
-    .reduce((sum, l) => sum + (l.nutrition?.calories || 0), 0);
-  const totalCalories = checklistCals + scannedCals;
+  const assignedCompleted = completedChecklist.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
+  const extraCompleted = completedChecklist.filter(i => i.isExtra || i.mealType?.toLowerCase().includes('extra'));
+  const assignedCalories = assignedCompleted.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+  const extraCalories = extraCompleted.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+
+  const scannedLogs = todayLogs.filter(l => {
+    if (l.source === 'quick_log' || l.isExtra || l.mealType?.toLowerCase().includes('extra')) {
+      return false;
+    }
+    const cleanLogName = (l.description || l.items?.[0]?.name || '').replace(/^Extra:\s*/i, '').trim().toLowerCase();
+    return !completedChecklist.some(c => (c.name || '').replace(/^Extra:\s*/i, '').trim().toLowerCase() === cleanLogName);
+  });
+  const scannedCals = scannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.calories) || 0), 0);
+  const totalCalories = assignedCalories + extraCalories + scannedCals;
 
   const targetCalories = activePlan?.targets?.calories || 2000;
   const targetProtein = activePlan?.targets?.protein || 100;
-  const loggedProtein = completedChecklist.reduce((sum, i) => sum + (i.protein || 0), 0) + todayLogs.reduce((sum, l) => sum + (l.nutrition?.protein || 0), 0);
+  const loggedProtein = completedChecklist.reduce((sum, i) => sum + (Number(i.protein) || 0), 0) + scannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.protein) || 0), 0);
 
   // Get checked items count
   const checkedItemsCount = completedChecklist.length;

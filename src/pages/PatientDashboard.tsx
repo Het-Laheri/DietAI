@@ -108,31 +108,82 @@ export default function PatientDashboard() {
   };
 
   const navItems = [
-    { name: 'Dashboard', path: '/patient', icon: Home },
-    { name: "Today's Meals", path: '/patient/meals', icon: ClipboardList, locked: !isSubscribed },
-    { name: 'AI Scanner', path: '/patient/scanner', icon: Camera },
-    { name: 'Progress', path: '/patient/progress', icon: Activity },
-    { name: 'Ask Dietician', path: '/patient/inbox', icon: MessageCircle },
-    { name: 'Membership', path: '/patient/subscription', icon: CreditCard },
+    { 
+      name: 'Dashboard', 
+      path: '/patient', 
+      icon: Home,
+      activeClass: 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/25',
+      iconActive: 'text-white',
+      hoverClass: 'hover:text-emerald-700 hover:bg-emerald-50/80',
+      iconInactive: 'text-emerald-500'
+    },
+    { 
+      name: "Today's Meals", 
+      path: '/patient/meals', 
+      icon: ClipboardList, 
+      locked: !isSubscribed,
+      activeClass: 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow-md shadow-orange-500/25',
+      iconActive: 'text-white',
+      hoverClass: 'hover:text-orange-700 hover:bg-orange-50/80',
+      iconInactive: 'text-orange-500'
+    },
+    { 
+      name: 'AI Scanner', 
+      path: '/patient/scanner', 
+      icon: Camera,
+      activeClass: 'bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 text-white shadow-md shadow-purple-500/25',
+      iconActive: 'text-white',
+      hoverClass: 'hover:text-purple-700 hover:bg-purple-50/80',
+      iconInactive: 'text-purple-500'
+    },
+    { 
+      name: 'Progress', 
+      path: '/patient/progress', 
+      icon: Activity,
+      activeClass: 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/25',
+      iconActive: 'text-white',
+      hoverClass: 'hover:text-sky-700 hover:bg-sky-50/80',
+      iconInactive: 'text-sky-500'
+    },
+    { 
+      name: 'Ask Dietician', 
+      path: '/patient/inbox', 
+      icon: MessageCircle,
+      activeClass: 'bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-md shadow-pink-500/25',
+      iconActive: 'text-white',
+      hoverClass: 'hover:text-rose-700 hover:bg-rose-50/80',
+      iconInactive: 'text-rose-500'
+    },
+    { 
+      name: 'Membership', 
+      path: '/patient/subscription', 
+      icon: CreditCard,
+      activeClass: 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/25',
+      iconActive: 'text-white',
+      hoverClass: 'hover:text-indigo-700 hover:bg-indigo-50/80',
+      iconInactive: 'text-indigo-500'
+    },
   ];
 
   return (
-    <div className="min-h-screen bg-stone-50 flex flex-col md:flex-row font-sans">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50/30 via-slate-50 to-orange-50/20 flex flex-col md:flex-row font-sans">
       {/* Mobile Top Header */}
-      <header className="md:hidden bg-white border-b border-stone-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+      <header className="md:hidden bg-white/90 backdrop-blur-md border-b border-orange-100 px-4 py-3 flex items-center justify-between sticky top-0 z-30 shadow-xs">
         <Link to="/patient" className="flex items-center gap-2">
-          <img src="/logo.jpg" alt="NutriSnap" className="h-7 w-auto rounded-md shadow-xs" />
-          <h2 className="text-lg font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500">NutriSnap</h2>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-orange-500 via-rose-500 to-pink-500 p-0.5 shadow-sm flex items-center justify-center">
+            <img src="/logo.jpg" alt="NutriSnap" className="h-full w-full object-cover rounded-[6px]" />
+          </div>
+          <h2 className="text-lg font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-rose-500 to-pink-500">NutriSnap</h2>
         </Link>
 
         <div className="flex items-center gap-2 sm:gap-3">
           <Link to="/patient/subscription">
             {isSubscribed ? (
-              <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
                 ★ Premium
               </span>
             ) : (
-              <span className="text-[10px] font-black uppercase tracking-wider bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-orange-500 text-white px-2.5 py-0.5 rounded-full shadow-xs">
                 Upgrade
               </span>
             )}
@@ -154,7 +205,7 @@ export default function PatientDashboard() {
           <button
             onClick={() => setIsProfileModalOpen(true)}
             title="Edit Health Profile & Metrics"
-            className="w-7 h-7 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold text-xs shadow-xs hover:scale-105 transition-transform cursor-pointer"
+            className="w-7 h-7 rounded-full bg-gradient-to-br from-orange-400 via-rose-400 to-pink-500 flex items-center justify-center text-white font-bold text-xs shadow-sm hover:scale-105 transition-transform cursor-pointer"
           >
             {profile?.name?.charAt(0) || 'P'}
           </button>
@@ -169,16 +220,20 @@ export default function PatientDashboard() {
       </header>
 
       {/* Sidebar Desktop */}
-      <aside className="hidden md:flex w-64 bg-white border-r border-stone-100 flex-col z-10 shadow-sm shrink-0">
-        <div className="p-8 pb-4">
-          <Link to="/" className="flex items-center gap-2 mb-2">
-            <img src="/logo.jpg" alt="NutriSnap" className="h-8 w-auto rounded-md shadow-sm" />
-            <h2 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500">NutriSnap</h2>
+      <aside className="hidden md:flex w-64 bg-white/90 backdrop-blur-md border-r border-orange-100/80 flex-col z-10 shadow-sm shrink-0">
+        <div className="p-6 pb-4">
+          <Link to="/" className="flex items-center gap-2.5 mb-2 group">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-orange-500 via-rose-500 to-pink-500 p-0.5 shadow-md shadow-orange-500/20 group-hover:scale-105 transition-transform flex items-center justify-center">
+              <img src="/logo.jpg" alt="NutriSnap" className="h-full w-full object-cover rounded-[10px]" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-rose-500 to-pink-500 leading-none">NutriSnap</h2>
+              <span className="text-[10px] uppercase tracking-widest text-orange-600 font-bold">Patient Portal</span>
+            </div>
           </Link>
-          <p className="text-[10px] uppercase tracking-widest text-orange-600 font-bold mt-1">Patient Portal</p>
         </div>
         
-        <nav className="flex-1 px-4 py-6 flex flex-col space-y-1">
+        <nav className="flex-1 px-3 py-4 flex flex-col space-y-1.5">
           {navItems.map(item => {
             const active = location.pathname === item.path;
             const Icon = item.icon;
@@ -186,16 +241,20 @@ export default function PatientDashboard() {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center justify-start gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+                className={`flex items-center justify-start gap-3 px-3.5 py-2.5 rounded-xl text-sm font-bold transition-all ${
                   active 
-                    ? 'bg-orange-50 text-orange-600 shadow-sm border border-orange-200' 
-                    : 'text-stone-500 hover:text-orange-500 hover:bg-orange-50/50'
+                    ? item.activeClass
+                    : `text-stone-600 ${item.hoverClass}`
                 }`}
               >
-                <Icon className={`w-4 h-4 ${active ? 'text-pink-500' : 'text-stone-400'}`} />
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                  active ? 'bg-white/20' : 'bg-stone-100/80'
+                }`}>
+                  <Icon className={`w-4 h-4 ${active ? item.iconActive : item.iconInactive}`} />
+                </div>
                 <span>{item.name}</span>
                 {item.locked && (
-                  <Lock className="w-3 h-3 text-amber-500 ml-auto" />
+                  <Lock className="w-3.5 h-3.5 text-amber-500 ml-auto" />
                 )}
               </Link>
             );
@@ -204,10 +263,12 @@ export default function PatientDashboard() {
           {/* Desktop Sidebar Notification Button */}
           <button
             onClick={() => setShowNotifications(true)}
-            className="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold text-stone-500 hover:text-orange-500 hover:bg-orange-50/50 transition-all text-left mt-2"
+            className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-bold text-stone-600 hover:text-purple-600 hover:bg-purple-50/80 transition-all text-left mt-2"
           >
             <div className="flex items-center gap-3">
-              <Bell className="w-4 h-4 text-stone-400" />
+              <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                <Bell className="w-4 h-4" />
+              </div>
               <span>Notifications</span>
             </div>
             {unreadCount > 0 ? (
@@ -282,22 +343,29 @@ export default function PatientDashboard() {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto pb-24 md:pb-8 bg-[#FAFAFA] relative">
-        <Routes>
-          <Route path="/" element={<PatientOverview />} />
-          <Route path="/meals" element={<MealNotepad />} />
-          <Route path="/today" element={<MealNotepad />} />
-          <Route path="/scanner" element={<FoodScanner />} />
-          <Route path="/progress" element={<Progress />} />
-          <Route path="/inbox" element={<Inbox />} />
-          <Route path="/ai" element={<Inbox />} />
-          <Route path="/subscription" element={<SubscriptionPage />} />
-          <Route path="/billing" element={<SubscriptionPage />} />
-        </Routes>
+      <main className="flex-1 overflow-auto pb-24 md:pb-8 bg-gradient-to-br from-amber-50/40 via-slate-50 to-orange-50/30 relative">
+        {/* Ambient atmospheric color glows */}
+        <div className="fixed top-0 right-0 w-[450px] h-[450px] bg-gradient-to-bl from-orange-300/20 via-pink-300/15 to-transparent rounded-full blur-3xl pointer-events-none -z-0" />
+        <div className="fixed bottom-0 left-64 w-[450px] h-[450px] bg-gradient-to-tr from-emerald-300/20 via-teal-300/15 to-transparent rounded-full blur-3xl pointer-events-none -z-0" />
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-gradient-to-r from-sky-300/10 via-violet-300/10 to-transparent rounded-full blur-3xl pointer-events-none -z-0" />
+
+        <div className="relative z-10">
+          <Routes>
+            <Route path="/" element={<PatientOverview />} />
+            <Route path="/meals" element={<MealNotepad />} />
+            <Route path="/today" element={<MealNotepad />} />
+            <Route path="/scanner" element={<FoodScanner />} />
+            <Route path="/progress" element={<Progress />} />
+            <Route path="/inbox" element={<Inbox />} />
+            <Route path="/ai" element={<Inbox />} />
+            <Route path="/subscription" element={<SubscriptionPage />} />
+            <Route path="/billing" element={<SubscriptionPage />} />
+          </Routes>
+        </div>
       </main>
 
       {/* Mobile Fixed Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-stone-200 flex items-center justify-around py-2 px-1 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-orange-100 flex items-center justify-around py-2 px-1 shadow-[0_-4px_16px_rgba(249,115,22,0.08)]">
         {navItems.map(item => {
           const active = location.pathname === item.path;
           const Icon = item.icon;
@@ -306,16 +374,16 @@ export default function PatientDashboard() {
               key={item.path}
               to={item.path}
               className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl text-[10px] font-bold transition-all relative ${
-                active ? 'text-orange-600' : 'text-stone-400 hover:text-stone-700'
+                active ? 'text-orange-600 font-extrabold scale-105' : 'text-stone-400 hover:text-stone-700'
               }`}
             >
-              <div className="relative">
-                <Icon className={`w-5 h-5 mb-0.5 ${active ? 'text-orange-500' : 'text-stone-400'}`} />
+              <div className={`p-1 rounded-lg transition-colors ${active ? 'bg-orange-50 text-orange-600' : ''}`}>
+                <Icon className={`w-5 h-5 ${active ? item.iconInactive : 'text-stone-400'}`} />
                 {item.locked && (
-                  <Lock className="w-2.5 h-2.5 text-amber-500 absolute -top-1 -right-1" />
+                  <Lock className="w-2.5 h-2.5 text-amber-500 absolute -top-0.5 -right-0.5" />
                 )}
               </div>
-              <span className="truncate max-w-[58px]">{item.name}</span>
+              <span className="truncate max-w-[58px] mt-0.5">{item.name}</span>
             </Link>
           );
         })}

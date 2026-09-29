@@ -465,39 +465,39 @@ export default function MealNotepad() {
       )}
 
       {/* CLINICAL DAILY MEAL SCHEDULE CONTAINER */}
-      <div className="bg-white rounded-xl border border-stone-200/90 shadow-xs relative overflow-hidden transition-all">
+      <div className="bg-gradient-to-br from-white via-stone-50/20 to-orange-50/15 rounded-3xl border-2 border-orange-200/90 shadow-xl relative overflow-hidden transition-all">
         
         {/* Header Bar */}
-        <div className="bg-stone-900 text-stone-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-stone-800">
+        <div className="bg-gradient-to-r from-stone-900 via-stone-850 to-orange-950 text-stone-200 px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-orange-900/30">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <CheckSquare className="w-4 h-4" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-orange-500/25">
+              <CheckSquare className="w-5 h-5" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-mono tracking-wider text-orange-400 uppercase font-semibold">
+                <span className="text-[10px] font-mono tracking-wider text-amber-300 uppercase font-black">
                   CLINICAL NUTRITION SCHEDULE
                 </span>
                 <span className="text-stone-500 text-[10px]">•</span>
                 <span className="text-stone-300 text-[11px] font-mono">{formattedDate}</span>
                 <span className="text-stone-500 text-[10px]">•</span>
-                <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/40 text-[10px] font-bold uppercase tracking-wider">
+                <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-orange-500/30 to-amber-500/30 text-amber-200 border border-amber-400/40 text-[10px] font-black uppercase tracking-wider">
                   Day {timeline.totalDays} of Care Plan
                 </span>
               </div>
-              <h1 className="text-base md:text-lg font-bold text-white tracking-tight">
+              <h1 className="text-lg md:text-xl font-serif font-black text-white tracking-tight mt-0.5">
                 Today's Assigned Meal To-Do Checklist
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 bg-stone-800/90 px-3 py-1.5 rounded-lg border border-stone-700/80">
-            <span className="text-xs font-medium text-stone-300">Prescribed:</span>
-            <span className="text-xs font-bold text-orange-400 font-mono">
+          <div className="flex items-center gap-2 bg-stone-800/90 backdrop-blur-md px-3.5 py-2 rounded-xl border border-stone-700/80 shadow-inner">
+            <span className="text-xs font-semibold text-stone-300">Prescribed:</span>
+            <span className="text-xs font-black text-amber-400 font-mono">
               {completedAssignedItems.length} / {assignedItems.length} Done
             </span>
             {extraItems.length > 0 && (
-              <span className="text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded ml-1">
+              <span className="text-[10px] font-black bg-gradient-to-r from-amber-500 to-orange-500 text-white px-2 py-0.5 rounded-md ml-1 shadow-2xs">
                 +{extraItems.length} Extra
               </span>
             )}
@@ -505,45 +505,45 @@ export default function MealNotepad() {
         </div>
 
         {/* Clinical Dossier Header & Calorie Tracking Dashboard */}
-        <div className="p-6 border-b border-stone-200 bg-stone-50/40">
+        <div className="p-6 border-b border-orange-100 bg-white/70">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-stone-500 mb-0.5">
-                Client: <span className="text-stone-900 font-semibold">{profile?.name}</span>
+              <p className="text-[11px] font-black uppercase tracking-wider text-stone-500 mb-0.5">
+                Client: <span className="text-stone-900 font-black">{profile?.name}</span>
               </p>
-              <p className="text-xs text-stone-500">
+              <p className="text-xs text-stone-600 font-medium">
                 Check off each item as you consume it. Your progress is synced to your clinical record in real-time.
               </p>
             </div>
 
-            {/* Dietician Clinical Directive Callout */}
-            <div className="border-l-2 border-orange-500 bg-orange-50/50 rounded-r-lg p-3.5 max-w-md shadow-xs">
-              <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-orange-800 mb-1">
+            {/* Dietician Clinical Directive Callout with Warm Gradient */}
+            <div className="border-l-4 border-orange-500 bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50/30 rounded-r-2xl p-4 max-w-md shadow-xs">
+              <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-orange-900 mb-1">
                 <Sparkles className="w-3.5 h-3.5 text-orange-600" />
                 Dietician Directive
               </div>
-              <p className="text-xs leading-relaxed text-stone-700 font-normal">
+              <p className="text-xs leading-relaxed text-stone-700 font-medium">
                 {activePlan?.instructions || 'Chew slowly, stay hydrated between meals, and avoid processed refined sugars today.'}
               </p>
             </div>
           </div>
 
           {/* DYNAMIC CALORIE & MACRO COMPLETION PROGRESS SECTION */}
-          <div className="mt-5 p-4 rounded-xl bg-white border border-stone-200 shadow-2xs space-y-3">
+          <div className="mt-5 p-5 rounded-2xl bg-gradient-to-br from-white via-orange-50/20 to-amber-50/20 border-2 border-orange-150 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-stone-500 block">
+                <span className="text-xs font-black uppercase tracking-wider text-stone-600 block">
                   Total Day's Calories Logged
                 </span>
                 <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className="text-2xl font-black text-stone-900 font-mono tracking-tight">
+                  <span className="text-3xl font-black text-stone-900 font-mono tracking-tight">
                     {totalCaloriesTracked}
                   </span>
-                  <span className="text-xs text-stone-500 font-medium">
+                  <span className="text-xs text-stone-500 font-bold">
                     / {targetCalories} kcal target ({calorieProgressPercent}%)
                   </span>
                   {isOverTarget && (
-                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full ml-1">
+                    <span className="text-[10px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full ml-1">
                       +{totalCaloriesTracked - targetCalories} kcal over target
                     </span>
                   )}
@@ -551,58 +551,58 @@ export default function MealNotepad() {
               </div>
 
               {/* Baseline vs Extra Breakdown Pills */}
-              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  Prescribed: <strong className="font-bold">{baselineCaloriesLogged} kcal</strong>
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-900 border border-emerald-200 font-bold shadow-2xs">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs" />
+                  Prescribed: <strong className="font-black">{baselineCaloriesLogged} kcal</strong>
                 </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-50 text-amber-900 border border-amber-200 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  Extra Food: <strong className="font-bold">{extraCaloriesLogged} kcal</strong>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 text-amber-900 border border-amber-200 font-bold shadow-2xs">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-xs" />
+                  Extra Food: <strong className="font-black">{extraCaloriesLogged} kcal</strong>
                 </span>
               </div>
             </div>
 
-            {/* DUAL-SEGMENT DYNAMIC COMPLETION BAR */}
-            <div className="space-y-1">
-              <div className="w-full bg-stone-100 h-3 rounded-full overflow-hidden flex p-0.5 border border-stone-200/80">
-                {/* Prescribed meals portion (emerald) */}
+            {/* DUAL-SEGMENT DYNAMIC COMPLETION BAR with Radiant Gradients */}
+            <div className="space-y-1.5">
+              <div className="w-full bg-stone-100 h-3.5 rounded-full overflow-hidden flex p-0.5 border border-stone-200 shadow-inner">
+                {/* Prescribed meals portion (emerald-teal) */}
                 <div 
-                  className="bg-emerald-500 h-full rounded-l-full transition-all duration-500"
+                  className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-l-full transition-all duration-500 shadow-xs"
                   style={{ width: `${baselineProgressPercent}%` }}
                   title={`Prescribed Meals: ${baselineCaloriesLogged} kcal`}
                 />
-                {/* Extra food items portion (amber/orange) */}
+                {/* Extra food items portion (amber-orange) */}
                 <div 
-                  className={`bg-amber-500 h-full transition-all duration-500 ${baselineProgressPercent === 0 ? 'rounded-l-full' : ''} ${(baselineProgressPercent + extraProgressPercent) >= 100 ? 'rounded-r-full' : ''}`}
+                  className={`bg-gradient-to-r from-amber-400 to-orange-500 h-full transition-all duration-500 ${baselineProgressPercent === 0 ? 'rounded-l-full' : ''} ${(baselineProgressPercent + extraProgressPercent) >= 100 ? 'rounded-r-full' : ''}`}
                   style={{ width: `${extraProgressPercent}%` }}
                   title={`Extra Food: ${extraCaloriesLogged} kcal`}
                 />
               </div>
 
-              <div className="flex items-center justify-between text-[10px] font-medium text-stone-400">
+              <div className="flex items-center justify-between text-[10px] font-bold text-stone-500">
                 <span>0 kcal</span>
                 <span>{Math.round(targetCalories / 2)} kcal (50%)</span>
-                <span className="font-semibold text-stone-600">
+                <span className="font-black text-stone-800">
                   {targetCalories} kcal (Target)
                   {isOverTarget && ` • ${totalCaloriesTracked} kcal total`}
                 </span>
               </div>
             </div>
 
-            {/* Macros Breakdown Bar */}
-            <div className="pt-2 border-t border-stone-100 grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="p-2 bg-stone-50 rounded-lg border border-stone-150">
-                <span className="text-[10px] uppercase font-bold text-stone-400 block">Protein</span>
-                <span className="font-bold text-stone-800 font-mono">{totalProteinTracked}g</span>
+            {/* Macros Breakdown Bar with Vibrant Gradient Cards */}
+            <div className="pt-2 border-t border-orange-100 grid grid-cols-3 gap-3 text-center text-xs">
+              <div className="p-3 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-200 shadow-2xs">
+                <span className="text-[10px] uppercase font-black text-emerald-700 block tracking-wider">Protein</span>
+                <span className="font-black text-emerald-950 font-mono text-base">{totalProteinTracked}g</span>
               </div>
-              <div className="p-2 bg-stone-50 rounded-lg border border-stone-150">
-                <span className="text-[10px] uppercase font-bold text-stone-400 block">Carbohydrates</span>
-                <span className="font-bold text-stone-800 font-mono">{totalCarbsTracked}g</span>
+              <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200 shadow-2xs">
+                <span className="text-[10px] uppercase font-black text-amber-700 block tracking-wider">Carbohydrates</span>
+                <span className="font-black text-amber-950 font-mono text-base">{totalCarbsTracked}g</span>
               </div>
-              <div className="p-2 bg-stone-50 rounded-lg border border-stone-150">
-                <span className="text-[10px] uppercase font-bold text-stone-400 block">Fats</span>
-                <span className="font-bold text-stone-800 font-mono">{totalFatTracked}g</span>
+              <div className="p-3 bg-gradient-to-br from-rose-50 to-pink-50 rounded-xl border border-rose-200 shadow-2xs">
+                <span className="text-[10px] uppercase font-black text-rose-700 block tracking-wider">Fats</span>
+                <span className="font-black text-rose-950 font-mono text-base">{totalFatTracked}g</span>
               </div>
             </div>
           </div>
@@ -676,14 +676,26 @@ export default function MealNotepad() {
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                           <div className="flex items-center gap-1.5">
-                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                              isExtra 
-                                ? 'bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1' 
-                                : 'bg-stone-100 text-stone-600 border border-stone-200'
-                            }`}>
-                              {isExtra && <Sparkles className="w-2.5 h-2.5 text-amber-600" />}
-                              {isExtra ? 'EXTRA FOOD (PATIENT LOGGED)' : item.mealType}
-                            </span>
+                            {(() => {
+                              const slotColorMap: Record<string, string> = {
+                                'Breakfast': 'bg-amber-100 text-amber-900 border-amber-300',
+                                'Morning Snack': 'bg-orange-100 text-orange-900 border-orange-300',
+                                'Lunch': 'bg-emerald-100 text-emerald-900 border-emerald-300',
+                                'Evening Snack': 'bg-rose-100 text-rose-900 border-rose-300',
+                                'Dinner': 'bg-purple-100 text-purple-900 border-purple-300',
+                                'Bedtime Snack': 'bg-indigo-100 text-indigo-900 border-indigo-300',
+                              };
+                              const badgeClass = isExtra
+                                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-transparent shadow-xs'
+                                : (slotColorMap[item.mealType] || 'bg-stone-100 text-stone-700 border-stone-200');
+
+                              return (
+                                <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md border flex items-center gap-1 ${badgeClass}`}>
+                                  {isExtra && <Sparkles className="w-2.5 h-2.5 text-amber-200" />}
+                                  {isExtra ? 'EXTRA FOOD (PATIENT LOGGED)' : item.mealType}
+                                </span>
+                              );
+                            })()}
                           </div>
                           
                           <div className="flex items-center gap-2">

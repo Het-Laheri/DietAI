@@ -22,6 +22,15 @@ import {
 import { Link } from 'react-router-dom';
 
 interface ScanResult {
+  scanType?: 'plate' | 'label';
+  productName?: string;
+  servingSize?: string;
+  servingsPerContainer?: number;
+  labelDetails?: {
+    sugars?: number;
+    sodium?: number;
+    saturatedFat?: number;
+  };
   detectedFoods: string[];
   items: FoodLogItem[];
   nutrition: {
@@ -55,6 +64,7 @@ export default function FoodScanner() {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [result, setResult] = useState<ScanResult | null>(null);
+  const [servingMultiplier, setServingMultiplier] = useState<number>(1);
   const [selectedMealType, setSelectedMealType] = useState<string>('Lunch');
   const [logging, setLogging] = useState(false);
   const [logged, setLogged] = useState(false);
@@ -185,15 +195,16 @@ export default function FoodScanner() {
       }
 
       if (!res.ok || data.error) {
-        throw new Error(data.details || data.error || 'Failed to analyze food photo');
+        throw new Error(data.error || data.details || 'Failed to analyze food photo');
       }
 
       setResult(data);
-      if (data.suggestedMealType) {
+      if (data.suggestedMealType && ['Breakfast', 'Lunch', 'Dinner', 'Snack'].includes(data.suggestedMealType)) {
         setSelectedMealType(data.suggestedMealType);
       } else {
         setSelectedMealType(getAutoMealType());
       }
+      setServingMultiplier(1);
     } catch (e: any) {
       console.error('Scan error:', e);
       setScanError(e.message || 'Failed to scan food photo. Please check your network and try again.');
@@ -207,7 +218,32 @@ export default function FoodScanner() {
     setLogging(true);
     try {
       const todayStr = new Date().toISOString().split('T')[0];
-      const description = result.items?.map(i => `${i.name} (${i.portion})`).join(', ') || result.detectedFoods.join(', ');
+      const mult = result.scanType === 'label' ? servingMultiplier : 1;
+      const baseCal = Number(result.nutrition?.calories) || 0;
+      const baseProt = Number(result.nutrition?.protein) || 0;
+      const baseCarbs = Number(result.nutrition?.carbs) || 0;
+      const baseFat = Number(result.nutrition?.fat) || 0;
+      const baseFiber = Number(result.nutrition?.fiber) || 0;
+
+      const calcCalories = Math.round(baseCal * mult);
+      const calcProtein = Math.round(baseProt * mult * 10) / 10;
+      const calcCarbs = Math.round(baseCarbs * mult * 10) / 10;
+      const calcFat = Math.round(baseFat * mult * 10) / 10;
+      const calcFiber = Math.round(baseFiber * mult * 10) / 10;
+
+      const adjustedItems = (result.items || []).map(item => ({
+        ...item,
+        portion: mult !== 1 ? `${item.portion} (x${mult})` : item.portion,
+        calories: Math.round(item.calories * mult),
+        protein: Math.round(item.protein * mult * 10) / 10,
+        carbs: Math.round(item.carbs * mult * 10) / 10,
+        fat: Math.round(item.fat * mult * 10) / 10,
+        fiber: Math.round(item.fiber * mult * 10) / 10
+      }));
+
+      const description = result.scanType === 'label'
+        ? `${result.productName || 'Packaged Item'} (${mult} serving${mult > 1 ? 's' : ''}, ${result.servingSize || ''})`
+        : (adjustedItems.map(i => `${i.name} (${i.portion})`).join(', ') || result.detectedFoods.join(', '));
 
       const logPayload: any = {
         patientId: profile.uid,
@@ -215,13 +251,13 @@ export default function FoodScanner() {
         date: todayStr,
         mealType: selectedMealType,
         description,
-        items: result.items || [],
+        items: adjustedItems,
         nutrition: {
-          calories: Number(result.nutrition?.calories) || 0,
-          protein: Number(result.nutrition?.protein) || 0,
-          carbs: Number(result.nutrition?.carbs) || 0,
-          fat: Number(result.nutrition?.fat) || 0,
-          fiber: Number(result.nutrition?.fiber) || 0
+          calories: calcCalories,
+          protein: calcProtein,
+          carbs: calcCarbs,
+          fat: calcFat,
+          fiber: calcFiber
         },
         source: 'scanner'
       };
@@ -250,35 +286,36 @@ export default function FoodScanner() {
     setImagePreview(null);
     setUserNotes('');
     setResult(null);
+    setServingMultiplier(1);
     setLogged(false);
     setScanError(null);
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto pb-24 md:pb-8">
+    <div className="p-4 md:p-8 max-w-4xl mx-auto pb-24 md:pb-8 font-sans">
       {/* Header */}
       <div className="mb-6">
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="px-2.5 py-0.5 bg-orange-50 border border-orange-200 text-orange-800 text-[11px] font-bold uppercase tracking-wider rounded-md flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-orange-600" /> Powered by Gemini Vision
+        <div className="flex items-center gap-2 mb-2">
+          <span className="px-3 py-1 bg-gradient-to-r from-orange-500 via-rose-500 to-pink-500 text-white text-[11px] font-black uppercase tracking-wider rounded-full flex items-center gap-1.5 shadow-sm shadow-orange-500/20">
+            <Sparkles className="w-3.5 h-3.5 text-amber-200" /> Powered by Gemini Multimodal Vision
           </span>
         </div>
-        <h1 className="text-xl md:text-2xl font-bold text-stone-900 tracking-tight">AI Food & Plate Scanner</h1>
-        <p className="text-stone-500 text-xs md:text-sm mt-0.5">
-          Snap a photo of your plate, add any preparation notes, and our clinical AI will breakdown every food item, portion quantity, and nutritional value.
+        <h1 className="text-2xl md:text-3xl font-serif font-black text-stone-900 tracking-tight">AI Food & Nutrition Facts Scanner</h1>
+        <p className="text-stone-600 text-xs md:text-sm mt-1 max-w-xl font-medium">
+          Snap a photo of your meal plate or packaged food Nutrition Facts label. Our clinical AI immediately measures portion sizes, itemizes ingredients, and calculates accurate calories & macros.
         </p>
       </div>
 
       {/* Main Upload / Camera Box */}
-      <div className="bg-white border border-stone-200/90 rounded-xl p-6 md:p-8 mb-6 shadow-xs">
+      <div className="bg-gradient-to-br from-white via-orange-50/20 to-amber-50/20 border-2 border-orange-200/80 rounded-3xl p-6 md:p-8 mb-6 shadow-sm hover:shadow-md transition-shadow">
         {!imagePreview ? (
-          <div className="text-center py-6">
-            <div className="w-14 h-14 mx-auto bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-3.5 border border-orange-100 shadow-xs">
-              <Camera className="w-7 h-7" />
+          <div className="text-center py-8">
+            <div className="w-16 h-16 mx-auto bg-gradient-to-tr from-amber-400 via-orange-500 to-rose-500 text-white rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-orange-500/25 animate-float">
+              <Camera className="w-8 h-8" />
             </div>
-            <h2 className="text-base font-semibold text-stone-900 mb-1.5">Upload or Take a Photo of Your Meal</h2>
-            <p className="text-stone-500 text-xs max-w-md mx-auto mb-5">
-              Ensure the meal is well-lit and clearly visible. You can add extra details below for precision accuracy.
+            <h2 className="text-lg font-serif font-black text-stone-900 mb-1.5">Upload or Snap Photo of Food / Label</h2>
+            <p className="text-stone-500 text-xs max-w-md mx-auto mb-6 font-medium">
+              Ensure the plate or nutrition facts panel is well-lit and clearly in frame. You can add extra details or cooking oils below for pinpoint accuracy.
             </p>
 
             <input 
@@ -290,7 +327,7 @@ export default function FoodScanner() {
             />
             <label 
               htmlFor="camera-input"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-stone-900 text-white text-xs font-semibold rounded-lg hover:bg-stone-800 transition-colors cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-orange-500 via-rose-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white text-xs md:text-sm font-black rounded-xl hover:scale-102 transition-all cursor-pointer shadow-lg shadow-orange-500/25"
             >
               <Upload className="w-4 h-4" />
               Choose Photo / Camera
@@ -300,7 +337,7 @@ export default function FoodScanner() {
           <div className="space-y-6">
             {/* Image Preview & Details */}
             <div className="flex flex-col md:flex-row gap-6 items-start">
-              <div className="w-full md:w-56 h-56 relative bg-stone-100 border border-stone-200 rounded-lg overflow-hidden shrink-0 group">
+              <div className="w-full md:w-56 h-56 relative bg-stone-100 border-2 border-orange-200 rounded-2xl overflow-hidden shrink-0 group shadow-md shadow-orange-500/10">
                 <img 
                   src={imagePreview} 
                   alt="Scanned Food Preview" 
@@ -309,7 +346,7 @@ export default function FoodScanner() {
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="absolute top-2 right-2 p-1.5 bg-stone-900/80 text-white text-xs rounded-md hover:bg-stone-900 transition-colors flex items-center gap-1 shadow-xs"
+                  className="absolute top-2.5 right-2.5 px-2.5 py-1.5 bg-stone-900/80 backdrop-blur-md text-white text-xs font-bold rounded-lg hover:bg-black transition-colors flex items-center gap-1.5 shadow-sm"
                   title="Change image"
                 >
                   <RotateCcw className="w-3.5 h-3.5" /> Retake
@@ -318,7 +355,7 @@ export default function FoodScanner() {
 
               {/* Extra Context Notes Input */}
               <div className="flex-1 w-full space-y-3">
-                <label className="block text-xs uppercase tracking-wider font-bold text-stone-700">
+                <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-700">
                   Specify Extra Details & Context for Gemini AI:
                 </label>
                 <div className="relative">
@@ -327,29 +364,44 @@ export default function FoodScanner() {
                     value={userNotes}
                     onChange={e => setUserNotes(e.target.value)}
                     placeholder="e.g. Cooked in 1 tbsp olive oil, 2 whole wheat rotis, 1 cup homemade yellow dal, added 1 scoop whey protein..."
-                    className="w-full p-3 text-xs text-stone-900 border border-stone-200 rounded-lg focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none bg-stone-50/40 resize-none"
+                    className="w-full p-3.5 text-xs text-stone-900 border-2 border-orange-200/80 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none bg-white resize-none shadow-2xs"
                   />
-                  <FileText className="w-4 h-4 text-stone-400 absolute right-3 bottom-3 pointer-events-none" />
+                  <FileText className="w-4 h-4 text-orange-400 absolute right-3.5 bottom-3.5 pointer-events-none" />
                 </div>
 
-                {/* Quick Context Chips */}
+                {/* Quick Context Chips with lively colors */}
                 <div>
-                  <p className="text-[11px] text-stone-400 mb-1.5 font-medium">Quick Context Tags (Click to add):</p>
+                  <p className="text-[11px] text-stone-500 mb-1.5 font-bold uppercase tracking-wider">Quick Context Tags (Click to add):</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {QUICK_NOTE_CHIPS.map(chip => (
-                      <button
-                        key={chip}
-                        type="button"
-                        onClick={() => handleChipClick(chip)}
-                        className={`text-[11px] px-2.5 py-1 border rounded-md transition-colors ${
-                          userNotes.includes(chip)
-                            ? 'bg-orange-50 border-orange-300 text-orange-800 font-semibold'
-                            : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
-                        }`}
-                      >
-                        + {chip}
-                      </button>
-                    ))}
+                    {QUICK_NOTE_CHIPS.map((chip, idx) => {
+                      const isSelected = userNotes.includes(chip);
+                      const colors = [
+                        'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100',
+                        'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100',
+                        'bg-teal-50 text-teal-800 border-teal-300 hover:bg-teal-100',
+                        'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100',
+                        'bg-purple-50 text-purple-800 border-purple-300 hover:bg-purple-100',
+                        'bg-sky-50 text-sky-800 border-sky-300 hover:bg-sky-100',
+                        'bg-pink-50 text-pink-800 border-pink-300 hover:bg-pink-100',
+                        'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100',
+                      ];
+                      const colorClass = colors[idx % colors.length];
+
+                      return (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => handleChipClick(chip)}
+                          className={`text-[11px] px-3 py-1 border rounded-lg font-bold transition-all ${
+                            isSelected
+                              ? 'bg-gradient-to-r from-orange-500 to-rose-500 text-white border-transparent shadow-xs scale-102'
+                              : `${colorClass} shadow-2xs`
+                          }`}
+                        >
+                          {isSelected ? '✓ ' : '+ '}{chip}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -359,10 +411,10 @@ export default function FoodScanner() {
             {!result && !scanning && (
               <button 
                 onClick={handleScan}
-                className="w-full py-3.5 bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs md:text-sm rounded-lg transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                className="w-full py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white font-black text-xs md:text-sm rounded-xl transition-all flex items-center justify-center gap-2 shadow-xl shadow-orange-500/25 hover:scale-101 cursor-pointer"
               >
-                <Sparkles className="w-4 h-4 text-orange-200" />
-                Analyze Plate with Gemini Multimodal AI
+                <Sparkles className="w-5 h-5 text-amber-200" />
+                Analyze Food with Gemini Multimodal AI
               </button>
             )}
           </div>
@@ -371,11 +423,11 @@ export default function FoodScanner() {
 
       {/* Loading State */}
       {scanning && (
-        <div className="bg-white border border-stone-200/90 rounded-xl p-8 text-center mb-6 shadow-xs animate-pulse">
-          <Loader2 className="w-8 h-8 animate-spin text-orange-600 mx-auto mb-3" />
-          <h3 className="text-sm font-semibold text-stone-900 mb-1">Gemini AI is Analyzing Your Food Plate...</h3>
-          <p className="text-xs text-stone-500 max-w-sm mx-auto">
-            Detecting individual food items, measuring portion weights, calculating macronutrients, and compiling clinical feedback.
+        <div className="bg-gradient-to-br from-amber-50/70 via-white to-orange-50/70 border-2 border-orange-200/90 rounded-3xl p-8 text-center mb-6 shadow-md animate-pulse">
+          <Loader2 className="w-10 h-10 animate-spin text-orange-600 mx-auto mb-3" />
+          <h3 className="text-base font-serif font-black text-stone-900 mb-1">Gemini Multimodal AI is Analyzing Your Food...</h3>
+          <p className="text-xs text-stone-600 max-w-sm mx-auto font-medium">
+            Detecting individual ingredients, calculating accurate portion weights, reconciling macronutrients, and compiling clinical feedback.
           </p>
         </div>
       )}
@@ -393,134 +445,235 @@ export default function FoodScanner() {
 
       {/* Results Section */}
       {result && (
-        <div className="space-y-6">
-          <div className="bg-white border border-stone-200/90 rounded-xl p-6 md:p-8 shadow-xs">
-            {/* Header & Total Calories */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-stone-200 gap-4">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 bg-orange-50 text-orange-800 border border-orange-200 rounded-md">
-                  AI Nutrition Breakdown
-                </span>
-                <h2 className="text-xl font-bold text-stone-900 tracking-tight mt-1">Plate Analysis Results</h2>
-                <p className="text-xs text-stone-500">
-                  {result.items?.length || result.detectedFoods.length} items detected on plate
-                </p>
-              </div>
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3 duration-500">
+          <div className="bg-gradient-to-br from-white via-orange-50/15 to-amber-50/20 border-2 border-orange-200/90 rounded-3xl p-6 md:p-8 shadow-xl shadow-orange-500/5">
+            {/* Header, Multiplier & Nutrient Cards */}
+            {(() => {
+              const isLabelScan = result.scanType === 'label';
+              const mult = isLabelScan ? servingMultiplier : 1;
+              const displayCalories = Math.round((result.nutrition?.calories ?? 0) * mult);
+              const displayProtein = Math.round(((result.nutrition?.protein ?? 0) * mult) * 10) / 10;
+              const displayCarbs = Math.round(((result.nutrition?.carbs ?? 0) * mult) * 10) / 10;
+              const displayFat = Math.round(((result.nutrition?.fat ?? 0) * mult) * 10) / 10;
+              const displayFiber = Math.round(((result.nutrition?.fiber ?? 0) * mult) * 10) / 10;
 
-              {/* Total Calorie Pill */}
-              <div className="bg-stone-900 text-white px-5 py-2.5 rounded-lg text-right shadow-xs">
-                <p className="text-[10px] uppercase tracking-wider text-stone-400 font-semibold">Total Meal Energy</p>
-                <div className="text-xl font-bold text-white flex items-baseline gap-1">
-                  {result.nutrition.calories} <span className="text-xs font-normal text-stone-300">kcal</span>
-                </div>
-              </div>
-            </div>
+              return (
+                <>
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-orange-100 gap-4">
+                    <div>
+                      <span className={`text-[11px] uppercase tracking-wider font-black px-3 py-1 rounded-full border shadow-2xs inline-flex items-center gap-1.5 ${
+                        isLabelScan
+                          ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-transparent shadow-blue-500/20'
+                          : 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white border-transparent shadow-orange-500/20'
+                      }`}>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        {isLabelScan ? 'Nutrition Facts Label Detected' : 'AI Nutrition Breakdown'}
+                      </span>
+                      <h2 className="text-xl md:text-2xl font-serif font-black text-stone-900 tracking-tight mt-2">
+                        {isLabelScan ? (result.productName || 'Packaged Nutrition Analysis') : 'Plate Analysis Results'}
+                      </h2>
+                      <p className="text-xs text-stone-500 mt-1 font-medium">
+                        {isLabelScan ? (
+                          <>
+                            Declared Serving Size: <strong className="text-stone-800 font-bold">{result.servingSize || '1 serving'}</strong>
+                            {result.servingsPerContainer ? ` • ${result.servingsPerContainer} servings per container` : ''}
+                          </>
+                        ) : (
+                          `${result.items?.length || result.detectedFoods.length} items detected on plate`
+                        )}
+                      </p>
+                    </div>
 
-            {/* Macro Cards Summary */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-6">
-              <div className="p-3.5 bg-emerald-50/50 border border-emerald-200/80 rounded-lg">
-                <div className="flex items-center justify-between text-emerald-800 mb-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wider">Protein</span>
-                  <Dna className="w-4 h-4 text-emerald-600" />
-                </div>
-                <p className="text-lg font-bold text-emerald-950">{result.nutrition.protein} <span className="text-xs font-normal text-emerald-700">g</span></p>
-              </div>
-
-              <div className="p-3.5 bg-amber-50/50 border border-amber-200/80 rounded-lg">
-                <div className="flex items-center justify-between text-amber-800 mb-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wider">Carbs</span>
-                  <Wheat className="w-4 h-4 text-amber-600" />
-                </div>
-                <p className="text-lg font-bold text-amber-950">{result.nutrition.carbs} <span className="text-xs font-normal text-amber-700">g</span></p>
-              </div>
-
-              <div className="p-3.5 bg-rose-50/50 border border-rose-200/80 rounded-lg">
-                <div className="flex items-center justify-between text-rose-800 mb-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wider">Total Fats</span>
-                  <Droplet className="w-4 h-4 text-rose-600" />
-                </div>
-                <p className="text-lg font-bold text-rose-950">{result.nutrition.fat} <span className="text-xs font-normal text-rose-700">g</span></p>
-              </div>
-
-              <div className="p-3.5 bg-sky-50/50 border border-sky-200/80 rounded-lg">
-                <div className="flex items-center justify-between text-sky-800 mb-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wider">Fiber</span>
-                  <Flame className="w-4 h-4 text-sky-600" />
-                </div>
-                <p className="text-lg font-bold text-sky-950">{result.nutrition.fiber || 0} <span className="text-xs font-normal text-sky-700">g</span></p>
-              </div>
-            </div>
-
-            {/* Itemized Food Breakdown Table */}
-            <div className="mb-6">
-              <h3 className="text-xs uppercase tracking-wider font-bold text-stone-700 mb-2.5 flex items-center gap-2">
-                <Utensils className="w-3.5 h-3.5 text-orange-600" />
-                Detected Plate Items & Quantities
-              </h3>
-
-              <div className="border border-stone-200 rounded-lg divide-y divide-stone-100 overflow-x-auto shadow-xs">
-                {result.items && result.items.length > 0 ? (
-                  result.items.map((item, idx) => (
-                    <div key={idx} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-stone-50/60 transition-colors">
-                      <div>
-                        <h4 className="font-semibold text-stone-900 text-sm">{item.name}</h4>
-                        <p className="text-xs text-stone-500 mt-0.5">
-                          Portion: <strong className="text-stone-700 font-medium">{item.portion}</strong>
-                          {item.notes ? ` • ${item.notes}` : ''}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-3.5 text-xs font-mono shrink-0">
-                        <span className="px-2.5 py-1 bg-stone-100 border border-stone-200 text-stone-900 font-semibold font-sans rounded-md">
-                          {item.calories} kcal
-                        </span>
-                        <div className="hidden sm:flex items-center gap-2 text-stone-500 text-[11px] font-sans">
-                          <span>P: <strong className="text-stone-800">{item.protein}g</strong></span>
-                          <span>C: <strong className="text-stone-800">{item.carbs}g</strong></span>
-                          <span>F: <strong className="text-stone-800">{item.fat}g</strong></span>
-                        </div>
+                    {/* Total Calorie Pill with radiant gradient */}
+                    <div className="bg-gradient-to-r from-orange-500 via-rose-500 to-pink-600 text-white px-6 py-3 rounded-2xl text-right shadow-lg shadow-orange-500/25">
+                      <p className="text-[10px] uppercase tracking-widest text-amber-100 font-bold">
+                        {isLabelScan ? `Calculated (${mult} serving${mult > 1 ? 's' : ''})` : 'Total Meal Energy'}
+                      </p>
+                      <div className="text-2xl font-black text-white flex items-baseline justify-end gap-1 font-mono">
+                        {displayCalories} <span className="text-xs font-semibold text-rose-100 font-sans">kcal</span>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="p-4 text-xs text-stone-600">
-                    {result.detectedFoods.join(', ')}
                   </div>
-                )}
-              </div>
-            </div>
+
+                  {/* Serving Multiplier Selector for Labels */}
+                  {isLabelScan && (
+                    <div className="bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-purple-50/80 border-2 border-blue-200/80 rounded-2xl p-4 my-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                      <div>
+                        <span className="text-xs font-black text-indigo-950 block">Portion Consumed:</span>
+                        <span className="text-[11px] text-indigo-700 font-medium">Select how many servings you ate to scale calories & macros:</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {[0.5, 1, 1.5, 2, 3].map(m => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setServingMultiplier(m)}
+                            className={`px-3.5 py-1.5 text-xs font-black rounded-xl border transition-all cursor-pointer ${
+                              servingMultiplier === m
+                                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-transparent shadow-md shadow-indigo-500/25 scale-105'
+                                : 'bg-white text-indigo-900 border-indigo-200/80 hover:bg-indigo-50'
+                            }`}
+                          >
+                            {m}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Macro Cards Summary with Vibrant Palettes */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 my-6">
+                    {/* Protein */}
+                    <div className="p-4 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-white border-2 border-emerald-300/80 rounded-2xl shadow-sm shadow-emerald-500/10 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between text-emerald-800 mb-1.5">
+                        <span className="text-[11px] font-black uppercase tracking-wider">Protein</span>
+                        <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center">
+                          <Dna className="w-3.5 h-3.5 text-emerald-600" />
+                        </div>
+                      </div>
+                      <p className="text-2xl font-black text-emerald-950 font-mono tracking-tight">{displayProtein} <span className="text-xs font-bold text-emerald-700 font-sans">g</span></p>
+                    </div>
+
+                    {/* Carbs */}
+                    <div className="p-4 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-white border-2 border-amber-300/80 rounded-2xl shadow-sm shadow-amber-500/10 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between text-amber-800 mb-1.5">
+                        <span className="text-[11px] font-black uppercase tracking-wider">Carbs</span>
+                        <div className="w-6 h-6 rounded-lg bg-amber-100 flex items-center justify-center">
+                          <Wheat className="w-3.5 h-3.5 text-amber-600" />
+                        </div>
+                      </div>
+                      <p className="text-2xl font-black text-amber-950 font-mono tracking-tight">{displayCarbs} <span className="text-xs font-bold text-amber-700 font-sans">g</span></p>
+                    </div>
+
+                    {/* Total Fats */}
+                    <div className="p-4 bg-gradient-to-br from-rose-500/10 via-pink-500/5 to-white border-2 border-rose-300/80 rounded-2xl shadow-sm shadow-rose-500/10 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between text-rose-800 mb-1.5">
+                        <span className="text-[11px] font-black uppercase tracking-wider">Total Fats</span>
+                        <div className="w-6 h-6 rounded-lg bg-rose-100 flex items-center justify-center">
+                          <Droplet className="w-3.5 h-3.5 text-rose-600" />
+                        </div>
+                      </div>
+                      <p className="text-2xl font-black text-rose-950 font-mono tracking-tight">{displayFat} <span className="text-xs font-bold text-rose-700 font-sans">g</span></p>
+                    </div>
+
+                    {/* Fiber */}
+                    <div className="p-4 bg-gradient-to-br from-sky-500/10 via-cyan-500/5 to-white border-2 border-sky-300/80 rounded-2xl shadow-sm shadow-sky-500/10 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between text-sky-800 mb-1.5">
+                        <span className="text-[11px] font-black uppercase tracking-wider">Fiber</span>
+                        <div className="w-6 h-6 rounded-lg bg-sky-100 flex items-center justify-center">
+                          <Flame className="w-3.5 h-3.5 text-sky-600" />
+                        </div>
+                      </div>
+                      <p className="text-2xl font-black text-sky-950 font-mono tracking-tight">{displayFiber} <span className="text-xs font-bold text-sky-700 font-sans">g</span></p>
+                    </div>
+                  </div>
+
+                  {/* Micronutrients if label */}
+                  {isLabelScan && (result.labelDetails?.sugars !== undefined || result.labelDetails?.sodium !== undefined || result.labelDetails?.saturatedFat !== undefined) && (
+                    <div className="grid grid-cols-3 gap-2.5 mb-6">
+                      {result.labelDetails?.sugars !== undefined && (
+                        <div className="p-3 bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200/80 rounded-xl text-center">
+                          <span className="text-[10px] uppercase text-purple-700 font-black block tracking-wider">Sugars</span>
+                          <span className="text-base font-black text-purple-950 font-mono">{Math.round(((result.labelDetails.sugars || 0) * mult) * 10) / 10}g</span>
+                        </div>
+                      )}
+                      {result.labelDetails?.sodium !== undefined && (
+                        <div className="p-3 bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200/80 rounded-xl text-center">
+                          <span className="text-[10px] uppercase text-indigo-700 font-black block tracking-wider">Sodium</span>
+                          <span className="text-base font-black text-indigo-950 font-mono">{Math.round((result.labelDetails.sodium || 0) * mult)}mg</span>
+                        </div>
+                      )}
+                      {result.labelDetails?.saturatedFat !== undefined && (
+                        <div className="p-3 bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-200/80 rounded-xl text-center">
+                          <span className="text-[10px] uppercase text-rose-700 font-black block tracking-wider">Sat. Fat</span>
+                          <span className="text-base font-black text-rose-950 font-mono">{Math.round(((result.labelDetails.saturatedFat || 0) * mult) * 10) / 10}g</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Itemized Food Breakdown Table */}
+                  <div className="mb-6">
+                    <h3 className="text-xs uppercase tracking-wider font-black text-stone-700 mb-2.5 flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-md bg-orange-100 flex items-center justify-center">
+                        <Utensils className="w-3 h-3 text-orange-600" />
+                      </div>
+                      {isLabelScan ? 'Declared Item Nutrition' : 'Detected Plate Items & Quantities'}
+                    </h3>
+
+                    <div className="border-2 border-orange-100 rounded-2xl divide-y divide-orange-100/70 overflow-hidden bg-white shadow-xs">
+                      {result.items && result.items.length > 0 ? (
+                        result.items.map((item, idx) => (
+                          <div key={idx} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-orange-50/30 transition-colors">
+                            <div>
+                              <h4 className="font-black text-stone-900 text-sm tracking-tight">{item.name}</h4>
+                              <p className="text-xs text-stone-500 mt-0.5 font-medium">
+                                Portion: <strong className="text-stone-800 font-bold">{item.portion}{mult !== 1 ? ` (x${mult})` : ''}</strong>
+                                {item.notes ? ` • ${item.notes}` : ''}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-3.5 text-xs font-mono shrink-0">
+                              <span className="px-3 py-1.5 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 text-orange-950 font-black font-sans rounded-xl shadow-2xs">
+                                {Math.round(item.calories * mult)} kcal
+                              </span>
+                              <div className="hidden sm:flex items-center gap-2 text-stone-600 text-[11px] font-sans font-medium">
+                                <span className="bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 text-emerald-900">P: <strong className="font-bold">{Math.round(item.protein * mult * 10) / 10}g</strong></span>
+                                <span className="bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60 text-amber-900">C: <strong className="font-bold">{Math.round(item.carbs * mult * 10) / 10}g</strong></span>
+                                <span className="bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200/60 text-rose-900">F: <strong className="font-bold">{Math.round(item.fat * mult * 10) / 10}g</strong></span>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-4 text-xs text-stone-600 font-medium">
+                          {result.detectedFoods.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Clinical AI Feedback Card */}
             {result.insight && (
-              <div className="bg-orange-50/40 border border-orange-200/80 rounded-lg p-4 mb-6 shadow-xs">
-                <div className="flex items-start gap-2.5">
-                  <Sparkles className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
+              <div className="bg-gradient-to-r from-orange-50 via-amber-50 to-rose-50 border-2 border-orange-200/90 rounded-2xl p-4 mb-6 shadow-xs">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Sparkles className="w-4 h-4 text-amber-200" />
+                  </div>
                   <div>
-                    <p className="text-xs font-bold text-orange-950 uppercase tracking-wider mb-0.5">Clinical Dietician Insight</p>
-                    <p className="text-xs text-stone-700 leading-relaxed">{result.insight}</p>
+                    <p className="text-xs font-black text-orange-950 uppercase tracking-wider mb-0.5">Clinical Dietician Insight</p>
+                    <p className="text-xs text-stone-700 leading-relaxed font-medium">{result.insight}</p>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Meal Type Selection Before Logging */}
-            <div className="pt-4 border-t border-stone-200 mb-6">
-              <label className="block text-xs uppercase tracking-wider font-bold text-stone-700 mb-2">
+            <div className="pt-4 border-t border-orange-100 mb-6">
+              <label className="block text-xs uppercase tracking-wider font-black text-stone-700 mb-2.5">
                 Select Meal Category to Log:
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {['Breakfast', 'Lunch', 'Dinner', 'Snack'].map(type => (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {[
+                  { id: 'Breakfast', label: 'Breakfast', activeClass: 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/25 border-transparent' },
+                  { id: 'Lunch', label: 'Lunch', activeClass: 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/25 border-transparent' },
+                  { id: 'Dinner', label: 'Dinner', activeClass: 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white shadow-md shadow-purple-500/25 border-transparent' },
+                  { id: 'Snack', label: 'Snack', activeClass: 'bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-md shadow-rose-500/25 border-transparent' },
+                ].map(({ id, label, activeClass }) => (
                   <button
-                    key={type}
+                    key={id}
                     type="button"
-                    onClick={() => setSelectedMealType(type)}
-                    className={`py-2 px-3 text-xs font-semibold uppercase tracking-wider border rounded-lg transition-colors ${
-                      selectedMealType === type
-                        ? 'bg-stone-900 text-white border-stone-900 shadow-xs'
-                        : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
+                    onClick={() => setSelectedMealType(id)}
+                    className={`py-3 px-3 text-xs font-black uppercase tracking-wider border rounded-xl transition-all cursor-pointer ${
+                      selectedMealType === id
+                        ? `${activeClass} scale-102`
+                        : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
                     }`}
                   >
-                    {type}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -531,39 +684,39 @@ export default function FoodScanner() {
               <button 
                 onClick={handleLog}
                 disabled={logging}
-                className="w-full py-3 bg-stone-900 hover:bg-stone-800 text-white font-semibold text-xs md:text-sm rounded-lg transition-colors flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 cursor-pointer"
+                className="w-full py-4 bg-gradient-to-r from-emerald-500 via-teal-600 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 text-white font-black text-xs md:text-sm rounded-xl transition-all flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/30 hover:scale-101 disabled:opacity-50 cursor-pointer"
               >
-                {logging ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                {logging ? 'Saving to Your Health Record...' : `Save ${selectedMealType} (${result.nutrition.calories} kcal) to Progress Log`}
+                {logging ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5 text-emerald-200" />}
+                {logging ? 'Saving to Your Health Record...' : `Save ${selectedMealType} (${Math.round((result.nutrition?.calories ?? 0) * (result.scanType === 'label' ? servingMultiplier : 1))} kcal) to Progress Log`}
               </button>
             ) : (
-              <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-6 text-center space-y-4 shadow-xs">
-                <div className="w-11 h-11 rounded-lg bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center">
-                  <CheckCircle2 className="w-5 h-5" />
+              <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/50 border-2 border-emerald-300 rounded-3xl p-8 text-center space-y-4 shadow-lg shadow-emerald-500/10 animate-in zoom-in-95">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 text-white mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                  <CheckCircle2 className="w-7 h-7" />
                 </div>
                 <div>
-                  <h4 className="text-sm md:text-base font-bold text-emerald-950">Successfully Logged to Your Progress!</h4>
-                  <p className="text-xs text-emerald-800 mt-1 max-w-md mx-auto">
-                    Added {result.nutrition.calories} kcal to your daily intake tracker. Your dietician can now see this meal and its nutritional breakdown.
+                  <h4 className="text-base md:text-lg font-serif font-black text-emerald-950">Successfully Logged to Your Progress!</h4>
+                  <p className="text-xs text-emerald-800 mt-1.5 max-w-md mx-auto font-medium">
+                    Added {Math.round((result.nutrition?.calories ?? 0) * (result.scanType === 'label' ? servingMultiplier : 1))} kcal to your daily intake tracker. Your dietician can now inspect this meal and its nutritional breakdown.
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                   <Link
                     to="/patient/progress"
-                    className="px-4 py-2 bg-emerald-800 text-white text-xs font-semibold rounded-lg hover:bg-emerald-900 transition-colors inline-flex items-center gap-1.5 shadow-xs"
+                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 text-white text-xs font-black rounded-xl hover:from-emerald-700 hover:to-teal-800 transition-all inline-flex items-center gap-1.5 shadow-md shadow-emerald-600/25"
                   >
                     View Progress Page <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
                   <Link
                     to="/patient"
-                    className="px-4 py-2 bg-white border border-stone-300 text-stone-800 text-xs font-semibold rounded-lg hover:bg-stone-50 transition-colors shadow-xs"
+                    className="px-5 py-2.5 bg-white border border-stone-200 text-stone-800 text-xs font-black rounded-xl hover:bg-stone-50 transition-all shadow-xs"
                   >
                     Today's Plan
                   </Link>
                   <button
                     onClick={handleReset}
-                    className="px-3.5 py-2 text-stone-500 hover:text-stone-900 text-xs font-semibold transition-colors cursor-pointer"
+                    className="px-4 py-2.5 text-stone-600 hover:text-stone-900 text-xs font-black transition-colors cursor-pointer"
                   >
                     Scan Another Meal
                   </button>

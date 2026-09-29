@@ -18,7 +18,8 @@
 }
 
 body {
-  @apply bg-[#FAFAFA] text-stone-900 antialiased selection:bg-orange-100 selection:text-orange-950;
+  @apply bg-slate-50/50 text-stone-900 antialiased selection:bg-orange-200 selection:text-orange-950;
+  min-height: 100vh;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -26,15 +27,20 @@ h1, h2, h3, h4, h5, h6 {
   @apply tracking-tight font-bold text-stone-900;
 }
 
-/* Subtle, functional UI animations */
+/* Animations */
 @keyframes pulse-subtle {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  50% { opacity: 0.75; }
 }
 
 @keyframes scan-line {
   0% { transform: translateY(-100%); }
   100% { transform: translateY(100%); }
+}
+
+@keyframes float-glow {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-6px) scale(1.02); }
 }
 
 .animate-pulse-subtle {
@@ -45,11 +51,64 @@ h1, h2, h3, h4, h5, h6 {
   animation: scan-line 2.5s ease-in-out infinite;
 }
 
-/* Crisp professional surface helpers */
+.animate-float {
+  animation: float-glow 4s ease-in-out infinite;
+}
+
+/* Vibrant Glows & Shadows */
+.shadow-glow-orange {
+  box-shadow: 0 10px 25px -5px rgba(249, 115, 22, 0.25), 0 8px 10px -6px rgba(249, 115, 22, 0.2);
+}
+
+.shadow-glow-emerald {
+  box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.25), 0 8px 10px -6px rgba(16, 185, 129, 0.2);
+}
+
+.shadow-glow-sky {
+  box-shadow: 0 10px 25px -5px rgba(14, 165, 233, 0.25), 0 8px 10px -6px rgba(14, 165, 233, 0.2);
+}
+
+.shadow-glow-purple {
+  box-shadow: 0 10px 25px -5px rgba(168, 85, 247, 0.25), 0 8px 10px -6px rgba(168, 85, 247, 0.2);
+}
+
+.shadow-glow-rose {
+  box-shadow: 0 10px 25px -5px rgba(244, 63, 94, 0.25), 0 8px 10px -6px rgba(244, 63, 94, 0.2);
+}
+
+/* Vibrant Surface Card Helpers */
+.vibrant-card {
+  @apply bg-white/95 backdrop-blur-sm border border-stone-200/80 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300;
+}
+
 .clinical-card {
-  @apply bg-white border border-stone-200/90 rounded-xl shadow-xs;
+  @apply bg-white border border-stone-200/90 rounded-2xl shadow-sm hover:shadow-md transition-shadow;
 }
 
 .clinical-panel {
-  @apply bg-stone-50/80 border border-stone-200 rounded-xl;
+  @apply bg-gradient-to-br from-stone-50/90 to-orange-50/30 border border-stone-200/80 rounded-2xl;
+}
+
+/* Glass & Tint Overlays */
+.glass-pill {
+  @apply bg-white/80 backdrop-blur-md border border-white/50 shadow-xs;
+}
+
+/* Modern Gradient Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #fdba74, #f472b6);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #fb923c, #ec4899);
 }

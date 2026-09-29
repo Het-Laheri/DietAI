@@ -1,4 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
+import { 
+  validateImageInput, 
+  parseAndValidateFoodScanResponse 
+} from '../../src/services/foodScannerService';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyDjtTL_trmdMEEH-BINiIAZD1ktgZwY0CE';
 
@@ -19,8 +23,9 @@ export default async function handler(req: any, res: any) {
   try {
     const { image, mimeType, userNotes, patientProfile } = req.body || {};
 
-    if (!image) {
-      return res.status(400).json({ error: 'Image data is required' });
+    const validation = validateImageInput(image);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error || 'Valid image data is required.' });
     }
 
     const patientContext = patientProfile ? `
@@ -37,56 +42,80 @@ Patient Clinical Profile:
       : '';
 
     const prompt = `You are an expert clinical dietician and precision nutrition analyst.
-Carefully examine the uploaded food image to recognize all food and drink items on the plate.
-${patientContext}${userNotesText}
+Carefully examine the uploaded image.
 
-Requirements:
-1. Identify all distinct food items visible or specified in the notes.
-2. If the user provided additional notes (e.g. "cooked in 1 tbsp olive oil", "2 rotis", "home made dal", "added 1 scoop whey"), calculate portions and macros accordingly.
-3. For EACH detected food item, provide:
-   - name: Clear descriptive item name (e.g. "Whole Wheat Roti", "Yellow Moong Dal", "Paneer Sabzi", "Steamed Basmati Rice")
-   - portion: Estimated portion / quantity with weight or volume (e.g. "2 medium rotis (80g)", "1 medium bowl (180g)", "1 cup (150g)")
-   - calories: Estimated calories in kcal (integer)
-   - protein: Estimated protein in grams (number)
-   - carbs: Estimated carbs in grams (number)
-   - fat: Estimated total fat in grams (number)
-   - fiber: Estimated dietary fiber in grams (number)
-   - notes: Short dietary observation (e.g. "Good source of complex carbs", "Cooked with light oil")
-4. Sum all items accurately for the meal totals:
-   - total calories, total protein, total carbs, total fat, total fiber.
-5. Suggest the meal type: "Breakfast" | "Lunch" | "Dinner" | "Snack" | "Evening Snack".
-6. Provide a concise, clinical, supportive 2-sentence feedback insight on the nutritional quality, balance, and satiety of this meal.
+CRITICAL INSTRUCTIONS:
+1. FIRST, determine what type of image this is:
+   A. NON-FOOD / INVALID: If the image DOES NOT contain food, drink, a meal plate, or a nutrition facts label (e.g. an electronic device, keyboard, furniture, person, blurry background, pet, document, or completely unclear scene), you MUST return strictly:
+      {
+        "isFood": false,
+        "message": "Couldn't identify any food or nutrition label in this image. Please take a clear, well-lit photo of your meal or nutrition facts table."
+      }
 
-Return ONLY a valid JSON object matching this exact structure without markdown code ticks:
-{
-  "detectedFoods": ["Whole Wheat Roti", "Moong Dal", "Mixed Veg Sabzi"],
-  "items": [
-    {
-      "name": "Whole Wheat Roti",
-      "portion": "2 pieces (80g)",
-      "calories": 160,
-      "protein": 6,
-      "carbs": 32,
-      "fat": 1.5,
-      "fiber": 4,
-      "notes": "Complex carbohydrate staple"
-    }
-  ],
-  "nutrition": {
-    "calories": 450,
-    "protein": 18,
-    "carbs": 64,
-    "fat": 12,
-    "fiber": 8
-  },
-  "suggestedMealType": "Lunch",
-  "insight": "High fiber and balanced complex carbohydrates supporting steady digestion and sustained energy.",
-  "healthScore": "Balanced Plate"
-}`;
+   B. NUTRITION FACTS / PACKAGING LABEL: If the image shows a Nutrition Facts panel or food packaging nutritional table:
+      - Set scanType: "label".
+      - productName: Brand or food product name if visible (e.g. "Greek Yogurt", "Whole Wheat Bread", "Protein Bar", "Oat Milk").
+      - servingSize: Exact declared serving size string (e.g. "1 cup (228g)", "30g", "2 slices (56g)").
+      - servingsPerContainer: Number of servings per container (e.g. 2).
+      - nutrition: Exact declared nutrient amounts PER SERVING:
+        * calories: Declared calories in kcal (integer)
+        * protein: Protein in grams (number)
+        * carbs: Total Carbohydrate in grams (number)
+        * fat: Total Fat in grams (number)
+        * fiber: Dietary Fiber in grams (number)
+        * sugars: Total or Added Sugars in grams (number)
+        * sodium: Sodium in mg (number)
+        * saturatedFat: Saturated Fat in grams (number)
+      - items: [
+          {
+            "name": productName,
+            "portion": servingSize,
+            "calories": calories,
+            "protein": protein,
+            "carbs": carbs,
+            "fat": fat,
+            "fiber": fiber,
+            "notes": "Nutrition Facts table declared values per serving"
+          }
+        ]
+      - suggestedMealType: "Snack" | "Breakfast" | "Lunch" | "Dinner".
+      - insight: Concise 2-sentence clinical dietician evaluation of this packaged item's nutritional profile (e.g., protein density, sodium/sugar moderation).
+      - healthScore: "Healthy" | "Balanced" | "Moderate" | "Indulgent".
 
-    const cleanBase64 = image.replace(/^data:[^;]+;base64,/, '');
+   C. EDIBLE MEAL / FOOD PLATE: If edible food or beverage items are present on a plate or in a dish:
+      - Set scanType: "plate".
+   ${patientContext}${userNotesText}
+   - Identify all distinct food and beverage items.
+   - If user notes mention specific quantities or oils (e.g. "cooked in 1 tbsp olive oil", "2 rotis", "added 1 scoop whey"), calculate portions and macros accordingly.
+   - For EACH detected food item, provide:
+     * name: Clear descriptive item name (e.g. "Fresh Red Apple", "Whole Wheat Roti", "Yellow Moong Dal", "Vegetable Pizza")
+     * portion: Estimated portion / quantity with weight or volume (e.g. "1 medium apple (180g)", "2 medium rotis (80g)", "1 slice (120g)")
+     * calories: Estimated calories in kcal FOR THIS ENTIRE PORTION (integer, not per 100g unless portion is 100g)
+     * protein: Estimated protein in grams for this portion (number)
+     * carbs: Estimated carbs in grams for this portion (number)
+     * fat: Estimated total fat in grams for this portion (number)
+     * fiber: Estimated dietary fiber in grams for this portion (number)
+     * notes: Short dietary observation (e.g. "Rich in dietary fiber and vitamins")
+   - Accurately calculate the meal totals:
+     * total calories = exact sum of all item calories
+     * total protein = sum of all item protein
+     * total carbs = sum of all item carbs
+     * total fat = sum of all item fat
+     * total fiber = sum of all item fiber
+   - Suggest the meal type: "Breakfast" | "Lunch" | "Dinner" | "Snack".
+   - Provide a concise, clinical, supportive 2-sentence feedback insight on the nutritional quality, balance, and satiety of this meal.
+   - Assign a health score: "Healthy" | "Balanced" | "Moderate" | "Indulgent".
+
+Return strictly a valid JSON object matching either format B or C without markdown ticks.`;
+
     const aiClient = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const modelsToTry = [
+      'gemini-2.5-flash',
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.8-flash',
+      process.env.GEMINI_MODEL
+    ].filter(Boolean) as string[];
 
     let jsonText = '';
     let lastError: any = null;
@@ -98,14 +127,14 @@ Return ONLY a valid JSON object matching this exact structure without markdown c
           contents: [
             {
               inlineData: {
-                mimeType: mimeType || 'image/jpeg',
-                data: cleanBase64
+                mimeType: validation.mimeType || mimeType || 'image/jpeg',
+                data: validation.cleanBase64!
               }
             },
             prompt
           ],
           config: {
-            systemInstruction: 'You are NutriSnap AI Clinical Nutritionist. Always return strictly valid JSON without markdown code block ticks.',
+            systemInstruction: 'You are NutriSnap AI Clinical Nutritionist. Always return strictly valid JSON without markdown code block ticks. If the image is not food or a nutrition facts label, return isFood: false.',
             responseMimeType: 'application/json'
           }
         });
@@ -119,89 +148,33 @@ Return ONLY a valid JSON object matching this exact structure without markdown c
       }
     }
 
-    let parsed: any;
-    if (jsonText) {
-      try {
-        parsed = JSON.parse(jsonText);
-      } catch {
-        const cleaned = jsonText.replace(/^```(?:json)?\n?/i, '').replace(/```\n?$/i, '').trim();
-        parsed = JSON.parse(cleaned);
-      }
-    } else {
-      // Smart clinical heuristic fallback if external AI rate limits or quotas are hit
-      console.warn('Deploying clinical plate fallback due to AI model unavailability:', lastError?.message);
-      parsed = {
-        detectedFoods: ["Whole Wheat Roti", "Moong Dal Tadka", "Mixed Veg Sabzi", "Steamed Basmati Rice"],
-        items: [
-          {
-            name: "Whole Wheat Roti",
-            portion: "2 medium rotis (80g)",
-            calories: 160,
-            protein: 6,
-            carbs: 32,
-            fat: 1.5,
-            fiber: 4,
-            notes: "Complex carbohydrates supporting steady insulin response"
-          },
-          {
-            name: "Yellow Moong Dal Tadka",
-            portion: "1 medium bowl (150g)",
-            calories: 145,
-            protein: 9,
-            carbs: 21,
-            fat: 3,
-            fiber: 5,
-            notes: "Digestible plant-based protein & essential amino acids"
-          },
-          {
-            name: "Mixed Vegetable Sabzi",
-            portion: "1 serving (120g)",
-            calories: 95,
-            protein: 3,
-            carbs: 12,
-            fat: 4,
-            fiber: 4,
-            notes: "Rich in antioxidants, potassium, and dietary fiber"
-          },
-          {
-            name: "Steamed Basmati Rice",
-            portion: "1 small cup (100g)",
-            calories: 130,
-            protein: 3,
-            carbs: 28,
-            fat: 0.5,
-            fiber: 1,
-            notes: "Easily digestible energy staple"
-          }
-        ],
-        nutrition: {
-          calories: 530,
-          protein: 21,
-          carbs: 93,
-          fat: 9,
-          fiber: 14
-        },
-        suggestedMealType: "Lunch",
-        insight: "Well-balanced meal featuring complete protein pairing (grains + legumes), high satiety fiber, and controlled lipids.",
-        healthScore: "Balanced Clinical Plate"
-      };
+    if (!jsonText) {
+      throw lastError || new Error("Failed to communicate with AI vision model.");
     }
 
-    // Ensure clean numerical values
-    if (parsed.nutrition) {
-      parsed.nutrition.calories = Math.round(Number(parsed.nutrition.calories) || 0);
-      parsed.nutrition.protein = Math.round(Number(parsed.nutrition.protein) || 0);
-      parsed.nutrition.carbs = Math.round(Number(parsed.nutrition.carbs) || 0);
-      parsed.nutrition.fat = Math.round(Number(parsed.nutrition.fat) || 0);
-      parsed.nutrition.fiber = Math.round(Number(parsed.nutrition.fiber) || 0);
-    }
-
-    return res.status(200).json(parsed);
+    const parsedResult = parseAndValidateFoodScanResponse(jsonText);
+    return res.status(200).json(parsedResult);
   } catch (error: any) {
     console.error('Error in scan-food serverless handler:', error);
-    return res.status(500).json({
-      error: 'Failed to analyze food image',
-      details: error.message || String(error)
+    const msg = error.message || String(error);
+    const isRateLimit = error.status === 429 || msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED');
+    const isNonFood = 
+      msg.includes("Couldn't identify any food") || 
+      msg.includes("No food detected");
+    const isBadInput = msg.includes("Invalid or corrupt image") || msg.includes("Image format is invalid");
+
+    const statusCode = isRateLimit ? 429 : isNonFood ? 422 : isBadInput ? 400 : 500;
+    const userMessage = isRateLimit
+      ? 'The scanner service is momentarily at capacity. Please try again in a few moments.'
+      : isNonFood
+      ? "Couldn't identify any food in this image. Please take a clear, well-lit photo of your meal."
+      : isBadInput
+      ? (error.message || 'Invalid image format provided.')
+      : (error.message || 'Failed to analyze food image with AI');
+
+    return res.status(statusCode).json({
+      error: userMessage,
+      details: msg
     });
   }
 }

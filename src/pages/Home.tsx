@@ -17,7 +17,10 @@ import {
   Zap,
   ClipboardList,
   Bot,
-  Sparkles
+  Sparkles,
+  GraduationCap,
+  BookOpen,
+  Stethoscope
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -290,62 +293,90 @@ export default function Home() {
       {/* ─── DOCTOR ─────────────────────────────────────────── */}
       <section id="our-dietitian" className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-2 gap-16 items-center">
+          <div className="grid md:grid-cols-12 gap-12 lg:gap-16 items-center">
             {/* Photo */}
-            <div className="flex justify-center">
-              <div className="relative rounded-3xl overflow-hidden shadow-xl shadow-stone-200 border-8 border-stone-50 max-w-md">
+            <div className="md:col-span-5 flex justify-center">
+              <div className="relative rounded-3xl overflow-hidden shadow-2xl shadow-orange-500/10 border-8 border-stone-50 max-w-md w-full">
                 <img
                   src="/doctor.jpg"
-                  alt="Dt. Jyoti Bhatt — Clinical Dietitian"
-                  className="w-full h-auto object-cover aspect-[4/5]"
+                  alt="Clinical Dietitian & Founder"
+                  className="w-full h-auto object-cover aspect-[4/5] object-top"
                 />
-                <div className="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md p-6 border-t border-stone-100">
-                  <p className="text-stone-900 font-black text-xl mb-1">Dt. Jyoti Bhatt</p>
-                  <p className="text-pink-600 text-sm font-semibold">M.Sc. Clinical Nutrition & Dietetics</p>
+                <div className="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md p-6 border-t border-stone-100 shadow-md">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-stone-900 font-black text-xl leading-tight">Welcome to NutriSnap!</p>
+                      <p className="text-orange-600 text-xs font-bold mt-1">14+ Years in Clinical Nutrition & Dietetics</p>
+                    </div>
+                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-wider rounded-full border border-emerald-200">
+                      RD Honorary
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Bio */}
-            <div>
-              <span className="inline-flex items-center gap-2 text-[12px] uppercase tracking-widest font-bold text-fuchsia-500 mb-4">
-                Meet Your Dietitian
-              </span>
-              <h2 className="text-3xl md:text-4xl font-black text-stone-900 mb-6 tracking-tight leading-tight">
-                Evidence-Based Care,<br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500">Personalized for You</span>
-              </h2>
+            {/* Bio & Philosophy */}
+            <div className="md:col-span-7 space-y-6">
+              <div>
+                <span className="inline-flex items-center gap-2 text-[12px] uppercase tracking-widest font-bold text-orange-600 mb-3 bg-orange-50 px-3 py-1 rounded-full border border-orange-100">
+                  <Sparkles className="w-3.5 h-3.5" /> Founder & Clinical Lead
+                </span>
+                <h2 className="text-3xl md:text-4xl lg:text-5xl font-black text-stone-900 tracking-tight leading-tight">
+                  Food is the <br />
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-rose-500 to-pink-500">First Medicine</span>
+                </h2>
+              </div>
 
-              <p className="text-stone-600 leading-relaxed mb-6">
-                Dt. Jyoti Bhatt is a certified clinical dietitian with extensive experience in therapeutic nutrition,
-                metabolic health management, and lifestyle disease intervention. Her approach blends cutting-edge
-                nutritional science with traditional dietary wisdom.
-              </p>
+              <div className="space-y-4 text-stone-600 leading-relaxed text-base">
+                <p>
+                  I created <strong>NutriSnap</strong> with one simple mission — to bring expert nutrition care to your doorstep, no matter where you are. Because good health should not have to wait for a long travel or appointment.
+                </p>
 
-              <p className="text-stone-600 leading-relaxed mb-10">
-                Specializing in diabetes management, PCOS nutrition, cardiovascular health, gut rehabilitation,
-                and sports nutrition — she has helped hundreds of patients achieve transformative health outcomes
-                through AI-powered monitoring and personalized dietary protocols.
-              </p>
+                <p>
+                  In my <strong>14+ years of journey in clinical nutrition</strong>, I have seen that <em>Food is the First Medicine</em>. The right food, at the right time, in the right quantity can prevent, manage and even reverse many health conditions.
+                </p>
 
-              {/* Credentials */}
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { icon: Award, text: 'M.Sc. Clinical Nutrition', color: 'text-orange-500' },
-                  { icon: Star, text: '8+ Years Experience', color: 'text-pink-500' },
-                  { icon: Heart, text: 'PCOS & Diabetes', color: 'text-fuchsia-500' },
-                  { icon: Shield, text: 'Certified by IDDA', color: 'text-purple-500' }
-                ].map((c, i) => {
-                  const CIcon = c.icon;
-                  return (
-                    <div key={i} className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-stone-50 flex items-center justify-center shrink-0">
-                        <CIcon className={`w-4 h-4 ${c.color}`} />
+                <p>
+                  I have learned that every single food we eat has the power to heal. At NutriSnap, we don't give you fad diets — we help you understand your body and choose what is best for <strong>YOU</strong>. When combined with simple lifestyle changes and exercise, food becomes your most powerful medicine.
+                </p>
+              </div>
+
+              {/* Founder Promise Banner */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-orange-50 via-amber-50 to-rose-50 border border-orange-200/80 shadow-xs">
+                <p className="text-xs font-black uppercase tracking-wider text-orange-700 mb-1 flex items-center gap-1.5">
+                  <Heart className="w-4 h-4 text-rose-500 fill-rose-500" /> My Promise to You
+                </p>
+                <p className="text-sm font-semibold text-stone-800 italic">
+                  &ldquo;Simple, practical, and sustainable diet plans that fit into your real life — not the other way around.&rdquo;
+                </p>
+              </div>
+
+              {/* Credentials & Achievements */}
+              <div>
+                <h3 className="text-xs uppercase tracking-widest font-black text-stone-900 mb-3 flex items-center gap-2">
+                  <Award className="w-4 h-4 text-orange-500" /> Credentials & Achievements
+                </h3>
+                <div className="grid sm:grid-cols-2 gap-2.5">
+                  {[
+                    { icon: GraduationCap, title: 'Post Graduate in Clinical Nutrition & Dietetics', color: 'text-orange-500' },
+                    { icon: Shield, title: 'Registered Dietician Honorary (RD)', color: 'text-pink-500' },
+                    { icon: Stethoscope, title: 'Certified Diabetes Educator (CDE)', color: 'text-rose-500' },
+                    { icon: Award, title: 'Management Graduate — ISB Hyderabad', color: 'text-purple-500' },
+                    { icon: BookOpen, title: 'Active Researcher & Nutrition Educator', color: 'text-teal-600' },
+                    { icon: Heart, title: 'Creator of Heart-Healthy Recipe (National Paper Presentation)', color: 'text-amber-600' }
+                  ].map((item, i) => {
+                    const IconComponent = item.icon;
+                    return (
+                      <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-xl bg-stone-50 border border-stone-100 hover:border-orange-200 transition-colors">
+                        <div className="w-7 h-7 rounded-lg bg-white shadow-xs flex items-center justify-center shrink-0 mt-0.5">
+                          <IconComponent className={`w-3.5 h-3.5 ${item.color}`} />
+                        </div>
+                        <span className="text-xs font-bold text-stone-800 leading-snug">{item.title}</span>
                       </div>
-                      <span className="text-sm font-bold text-stone-700">{c.text}</span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>

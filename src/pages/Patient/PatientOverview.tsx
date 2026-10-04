@@ -251,7 +251,7 @@ export default function PatientOverview() {
       current: checkedItemsCount,
       total: totalAssignedMeals,
       unit: 'meals logged',
-      percent: Math.min(100, Math.round((checkedItemsCount / totalAssignedMeals) * 100)),
+      percent: Math.min(100, Math.round((assignedCompleted.length / Math.max(1, totalAssignedMeals)) * 100)),
       gradient: 'from-emerald-50 via-teal-50/70 to-emerald-100/90 border border-emerald-200/90',
       ringColor: '#10b981',
       ringTrack: 'rgba(16, 185, 129, 0.16)',
@@ -260,12 +260,14 @@ export default function PatientOverview() {
       badgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-200',
       btnBg: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20',
       activeTabBg: 'bg-emerald-600 text-white shadow-emerald-600/20',
-      title: `${checkedItemsCount} of ${totalAssignedMeals} meals done`,
+      title: extraCompleted.length > 0
+        ? `${assignedCompleted.length} of ${totalAssignedMeals} meals done (+${extraCompleted.length} extra)`
+        : `${checkedItemsCount} of ${totalAssignedMeals} meals done`,
       subtitle: nextMeal 
-        ? `Next up: ${nextMeal.mealType} — ${nextMeal.name}` 
-        : (checkedItemsCount >= totalAssignedMeals && totalAssignedMeals > 0
-          ? 'All scheduled meals completed! Exceptional clinical discipline today.'
-          : 'Ready to stay consistent with your dietician meal plan today.'),
+        ? `Next up: ${nextMeal.mealType} — ${nextMeal.name}${extraCompleted.length > 0 ? ` (+${extraCompleted.length} extra logged)` : ''}` 
+        : (assignedCompleted.length >= totalAssignedMeals && totalAssignedMeals > 0
+          ? `All scheduled meals completed!${extraCompleted.length > 0 ? ` Plus ${extraCompleted.length} extra meal logged (+${extraCalories} kcal).` : ' Exceptional clinical discipline today.'}`
+          : (extraCompleted.length > 0 ? `${extraCompleted.length} extra meal logged (+${extraCalories} kcal). All macros synced.` : 'Ready to stay consistent with your dietician meal plan today.')),
       ctaText: 'Open Meal Checklist',
       ctaLink: '/patient/meals'
     },
@@ -601,21 +603,25 @@ export default function PatientOverview() {
               </div>
             </div>
             <span className="text-xs font-black text-orange-700 bg-orange-50 border border-orange-200/80 px-3 py-1 rounded-full">
-              {checkedItemsCount} of {totalAssignedMeals} Eaten
+              {assignedCompleted.length} of {totalAssignedMeals} Eaten{extraCompleted.length > 0 ? ` (+${extraCompleted.length} extra)` : ''}
             </span>
           </div>
 
           {/* Checklist Meal Rows */}
           <div className="space-y-2.5 mt-3">
             {checklistItems.length > 0 ? (
-              checklistItems.map(item => (
+              checklistItems.map(item => {
+                const isExtraItem = item.isExtra || item.mealType?.toLowerCase().includes('extra');
+                return (
                 <div
                   key={item.id}
                   onClick={() => handleToggleMeal(item.id)}
                   className={`p-4 rounded-2xl border transition-all flex items-center justify-between gap-3 cursor-pointer group ${
                     item.completed
                       ? 'bg-emerald-50/70 border-emerald-200/80'
-                      : 'bg-stone-50/70 hover:bg-white hover:border-orange-300 border-stone-200/70'
+                      : isExtraItem
+                        ? 'bg-purple-50/50 hover:bg-purple-50 border-purple-200/70 hover:border-purple-300'
+                        : 'bg-stone-50/70 hover:bg-white hover:border-orange-300 border-stone-200/70'
                   }`}
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
@@ -628,7 +634,9 @@ export default function PatientOverview() {
                       className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all shrink-0 cursor-pointer ${
                         item.completed
                           ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'border-2 border-stone-300 group-hover:border-orange-400 bg-white'
+                          : isExtraItem
+                            ? 'border-2 border-purple-300 group-hover:border-purple-500 bg-white'
+                            : 'border-2 border-stone-300 group-hover:border-orange-400 bg-white'
                       }`}
                     >
                       {item.completed ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : null}
@@ -639,7 +647,9 @@ export default function PatientOverview() {
                         <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md ${
                           item.completed 
                             ? 'bg-emerald-200/70 text-emerald-800' 
-                            : 'bg-stone-200 text-stone-700'
+                            : isExtraItem
+                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                              : 'bg-stone-200 text-stone-700'
                         }`}>
                           {item.mealType}
                         </span>
@@ -662,7 +672,8 @@ export default function PatientOverview() {
                     {item.completed ? '✓ Logged' : 'Tap to complete'}
                   </span>
                 </div>
-              ))
+              );
+            })
             ) : (
               <div className="p-8 text-center bg-stone-50 rounded-2xl border border-dashed border-stone-200 text-stone-500 text-xs md:text-sm">
                 Your personalized clinical meal schedule will appear here once published by your dietician.

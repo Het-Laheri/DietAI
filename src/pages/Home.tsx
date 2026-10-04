@@ -20,7 +20,8 @@ import {
   Sparkles,
   GraduationCap,
   BookOpen,
-  Stethoscope
+  Stethoscope,
+  ExternalLink
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -50,19 +51,73 @@ const FEATURES = [
 const BLOGS = [
   {
     image: '/blog-nutrition.jpg',
-    tag: 'Nutrition Science',
-    title: 'Why Protein Timing Matters More Than You Think',
-    excerpt: 'How distributing protein intake across meals can optimize muscle synthesis, improve satiety, and support metabolic health.',
-    date: 'Sep 10, 2026',
-    tagColor: 'bg-orange-100 text-orange-700'
+    source: 'The Quint Fit',
+    tag: 'Heart Health',
+    title: 'World Heart Day: 5 Heart-Healthy Foods You Must Add to Your Daily Plate',
+    excerpt: 'Clinical nutrition inputs on how fiber-rich grains, antioxidant fruits, and omega-3 foods protect your arteries and reduce cardiovascular risks.',
+    date: 'World Heart Day Special',
+    tagColor: 'bg-rose-100 text-rose-700',
+    url: 'https://fit.thequint.com/hindi/heart-news/heart-healthy-foods?utm_source=WhatsApp_mWEB&utm_medium=Social&utm_campaign=socialsharebuttons&utm_content=c6d299e3-b37e-4c00-a380-057a7c594314_1601383016895'
   },
   {
-    image: '/blog-ai-scanner.jpg',
-    tag: 'AI & Technology',
-    title: 'How AI Food Scanning Is Revolutionizing Diet Tracking',
-    excerpt: 'From calorie counting to macro analysis — how multimodal AI vision is making nutrition logging effortless.',
-    date: 'Sep 5, 2026',
-    tagColor: 'bg-pink-100 text-pink-700'
+    image: '/blog-nutrition.jpg',
+    source: 'NDTV Food',
+    tag: 'Immunity & Seasonal Diet',
+    title: '10 Diet Mistakes You Must Avoid During Season Change to Build Immunity',
+    excerpt: 'Expert guide on common dietary missteps during weather transitions and how simple nutrient shifts keep infections and seasonal flu at bay.',
+    date: 'NDTV Food Feature',
+    tagColor: 'bg-orange-100 text-orange-700',
+    url: 'https://food.ndtv.com/food-drinks/immunity-10-diet-mistakes-you-must-avoid-during-season-change-to-build-immunity-2305929'
+  },
+  {
+    image: '/blog-nutrition.jpg',
+    source: 'NDTV Food (Hindi)',
+    tag: 'रोग प्रतिरोधक क्षमता',
+    title: 'मौसम बदलने पर खान-पान में न करें ये 10 गलतियां, जानिए इम्युनिटी बढ़ाने के सही टिप्स',
+    excerpt: 'मौसम के बदलाव के दौरान सेहत और पाचन तंत्र को दुरुस्त रखने के लिए किन गलतियों से बचना चाहिए और क्या खाना चाहिए।',
+    date: 'NDTV Hindi Feature',
+    tagColor: 'bg-amber-100 text-amber-800',
+    url: 'https://food.ndtv.com/hindi/you-must-avoid-these-10-mistakes-during-season-change-2306581'
+  },
+  {
+    image: '/blog-nutrition.jpg',
+    source: 'NDTV Food',
+    tag: 'Hypertension Management',
+    title: 'Garlic for Hypertension: Why and 6 Effective Ways to Eat Garlic for High BP',
+    excerpt: 'How allicin in garlic aids vascular dilation and blood pressure management, along with 6 practical kitchen methods to consume it daily.',
+    date: 'NDTV Clinical Feature',
+    tagColor: 'bg-emerald-100 text-emerald-700',
+    url: 'https://food.ndtv.com/health/garlic-for-hypertension-why-should-you-eat-garlic-to-manage-high-bp-6-ways-to-have-garlic-2307588'
+  },
+  {
+    image: '/blog-nutrition.jpg',
+    source: 'NDTV Food',
+    tag: 'PCOS & Hormonal Health',
+    title: 'PCOS Diet: 5 Low Glycaemic Foods You Should Add to Your Routine',
+    excerpt: 'Clinical insights on managing insulin spikes and hormonal fluctuations in PCOS through specific low-GI kitchen staples.',
+    date: 'NDTV Health Focus',
+    tagColor: 'bg-fuchsia-100 text-fuchsia-700',
+    url: 'https://food.ndtv.com/health/pcos-5-low-glycaemic-foods-you-should-add-to-your-pcos-diet-2307730'
+  },
+  {
+    image: '/blog-nutrition.jpg',
+    source: 'NDTV Food',
+    tag: 'Diabetes Diet',
+    title: 'Diabetes Diet: Is Rava / Suji Safe for Diabetics? 4 Nutritious Recipes That Help',
+    excerpt: 'A clinical breakdown of suji’s glycemic impact for diabetics, with 4 fiber-fortified recipe modifications that keep glucose steady.',
+    date: 'NDTV Food Feature',
+    tagColor: 'bg-blue-100 text-blue-700',
+    url: 'https://food.ndtv.com/food-drinks/diabetes-diet-is-rava-or-suji-safe-for-diabetics-4-recipes-thatll-steal-your-heart-2318847?amp=1&akamai-rum=off'
+  },
+  {
+    image: '/blog-nutrition.jpg',
+    source: 'NDTV Food',
+    tag: 'Blood Sugar Control',
+    title: 'Easy Moong Dal Palak Idli to Help Manage Blood Sugar Levels',
+    excerpt: 'A low-carb, protein and iron rich breakfast innovation combining yellow lentils and spinach for stable postprandial glucose levels.',
+    date: 'NDTV Recipe Feature',
+    tagColor: 'bg-teal-100 text-teal-700',
+    url: 'https://food.ndtv.com/food-drinks/diabetes-diet-this-easy-moong-dal-palak-idli-may-help-manage-blood-sugar-levels-2319363'
   }
 ];
 
@@ -389,14 +444,17 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-12 gap-4">
             <div>
               <span className="inline-flex items-center gap-2 text-[12px] uppercase tracking-widest font-bold text-orange-500 mb-4">
-                Latest Articles
+                Clinical Media Coverage & Articles
               </span>
               <h2 className="text-3xl md:text-4xl font-black text-stone-900 tracking-tight">
-                From the NutriSnap Blog
+                Featured Across National Health Media
               </h2>
+              <p className="text-stone-500 text-sm md:text-base mt-2">
+                Evidence-based nutrition insights, clinical guidance, and therapeutic recipes authored by our Clinical Dietitian.
+              </p>
             </div>
             <a href="#blog" className="text-sm font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 transition-colors">
-              View All <ChevronRight className="w-4 h-4" />
+              Featured Articles ({BLOGS.length})
             </a>
           </div>
 
@@ -404,28 +462,46 @@ export default function Home() {
             {BLOGS.map((b, i) => (
               <article
                 key={i}
-                className="bg-white rounded-3xl overflow-hidden border border-stone-100 hover:shadow-lg transition-shadow"
+                className="bg-white rounded-3xl overflow-hidden border border-stone-100 hover:shadow-xl hover:border-orange-200 transition-all flex flex-col justify-between group"
               >
-                <div className="relative aspect-[16/10]">
-                  <img
-                    src={b.image}
-                    alt={b.title}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute top-4 left-4">
-                    <span className={`px-3 py-1.5 ${b.tagColor} text-xs font-bold rounded-full`}>
-                      {b.tag}
-                    </span>
+                <div>
+                  <div className="relative aspect-[16/10] overflow-hidden bg-stone-100">
+                    <img
+                      src={b.image}
+                      alt={b.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute top-4 left-4 flex flex-wrap gap-1.5 items-center">
+                      <span className={`px-3 py-1 ${b.tagColor} text-xs font-bold rounded-full shadow-xs`}>
+                        {b.tag}
+                      </span>
+                    </div>
+                    <div className="absolute bottom-3 right-3">
+                      <span className="px-2.5 py-0.5 bg-stone-900/85 backdrop-blur-xs text-white text-[11px] font-bold rounded-md shadow-xs">
+                        {b.source}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-6 sm:p-7">
+                    <div className="flex items-center justify-between gap-2 mb-2.5">
+                      <p className="text-xs font-bold text-orange-600 uppercase tracking-wider">{b.source}</p>
+                      <span className="text-[11px] font-medium text-stone-400">{b.date}</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-bold text-stone-900 mb-3 leading-snug group-hover:text-orange-600 transition-colors">
+                      {b.title}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-stone-500 leading-relaxed line-clamp-3 mb-4">{b.excerpt}</p>
                   </div>
                 </div>
-                <div className="p-8">
-                  <p className="text-xs font-bold text-stone-400 mb-3 uppercase tracking-wider">{b.date}</p>
-                  <h3 className="text-lg font-bold text-stone-900 mb-3 leading-tight">
-                    {b.title}
-                  </h3>
-                  <p className="text-sm text-stone-500 leading-relaxed mb-6 line-clamp-3">{b.excerpt}</p>
-                  <a href="#blog" className="inline-flex items-center gap-1.5 text-sm font-bold text-orange-500 hover:text-orange-600 transition-colors">
-                    Read More <ArrowRight className="w-4 h-4" />
+                <div className="px-6 pb-6 sm:px-7 sm:pb-7 pt-0 border-t border-stone-50">
+                  <a 
+                    href={b.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-orange-600 hover:text-orange-700 transition-colors pt-3"
+                  >
+                    <span>Read Full Coverage</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 </div>
               </article>

@@ -285,20 +285,42 @@ export async function savePatientWeekPlan(plan: PatientWeekPlan, authorRole?: st
   if (authorRole && authorRole !== 'dietician') {
     throw new Error('Unauthorized: Only licensed dieticians can send or assign week plans.');
   }
+  const sanitized = cleanFirestoreData(plan);
+  let savedId = plan.id;
   if (plan.id) {
     await updateDoc(doc(db, 'patient_week_plans', plan.id), {
-      ...plan,
+      ...sanitized,
       updatedAt: serverTimestamp()
     });
-    return plan.id;
+    savedId = plan.id;
   } else {
     const ref = await addDoc(collection(db, 'patient_week_plans'), {
-      ...plan,
+      ...sanitized,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
-    return ref.id;
+    savedId = ref.id;
   }
+
+  // Trigger real-time notification for patient when meal plan is published
+  if (plan.status === 'published' && plan.patientId) {
+    try {
+      await createNotification({
+        recipientRole: 'patient',
+        recipientId: plan.patientId,
+        patientId: plan.patientId,
+        type: 'MEAL_PLAN_PUBLISHED',
+        title: 'New Meal Plan Assigned! 🥗',
+        message: `Your dietician has published an updated nutrition plan for your week (${plan.title || 'Weekly Clinical Plan'}). Check your daily recommendations.`,
+        link: '/patient/meals',
+        read: false
+      });
+    } catch (e) {
+      console.warn('Notice: Meal plan notification note:', e);
+    }
+  }
+
+  return savedId;
 }
 
 export async function getPatientWeekPlan(patientId: string): Promise<PatientWeekPlan | null> {
@@ -732,11 +754,19 @@ export function cleanFirestoreData<T extends Record<string, any>>(data: T): any 
       return item;
     });
   }
+  if (!data || typeof data !== 'object' || (data instanceof Date)) {
+    return data;
+  }
   const cleaned: any = {};
   for (const [key, value] of Object.entries(data)) {
     if (value !== undefined) {
       if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
-        cleaned[key] = cleanFirestoreData(value);
+        // Preserve Firestore FieldValue symbols / instances like serverTimestamp()
+        if (('_methodName' in (value as any)) || (value.constructor?.name === 'FieldValueImpl') || (value.constructor?.name === 'FieldValue')) {
+          cleaned[key] = value;
+        } else {
+          cleaned[key] = cleanFirestoreData(value);
+        }
       } else if (Array.isArray(value)) {
         cleaned[key] = value.map(item => {
           if (item && typeof item === 'object' && !(item instanceof Date)) {
@@ -962,6 +992,7 @@ export function deleteLocalQuery(id: string) {
 export async function submitQuery(queryData: Query): Promise<string> {
   // Save locally first to guarantee zero data loss
   const local = saveLocalQuery(queryData);
+  let savedId = local.id!;
 
   // 1. Try serverless backend endpoint first (handles auth and Firestore write)
   try {
@@ -974,7 +1005,7 @@ export async function submitQuery(queryData: Query): Promise<string> {
       const data = await res.json();
       if (data?.id) {
         updateLocalQuery(local.id!, { id: data.id });
-        return data.id;
+        savedId = data.id;
       }
     }
   } catch (backendErr) {
@@ -982,16 +1013,32 @@ export async function submitQuery(queryData: Query): Promise<string> {
   }
 
   // 2. Direct Firestore fallback
-  try {
-    const docRef = await addDoc(collection(db, 'queries'), { ...queryData, createdAt: serverTimestamp() });
-    if (docRef.id) {
-      updateLocalQuery(local.id!, { id: docRef.id });
-      return docRef.id;
+  if (savedId === local.id!) {
+    try {
+      const sanitized = cleanFirestoreData(queryData);
+      const docRef = await addDoc(collection(db, 'queries'), { ...sanitized, createdAt: serverTimestamp() });
+      if (docRef.id) {
+        updateLocalQuery(local.id!, { id: docRef.id });
+        savedId = docRef.id;
+      }
+    } catch (err) {
+      console.warn('Notice: Firestore query write failed (retained in client cache):', err);
     }
-  } catch (err) {
-    console.warn('Notice: Firestore query write failed (retained in client cache):', err);
   }
-  return local.id!;
+
+  // Guarantee real-time notification to the dietician!
+  createNotification({
+    recipientRole: 'dietician',
+    type: 'QUERY_SUBMITTED',
+    title: 'New Patient Consultation Query 💬',
+    patientId: queryData.patientId,
+    patientName: queryData.patientName,
+    message: `${queryData.patientName || 'A patient'} asked: "${(queryData.question || '').slice(0, 90)}"`,
+    link: '/dietician/inbox',
+    read: false
+  }).catch(console.warn);
+
+  return savedId;
 }
 
 export async function getQueries(dieticianId?: string, patientId?: string): Promise<Query[]> {
@@ -1029,9 +1076,50 @@ export async function getQueries(dieticianId?: string, patientId?: string): Prom
 
 export async function updateQuery(id: string, updates: Partial<Query>) {
   updateLocalQuery(id, updates);
+
+  // If this update provides an answer or sets answered status, notify the patient!
+  if (updates.reply && (updates.status === 'answered' || updates.status === 'viewed' || !updates.status)) {
+    try {
+      let patientId: string | undefined = updates.patientId;
+      let patientName: string | undefined = updates.patientName;
+      if (!patientId) {
+        const localQ = getLocalQueries().find(q => q.id === id);
+        if (localQ) {
+          patientId = localQ.patientId;
+          patientName = localQ.patientName;
+        }
+      }
+      if (!patientId) {
+        const snap = await getDoc(doc(db, 'queries', id));
+        if (snap.exists()) {
+          const d = snap.data();
+          patientId = d?.patientId;
+          patientName = d?.patientName;
+        }
+      }
+      if (patientId) {
+        const replyText = updates.reply;
+        createNotification({
+          recipientRole: 'patient',
+          recipientId: patientId,
+          patientId: patientId,
+          patientName: patientName,
+          type: 'QUERY_ANSWERED',
+          title: 'Dietician Answered Your Query 🩺',
+          message: `Jyoti Ma'am replied: "${replyText.slice(0, 80)}${replyText.length > 80 ? '...' : ''}"`,
+          link: '/patient/inbox',
+          read: false
+        }).catch(console.warn);
+      }
+    } catch (notifErr) {
+      console.warn('Notice: Failed to dispatch query reply notification:', notifErr);
+    }
+  }
+
   // 1. Direct Firestore update
   try {
-    await updateDoc(doc(db, 'queries', id), updates);
+    const sanitized = cleanFirestoreData(updates);
+    await updateDoc(doc(db, 'queries', id), sanitized);
     return;
   } catch (err) {
     console.warn('Notice: Firestore updateDoc note, trying backend endpoint:', err);
@@ -1092,6 +1180,16 @@ export function saveLocalNotifications(notifs: Notification[]) {
   }
 }
 
+export const parseNotificationTime = (n: Notification): number => {
+  const val = n.createdAt;
+  if (!val) return Date.now();
+  if (typeof val === 'number') return val;
+  if ((val as any)?.seconds) return (val as any).seconds * 1000;
+  if (typeof (val as any)?.toDate === 'function') return (val as any).toDate().getTime();
+  const parsed = new Date(val as any).getTime();
+  return isNaN(parsed) ? Date.now() : parsed;
+};
+
 export async function createNotification(data: Notification) {
   const notifId = data.id || `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const notifObj: Notification = {
@@ -1099,19 +1197,20 @@ export async function createNotification(data: Notification) {
     id: notifId,
     recipientRole: data.recipientRole || (data.recipientId ? 'patient' : 'dietician'),
     read: false,
-    createdAt: new Date().toISOString()
+    createdAt: data.createdAt || new Date().toISOString()
   };
 
   // 1. Save to local storage for instant responsiveness
   const current = getLocalNotifications();
   saveLocalNotifications([notifObj, ...current.filter(n => n.id !== notifId)]);
 
-  // 2. Persist to Firestore
+  // 2. Persist to Firestore cleanly with all undefined fields stripped
   try {
-    await setDoc(doc(db, 'notifications', notifId), {
-      ...notifObj,
+    const cleanDoc = {
+      ...cleanFirestoreData(notifObj),
       createdAt: serverTimestamp()
-    });
+    };
+    await setDoc(doc(db, 'notifications', notifId), cleanDoc);
   } catch (err) {
     console.warn('Notice: Background notification not written to Firestore, cached locally:', err);
   }
@@ -1119,7 +1218,7 @@ export async function createNotification(data: Notification) {
 
 export async function getNotifications(role?: 'dietician' | 'patient', userId?: string): Promise<Notification[]> {
   try {
-    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'notifications'));
     const snap = await getDocs(q);
     const remote = snap.docs.map(d => ({ ...d.data(), id: d.id } as Notification));
 
@@ -1130,6 +1229,7 @@ export async function getNotifications(role?: 'dietician' | 'patient', userId?: 
     local.forEach(n => { if (n.id && !map.has(n.id)) map.set(n.id, n); });
 
     const all = Array.from(map.values());
+    all.sort((a, b) => parseNotificationTime(b) - parseNotificationTime(a));
     if (!role) return all;
 
     return all.filter(n => {
@@ -1138,21 +1238,24 @@ export async function getNotifications(role?: 'dietician' | 'patient', userId?: 
       }
       if (role === 'patient') {
         const matchesRole = n.recipientRole === 'patient' || n.recipientRole === 'all';
-        const matchesUser = !n.recipientId || !userId || n.recipientId === userId;
+        const targetUser = n.recipientId || n.patientId;
+        const matchesUser = !targetUser || !userId || targetUser === userId;
         return matchesRole && matchesUser;
       }
       return true;
     });
   } catch {
     const local = getLocalNotifications();
+    local.sort((a, b) => parseNotificationTime(b) - parseNotificationTime(a));
     if (!role) return local;
     return local.filter(n => {
       if (role === 'dietician') {
         return n.recipientRole === 'dietician' || n.recipientRole === 'all' || !n.recipientRole;
       }
       if (role === 'patient') {
+        const targetUser = n.recipientId || n.patientId;
         return (n.recipientRole === 'patient' || n.recipientRole === 'all') &&
-          (!n.recipientId || !userId || n.recipientId === userId);
+          (!targetUser || !userId || targetUser === userId);
       }
       return true;
     });
@@ -1171,7 +1274,8 @@ export function subscribeToNotifications(
       }
       if (role === 'patient') {
         const matchesRole = n.recipientRole === 'patient' || n.recipientRole === 'all';
-        const matchesUser = !n.recipientId || !userId || n.recipientId === userId;
+        const targetUser = n.recipientId || n.patientId;
+        const matchesUser = !targetUser || !userId || targetUser === userId;
         return matchesRole && matchesUser;
       }
       return true;
@@ -1184,7 +1288,9 @@ export function subscribeToNotifications(
     remoteItems.forEach(n => { if (n.id) map.set(n.id, n); });
     local.forEach(n => { if (n.id && !map.has(n.id)) map.set(n.id, n); });
     const all = Array.from(map.values());
-    onUpdate(filterList(all));
+    const filtered = filterList(all);
+    filtered.sort((a, b) => parseNotificationTime(b) - parseNotificationTime(a));
+    onUpdate(filtered);
   };
 
   // Immediate callback from cache
@@ -1231,9 +1337,10 @@ export async function markNotificationRead(id: string) {
 export async function markAllNotificationsRead(role: 'dietician' | 'patient', userId?: string) {
   const local = getLocalNotifications();
   const updated = local.map(n => {
+    const targetUser = n.recipientId || n.patientId;
     const matchesRole = role === 'dietician' 
       ? (n.recipientRole === 'dietician' || !n.recipientRole)
-      : ((n.recipientRole === 'patient' || n.recipientRole === 'all') && (!n.recipientId || !userId || n.recipientId === userId));
+      : ((n.recipientRole === 'patient' || n.recipientRole === 'all') && (!targetUser || !userId || targetUser === userId));
     return matchesRole ? { ...n, read: true } : n;
   });
   saveLocalNotifications(updated);

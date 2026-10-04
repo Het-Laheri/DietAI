@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getQueries, updateQuery, submitQuery, Query } from '../../services/db';
+import { getQueries, updateQuery, submitQuery, createNotification, Query } from '../../services/db';
 import { MessageSquare, Send, Sparkles, PhoneCall, Plus } from 'lucide-react';
 
 export default function QueryInbox() {
@@ -47,8 +47,24 @@ export default function QueryInbox() {
     
     await updateQuery(selectedQuery.id!, {
       reply: replyText,
-      status: 'answered'
+      status: 'answered',
+      patientId: selectedQuery.patientId,
+      patientName: selectedQuery.patientName
     });
+
+    if (selectedQuery.patientId) {
+      createNotification({
+        recipientRole: 'patient',
+        recipientId: selectedQuery.patientId,
+        patientId: selectedQuery.patientId,
+        patientName: selectedQuery.patientName,
+        type: 'QUERY_ANSWERED',
+        title: 'Dietician Answered Your Query 🩺',
+        message: `Jyoti Ma'am replied: "${replyText.slice(0, 75)}${replyText.length > 75 ? '...' : ''}"`,
+        link: '/patient/inbox',
+        read: false
+      }).catch(console.warn);
+    }
 
     setQueries(await getQueries());
     setReplyText('');

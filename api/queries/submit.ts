@@ -70,6 +70,23 @@ export default async function handler(req: any, res: any) {
 
     const docRef = await addDoc(collection(db, 'queries'), docData);
 
+    // Also persist dietician notification in Firestore with admin credentials
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        recipientRole: 'dietician',
+        type: 'QUERY_SUBMITTED',
+        title: 'New Patient Consultation Query 💬',
+        patientId: finalPatientId,
+        patientName: finalPatientName,
+        message: `${finalPatientName} asked: "${question.trim().slice(0, 90)}"`,
+        link: '/dietician/inbox',
+        read: false,
+        createdAt: serverTimestamp()
+      });
+    } catch (notifErr) {
+      console.warn('Backend notification creation note:', notifErr);
+    }
+
     return res.status(200).json({
       success: true,
       id: docRef.id,

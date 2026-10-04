@@ -428,7 +428,28 @@ export default function PatientProfileView() {
     if (!text) return;
     setSendingReply(queryId);
     try {
-      await updateQuery(queryId, { reply: text, status: 'answered' });
+      const q = queries.find(item => item.id === queryId);
+      const targetPatientId = q?.patientId || profile?.uid || profile?.id || id;
+      const targetPatientName = q?.patientName || profile?.name || 'Patient';
+      await updateQuery(queryId, { 
+        reply: text, 
+        status: 'answered',
+        patientId: targetPatientId,
+        patientName: targetPatientName
+      });
+      if (targetPatientId) {
+        createNotification({
+          recipientRole: 'patient',
+          recipientId: targetPatientId,
+          patientId: targetPatientId,
+          patientName: targetPatientName,
+          type: 'QUERY_ANSWERED',
+          title: 'Dietician Answered Your Query 🩺',
+          message: `Jyoti Ma'am replied: "${text.slice(0, 75)}${text.length > 75 ? '...' : ''}"`,
+          link: '/patient/inbox',
+          read: false
+        }).catch(console.warn);
+      }
       setQueries(prev => prev.map(q => q.id === queryId ? { ...q, reply: text, status: 'answered' } : q));
       setReplyDrafts(prev => ({ ...prev, [queryId]: '' }));
     } catch (e) {
@@ -517,13 +538,15 @@ export default function PatientProfileView() {
     setEditingMeal(null);
 
     // Notify patient's phone of meal modification
-    if (profile?.id) {
+    const patientTargetId = profile?.uid || profile?.id || id;
+    if (patientTargetId) {
       createNotification({
         recipientRole: 'patient',
-        recipientId: profile.id,
+        recipientId: patientTargetId,
+        patientId: patientTargetId,
+        patientName: profile?.name || 'Patient',
         type: 'MEAL_PLAN_PUBLISHED',
-        title: 'Dietician Updated Your Meal',
-        patientId: profile.id,
+        title: 'Dietician Updated Your Meal 🥗',
         message: `Your dietician adjusted Day ${dayIdx + 1} (${updatedMeal.name || 'Meal'}). Review your updated plan!`,
         link: '/patient/meals',
         read: false
@@ -534,18 +557,20 @@ export default function PatientProfileView() {
   const handlePublishPlan = async (planToPublish: MealPlan) => {
     const published: MealPlan = { ...planToPublish, status: 'published' };
     await saveMealPlan(published, 'dietician');
-    const updated = await getMealPlans(profile.id);
+    const updated = await getMealPlans(profile?.id || id!);
     setMealPlans(updated);
 
     // Notify patient's phone that complete meal plan was published
-    if (profile?.id) {
+    const patientTargetId = profile?.uid || profile?.id || id;
+    if (patientTargetId) {
       createNotification({
         recipientRole: 'patient',
-        recipientId: profile.id,
+        recipientId: patientTargetId,
+        patientId: patientTargetId,
+        patientName: profile?.name || 'Patient',
         type: 'MEAL_PLAN_PUBLISHED',
-        title: 'New Meal Plan Assigned!',
-        patientId: profile.id,
-        message: `Your dietician has published a personalized clinical meal plan for you (${published.title || 'Weekly Plan'}).`,
+        title: 'New Meal Plan Assigned! 🥗',
+        message: `Your dietician has published a personalized clinical meal plan for you (${published.title || 'Weekly Plan'}). Check today's meals!`,
         link: '/patient/meals',
         read: false
       }).catch(console.warn);

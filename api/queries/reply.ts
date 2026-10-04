@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { initializeFirestore, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { initializeFirestore, doc, getDoc, updateDoc, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 
 const firebaseConfig = {
   projectId: 'careclarity-e67bb',
@@ -32,7 +32,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { queryId, reply, status, action } = req.body || {};
+    const { queryId, reply, status, action, patientId, patientName } = req.body || {};
 
     if (!queryId) {
       return res.status(400).json({ error: 'Missing queryId' });
@@ -54,6 +54,38 @@ export default async function handler(req: any, res: any) {
     if (status !== undefined) updates.status = status;
 
     await updateDoc(doc(db, 'queries', queryId), updates);
+
+    // Also notify patient in Firestore if this was a reply
+    if (reply) {
+      try {
+        let targetPatientId = patientId;
+        let targetPatientName = patientName;
+        if (!targetPatientId) {
+          const qSnap = await getDoc(doc(db, 'queries', queryId));
+          if (qSnap.exists()) {
+            const qData = qSnap.data();
+            targetPatientId = qData?.patientId;
+            targetPatientName = qData?.patientName;
+          }
+        }
+        if (targetPatientId) {
+          await addDoc(collection(db, 'notifications'), {
+            recipientRole: 'patient',
+            recipientId: targetPatientId,
+            patientId: targetPatientId,
+            patientName: targetPatientName,
+            type: 'QUERY_ANSWERED',
+            title: 'Dietician Answered Your Query 🩺',
+            message: `Jyoti Ma'am replied: "${String(reply).slice(0, 80)}${String(reply).length > 80 ? '...' : ''}"`,
+            link: '/patient/inbox',
+            read: false,
+            createdAt: serverTimestamp()
+          });
+        }
+      } catch (notifErr) {
+        console.warn('Backend reply notification note:', notifErr);
+      }
+    }
 
     return res.status(200).json({
       success: true,

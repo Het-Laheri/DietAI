@@ -120,16 +120,12 @@ export default function MessageInbox() {
         draft = generateFallbackDraft(q.question);
       }
       setAiDrafts(prev => ({ ...prev, [q.id!]: draft }));
-      if (!editReplies[q.id!]) {
-        setEditReplies(prev => ({ ...prev, [q.id!]: draft }));
-      }
+      setEditReplies(prev => ({ ...prev, [q.id!]: draft }));
     } catch (e) {
       console.warn('AI endpoint unavailable, using smart clinical heuristic draft:', e);
       const fallback = generateFallbackDraft(q.question);
       setAiDrafts(prev => ({ ...prev, [q.id!]: fallback }));
-      if (!editReplies[q.id!]) {
-        setEditReplies(prev => ({ ...prev, [q.id!]: fallback }));
-      }
+      setEditReplies(prev => ({ ...prev, [q.id!]: fallback }));
     } finally {
       setGeneratingAi(prev => ({ ...prev, [q.id!]: false }));
     }
@@ -137,16 +133,25 @@ export default function MessageInbox() {
 
   const generateFallbackDraft = (question: string) => {
     const qLower = question.toLowerCase();
-    if (qLower.includes('swap') || qLower.includes('replace') || qLower.includes('paneer') || qLower.includes('tofu')) {
-      return "Yes, you can make this substitution! Both offer high quality protein. Ensure you maintain similar portion sizes (approx. 100g) to keep your macronutrient targets aligned.";
+    if (qLower.includes('tea') || qLower.includes('coffee') || qLower.includes('caffeine')) {
+      return "Yes, having plain green tea or black coffee (without sugar or heavy creamers) is generally fine between meals. Keep intake to 1-2 cups daily and avoid drinking it within 45 minutes of main meals so it does not impair mineral and iron absorption.";
     }
-    if (qLower.includes('snack') || qLower.includes('hungry') || qLower.includes('4 pm')) {
-      return "For a balanced snack that controls blood sugar and sustains energy, choose roasted chana with cucumber slices or a small handful of unsalted almonds.";
+    if (qLower.includes('swap') || qLower.includes('replace') || qLower.includes('paneer') || qLower.includes('tofu') || qLower.includes('substitute')) {
+      return "Yes, you can make this substitution! Ensure you match similar portion weights (approx. 80-100g) to keep your protein and calorie targets consistent with your prescribed meal plan.";
+    }
+    if (qLower.includes('snack') || qLower.includes('hungry') || qLower.includes('4 pm') || qLower.includes('evening')) {
+      return "For a balanced snack that controls blood sugar and sustains energy, choose roasted chana with cucumber slices, a small handful of unsalted almonds, or a bowl of sprouted moong.";
     }
     if (qLower.includes('water') || qLower.includes('hydration')) {
       return "Aim for 2.5 to 3 liters of water spaced throughout the day. Drink 1-2 glasses 30 minutes before major meals to assist digestion.";
     }
-    return "Thank you for reaching out! Based on your current clinical nutrition plan, focus on keeping your portion sizes balanced and staying consistent with your daily hydration. Let me know if symptoms persist.";
+    if (qLower.includes('fruit') || qLower.includes('sugar') || qLower.includes('sweet')) {
+      return "Whole fruits like apples, guava, or berries are great options due to their dietary fiber. Avoid fruit juices and have whole fruit between meals rather than late at night.";
+    }
+    if (qLower.includes('skip') || qLower.includes('fast') || qLower.includes('breakfast')) {
+      return "Consistent meal timing stabilizes metabolism and blood glucose levels. If you are not hungry for a heavy meal, opt for a light protein shake or chia seed pudding instead of skipping entirely.";
+    }
+    return `Thank you for asking about "${question.slice(0, 45)}${question.length > 45 ? '...' : ''}"! Based on your clinical profile, keep portions consistent and stay hydrated. Let me know if you experience any digestive discomfort.`;
   };
 
   const showToast = (msg: string) => {

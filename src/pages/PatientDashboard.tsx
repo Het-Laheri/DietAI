@@ -22,12 +22,8 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { isPatientSubscribed } from '../services/subscription';
-import { 
-  subscribeToNotifications, 
-  markNotificationRead, 
-  markAllNotificationsRead, 
-  Notification 
-} from '../services/db';
+import { Notification } from '../services/db';
+import { useNotification } from '../contexts/NotificationContext';
 import PatientOverview from './Patient/PatientOverview';
 import MealNotepad from './Patient/MealNotepad';
 import FoodScanner from './Patient/FoodScanner';
@@ -64,7 +60,7 @@ export default function PatientDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isSubscribed, setIsSubscribed] = useState(() => isPatientSubscribed(profile));
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const { notifications, unreadCount, markRead, markAllRead } = useNotification();
   const [showNotifications, setShowNotifications] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
@@ -75,46 +71,9 @@ export default function PatientDashboard() {
     return () => window.removeEventListener('nutrisnap:subscription_change', handleSubChange);
   }, [profile]);
 
-  // Subscribe to real-time notifications for this patient & trigger mobile phone popups
-  useEffect(() => {
-    let initialLoadDone = false;
-    const unsub = subscribeToNotifications('patient', profile?.uid, (notifs) => {
-      setNotifications(notifs);
-
-      // On updates, check for any unread notification not yet seen on this phone
-      if (initialLoadDone) {
-        const unreadItems = notifs.filter(n => !n.read);
-        for (const n of unreadItems) {
-          if (n.id && !mobileNotificationService.isSeen(n.id)) {
-            mobileNotificationService.playNotificationChime();
-            mobileNotificationService.vibrateDevice();
-            mobileNotificationService.showMobilePopup({
-              id: n.id,
-              title: n.title || 'NutriSnap Health Alert',
-              message: n.message || 'You have an update from your dietician.',
-              link: n.link || '/patient/meals'
-            });
-          }
-        }
-      } else {
-        // First load: mark existing items as seen so we don't bombard user with old historical alerts
-        notifs.forEach(n => {
-          if (n.id) {
-            // mark seen internally
-            (mobileNotificationService as any).seenNotificationIds?.add?.(n.id);
-          }
-        });
-        initialLoadDone = true;
-      }
-    });
-    return () => unsub();
-  }, [profile?.uid]);
-
-  const unreadCount = notifications.filter(n => !n.read).length;
-
   const handleNotificationClick = async (n: Notification) => {
     if (n.id) {
-      await markNotificationRead(n.id);
+      await markRead(n.id);
     }
     setShowNotifications(false);
     if (n.link) {
@@ -125,11 +84,7 @@ export default function PatientDashboard() {
   };
 
   const handleMarkAllRead = async () => {
-    if (profile?.uid) {
-      await markAllNotificationsRead('patient', profile.uid);
-    } else {
-      await markAllNotificationsRead('patient');
-    }
+    await markAllRead();
   };
 
   const handleLogout = async () => {

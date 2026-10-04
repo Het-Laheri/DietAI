@@ -27,6 +27,10 @@
       "destination": "/api/queries/reply"
     },
     {
+      "source": "/api/queries/poll",
+      "destination": "/api/queries/poll"
+    },
+    {
       "source": "/api/knowledge/list",
       "destination": "/api/knowledge/list"
     },

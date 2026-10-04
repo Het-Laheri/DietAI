@@ -3,12 +3,8 @@ import { useAuth } from '../contexts/AuthContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { auth, db } from '../services/firebase';
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { 
-  subscribeToNotifications, 
-  markNotificationRead, 
-  markAllNotificationsRead, 
-  Notification 
-} from '../services/db';
+import { Notification } from '../services/db';
+import { useNotification } from '../contexts/NotificationContext';
 import { 
   LayoutDashboard, 
   Users, 
@@ -64,7 +60,7 @@ export default function DieticianDashboard() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const { notifications, unreadCount, markRead, markAllRead } = useNotification();
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -83,44 +79,9 @@ export default function DieticianDashboard() {
     return () => unsubscribe();
   }, []);
 
-  // Real-time listener for dietician notifications & mobile phone popups
-  useEffect(() => {
-    let initialLoadDone = false;
-    const unsubscribe = subscribeToNotifications('dietician', undefined, (notifs) => {
-      setNotifications(notifs);
-
-      // On updates, pop system notification on phone if unread and not yet seen
-      if (initialLoadDone) {
-        const unreadItems = notifs.filter(n => !n.read);
-        for (const n of unreadItems) {
-          if (n.id && !mobileNotificationService.isSeen(n.id)) {
-            mobileNotificationService.playNotificationChime();
-            mobileNotificationService.vibrateDevice();
-            mobileNotificationService.showMobilePopup({
-              id: n.id,
-              title: n.title || 'NutriSnap Practice Alert',
-              message: n.message || 'You have a new patient inquiry or clinical event.',
-              link: n.link || '/dietician/inbox'
-            });
-          }
-        }
-      } else {
-        notifs.forEach(n => {
-          if (n.id) {
-            (mobileNotificationService as any).seenNotificationIds?.add?.(n.id);
-          }
-        });
-        initialLoadDone = true;
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const unreadCount = notifications.filter(n => !n.read).length;
-
   const handleNotificationClick = async (n: Notification) => {
     if (n.id) {
-      await markNotificationRead(n.id);
+      await markRead(n.id);
     }
     setShowNotifications(false);
     if (n.link) {
@@ -131,7 +92,7 @@ export default function DieticianDashboard() {
   };
 
   const handleMarkAllRead = async () => {
-    await markAllNotificationsRead('dietician');
+    await markAllRead();
   };
 
   const handleLogout = async () => {

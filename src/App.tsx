@@ -7,6 +7,8 @@ import DieticianDashboard from './pages/DieticianDashboard';
 import PatientDashboard from './pages/PatientDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
+import { NotificationProvider } from './contexts/NotificationContext';
+import InAppNotificationToast from './components/InAppNotificationToast';
 
 function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode, requiredRole: 'dietician' | 'patient' }) {
   const { user, profile, loading } = useAuth();
@@ -51,9 +53,12 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
+        <NotificationProvider>
+          <BrowserRouter>
+            <InAppNotificationToast />
+            <AppRoutes />
+          </BrowserRouter>
+        </NotificationProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

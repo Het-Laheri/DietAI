@@ -1038,6 +1038,15 @@ export async function submitQuery(queryData: Query): Promise<string> {
     read: false
   }).catch(console.warn);
 
+  window.dispatchEvent(new CustomEvent('nutrisnap:query_change'));
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    try {
+      const bc = new BroadcastChannel('nutrisnap_notification_bus');
+      bc.postMessage({ type: 'QUERY_SUBMITTED', id: savedId });
+      bc.close();
+    } catch {}
+  }
+
   return savedId;
 }
 
@@ -1120,6 +1129,14 @@ export async function updateQuery(id: string, updates: Partial<Query>) {
   try {
     const sanitized = cleanFirestoreData(updates);
     await updateDoc(doc(db, 'queries', id), sanitized);
+    window.dispatchEvent(new CustomEvent('nutrisnap:query_change'));
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel('nutrisnap_notification_bus');
+        bc.postMessage({ type: 'QUERY_UPDATED', id });
+        bc.close();
+      } catch {}
+    }
     return;
   } catch (err) {
     console.warn('Notice: Firestore updateDoc note, trying backend endpoint:', err);
@@ -1132,6 +1149,14 @@ export async function updateQuery(id: string, updates: Partial<Query>) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ queryId: id, ...updates })
     });
+    window.dispatchEvent(new CustomEvent('nutrisnap:query_change'));
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel('nutrisnap_notification_bus');
+        bc.postMessage({ type: 'QUERY_UPDATED', id });
+        bc.close();
+      } catch {}
+    }
   } catch (err2) {
     console.warn('Backend update query failed:', err2);
   }
@@ -1175,6 +1200,13 @@ export function saveLocalNotifications(notifs: Notification[]) {
   try {
     localStorage.setItem(LOCAL_NOTIFS_KEY, JSON.stringify(notifs.slice(0, 50)));
     window.dispatchEvent(new CustomEvent('nutrisnap:notification_change'));
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel('nutrisnap_notification_bus');
+        bc.postMessage({ type: 'NOTIFS_UPDATED' });
+        bc.close();
+      } catch {}
+    }
   } catch (err) {
     console.warn('saveLocalNotifications error:', err);
   }

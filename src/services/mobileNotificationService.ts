@@ -184,8 +184,8 @@ class MobileNotificationService {
     const notifTitle = payload.title || 'NutriSnap Health Alert';
     const notifOptions: NotificationOptions = {
       body: payload.message,
-      icon: '/Nutrisnap.png',
-      badge: '/Nutrisnap.png',
+      icon: '/pwa-192x192.png',
+      badge: '/favicon-48x48.png',
       tag: payload.tag || payload.id || `notif_${Date.now()}`,
       renotify: true,
       requireInteraction: true,

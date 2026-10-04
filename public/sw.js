@@ -17,8 +17,8 @@ self.addEventListener('message', (event) => {
     const { title, options } = event.data;
     event.waitUntil(
       self.registration.showNotification(title || 'NutriSnap Notification', {
-        icon: '/Nutrisnap.png',
-        badge: '/Nutrisnap.png',
+        icon: '/pwa-192x192.png',
+        badge: '/favicon-48x48.png',
         vibrate: [200, 100, 200, 100, 200],
         requireInteraction: true,
         tag: options?.tag || `nutrisnap-${Date.now()}`,
@@ -41,8 +41,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'NutriSnap Alert';
   const options = {
     body: data.body || data.message || 'You have a new clinical notification.',
-    icon: '/Nutrisnap.png',
-    badge: '/Nutrisnap.png',
+    icon: '/pwa-192x192.png',
+    badge: '/favicon-48x48.png',
     tag: data.tag || `push-${Date.now()}`,
     data: {
       url: data.url || data.link || '/',

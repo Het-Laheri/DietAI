@@ -1,7 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getMealPlans, getFoodLogs, getQueries, getPatientProfile, getPatientWeekPlan, getPatientChecklist, calculatePatientProgramTimeline, ChecklistMealItem, MealPlan, FoodLog, Query, PatientProfile, PatientWeekPlan } from '../../services/db';
+import { 
+  getMealPlans, 
+  getFoodLogs, 
+  getQueries, 
+  getPatientProfile, 
+  getPatientWeekPlan, 
+  getPatientChecklist, 
+  savePatientChecklist,
+  createNotification,
+  calculatePatientProgramTimeline, 
+  ChecklistMealItem, 
+  MealPlan, 
+  FoodLog, 
+  Query, 
+  PatientProfile, 
+  PatientWeekPlan 
+} from '../../services/db';
 import { isPatientSubscribed, getLocalSubscription } from '../../services/subscription';
 import YogaPoseCard from '../../components/YogaPoseCard';
 import { 
@@ -18,9 +34,19 @@ import {
   Lock, 
   Flame, 
   ChevronRight,
+  ChevronLeft,
   ClipboardList,
   Target,
-  Scale
+  Scale,
+  Droplets,
+  GlassWater,
+  Dumbbell,
+  Heart,
+  Play,
+  Pause,
+  Plus,
+  Minus,
+  Check
 } from 'lucide-react';
 
 export default function PatientOverview() {
@@ -107,17 +133,21 @@ export default function PatientOverview() {
   const totalCalories = assignedCalories + extraCalories + scannedCals;
 
   // Prescribed / Assigned Meals planned for today
+  // Prescribed / Assigned Meals planned for today
   const assignedPrescribed = checklistItems.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
   const plannedDailyCalories = assignedPrescribed.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
   const plannedDailyProtein = assignedPrescribed.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
   const plannedDailyCarbs = assignedPrescribed.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
+  const plannedDailyFat = assignedPrescribed.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
 
   const targetCalories = plannedDailyCalories > 0 ? plannedDailyCalories : (activePlan?.targets?.calories || 2000);
   const targetProtein = plannedDailyProtein > 0 ? plannedDailyProtein : (activePlan?.targets?.protein || 90);
   const targetCarbs = plannedDailyCarbs > 0 ? plannedDailyCarbs : (activePlan?.targets?.carbs || 180);
+  const targetFat = plannedDailyFat > 0 ? plannedDailyFat : (activePlan?.targets?.fat || 55);
 
   const loggedProtein = completedChecklist.reduce((sum, i) => sum + (Number(i.protein) || 0), 0) + scannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.protein) || 0), 0);
   const loggedCarbs = completedChecklist.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0) + scannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.carbs) || 0), 0);
+  const loggedFat = completedChecklist.reduce((sum, i) => sum + (Number(i.fat) || 0), 0) + scannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.fat) || 0), 0);
 
   // Get checked items count
   const checkedItemsCount = completedChecklist.length;
@@ -136,8 +166,232 @@ export default function PatientOverview() {
       const dayIndex = (timeline.totalDays - 1) % activePlan.days.length;
       return activePlan.days[dayIndex]?.meals?.length || activePlan.days[0]?.meals?.length || 0;
     }
-    return 0;
+    return checklistItems.filter(i => !i.isExtra).length || 4;
   })();
+
+  // Water Hydration Tracker State (Persisted in localStorage)
+  const waterStorageKey = `nutrisnap_water_${profile?.uid || 'guest'}_${todayStr}`;
+  const [waterGlasses, setWaterGlasses] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(waterStorageKey);
+      return saved !== null ? Math.min(8, Math.max(0, parseInt(saved, 10))) : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const waterGoal = 8; // 8 glasses = 2000ml (2.0L)
+
+  const handleSetWater = (count: number) => {
+    const clamped = Math.max(0, Math.min(waterGoal, count));
+    setWaterGlasses(clamped);
+    try {
+      localStorage.setItem(waterStorageKey, clamped.toString());
+    } catch (e) {
+      console.warn('Could not save water tracking:', e);
+    }
+  };
+
+  // Next up meal
+  const nextMeal = React.useMemo(() => {
+    if (!checklistItems || checklistItems.length === 0) return null;
+    const uncompleted = checklistItems.filter(i => !i.completed);
+    return uncompleted.length > 0 ? uncompleted[0] : null;
+  }, [checklistItems]);
+
+  // Toggle meal completion directly from dashboard
+  const handleToggleMeal = async (id: string) => {
+    const updated = checklistItems.map(item => {
+      if (item.id === id) {
+        const nextState = !item.completed;
+        return {
+          ...item,
+          completed: nextState,
+          completedAt: nextState
+            ? new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+            : undefined
+        };
+      }
+      return item;
+    });
+
+    setChecklistItems(updated);
+
+    // Save states to localStorage
+    const storageKey = `nutrisnap_checklist_states_${profile?.uid || 'guest'}_${todayStr}`;
+    const stateMap: Record<string, { completed: boolean; completedAt?: string }> = {};
+    updated.forEach(it => {
+      stateMap[it.id] = { completed: it.completed, completedAt: it.completedAt };
+    });
+    localStorage.setItem(storageKey, JSON.stringify(stateMap));
+
+    if (profile) {
+      try {
+        await savePatientChecklist(profile.uid, todayStr, updated);
+        window.dispatchEvent(new CustomEvent('nutrisnap:checklist_updated'));
+
+        const targetItem = updated.find(it => it.id === id);
+        if (targetItem && targetItem.completed) {
+          createNotification({
+            recipientRole: 'dietician',
+            type: 'MEAL_LOGGED',
+            title: 'Meal Completed',
+            patientId: profile.uid,
+            patientName: profile.name || 'Patient',
+            message: `${profile.name || 'Patient'} completed ${targetItem.mealType}: ${targetItem.name}.`,
+            link: `/dietician/patients/${profile.uid}`,
+            read: false
+          }).catch(console.warn);
+        }
+      } catch (err) {
+        console.warn('Failed to update checklist item:', err);
+      }
+    }
+  };
+
+  // Carousel Definition
+  const carouselSlides = [
+    {
+      id: 'meals',
+      label: 'Meals Protocol',
+      tabName: 'Meals',
+      icon: Utensils,
+      current: checkedItemsCount,
+      total: totalAssignedMeals,
+      unit: 'meals logged',
+      percent: Math.min(100, Math.round((checkedItemsCount / totalAssignedMeals) * 100)),
+      gradient: 'from-emerald-700 via-teal-800 to-[#0e4b31]',
+      ringColor: '#34d399',
+      badgeBg: 'bg-emerald-900/50 text-emerald-200 border-emerald-400/30',
+      title: `${checkedItemsCount} of ${totalAssignedMeals} meals done`,
+      subtitle: nextMeal 
+        ? `Next up: ${nextMeal.mealType} — ${nextMeal.name}` 
+        : (checkedItemsCount >= totalAssignedMeals && totalAssignedMeals > 0
+          ? 'All scheduled meals completed! Exceptional clinical discipline today.'
+          : 'Ready to stay consistent with your dietician meal plan today.'),
+      ctaText: 'Open Meal Checklist',
+      ctaLink: '/patient/meals',
+      actionType: 'link'
+    },
+    {
+      id: 'calories',
+      label: 'Caloric Balance',
+      tabName: 'Calories',
+      icon: Flame,
+      current: totalCalories,
+      total: targetCalories,
+      unit: 'kcal eaten',
+      percent: Math.min(100, Math.round((totalCalories / targetCalories) * 100)),
+      gradient: 'from-orange-600 via-rose-600 to-amber-700',
+      ringColor: '#fb923c',
+      badgeBg: 'bg-orange-900/50 text-amber-200 border-orange-400/30',
+      title: `${totalCalories.toLocaleString()} of ${targetCalories.toLocaleString()} kcal`,
+      subtitle: targetCalories > totalCalories 
+        ? `${(targetCalories - totalCalories).toLocaleString()} kcal remaining for dinner & wholesome nourishment.` 
+        : 'Daily caloric target fulfilled! Great energy balance today.',
+      ctaText: 'Scan Food / Plate',
+      ctaLink: '/patient/scanner',
+      actionType: 'link'
+    },
+    {
+      id: 'protein',
+      label: 'Daily Protein',
+      tabName: 'Protein',
+      icon: Dumbbell,
+      current: Math.round(loggedProtein),
+      total: targetProtein,
+      unit: 'g Protein',
+      percent: Math.min(100, Math.round((loggedProtein / targetProtein) * 100)),
+      gradient: 'from-indigo-700 via-purple-700 to-violet-900',
+      ringColor: '#c084fc',
+      badgeBg: 'bg-indigo-900/50 text-purple-200 border-indigo-400/30',
+      title: `${Math.round(loggedProtein)}g of ${targetProtein}g Protein`,
+      subtitle: targetProtein > loggedProtein
+        ? `${Math.max(0, targetProtein - Math.round(loggedProtein))}g needed • Essential for cellular repair, lean muscle & satiety.`
+        : 'Protein target hit! Optimal satiety and muscle maintenance.',
+      ctaText: 'High-Protein Recipes',
+      ctaLink: '/patient/meals',
+      actionType: 'link'
+    },
+    {
+      id: 'carbs',
+      label: 'Daily Carbs',
+      tabName: 'Carbs',
+      icon: Wheat,
+      current: Math.round(loggedCarbs),
+      total: targetCarbs,
+      unit: 'g Carbs',
+      percent: Math.min(100, Math.round((loggedCarbs / targetCarbs) * 100)),
+      gradient: 'from-amber-600 via-yellow-600 to-orange-700',
+      ringColor: '#fde047',
+      badgeBg: 'bg-amber-900/50 text-yellow-200 border-yellow-400/30',
+      title: `${Math.round(loggedCarbs)}g of ${targetCarbs}g Carbs`,
+      subtitle: targetCarbs > loggedCarbs
+        ? `${Math.max(0, targetCarbs - Math.round(loggedCarbs))}g remaining • Low-GI complex carbs fuel brain & sustained physical energy.`
+        : 'Carbohydrate daily target achieved smoothly.',
+      ctaText: 'View Complex Carbs',
+      ctaLink: '/patient/meals',
+      actionType: 'link'
+    },
+    {
+      id: 'fats',
+      label: 'Healthy Fats',
+      tabName: 'Fats',
+      icon: Heart,
+      current: Math.round(loggedFat),
+      total: targetFat,
+      unit: 'g Fats',
+      percent: Math.min(100, Math.round((loggedFat / targetFat) * 100)),
+      gradient: 'from-rose-600 via-pink-600 to-fuchsia-800',
+      ringColor: '#fb7185',
+      badgeBg: 'bg-rose-900/50 text-pink-200 border-rose-400/30',
+      title: `${Math.round(loggedFat)}g of ${targetFat}g Fats`,
+      subtitle: targetFat > loggedFat
+        ? `${Math.max(0, targetFat - Math.round(loggedFat))}g remaining • Essential fatty acids for hormones, joints & cellular health.`
+        : 'Healthy lipid target satisfied today.',
+      ctaText: 'Explore Healthy Fats',
+      ctaLink: '/patient/meals',
+      actionType: 'link'
+    },
+    {
+      id: 'water',
+      label: 'Daily Hydration',
+      tabName: 'Water',
+      icon: GlassWater,
+      current: waterGlasses,
+      total: waterGoal,
+      unit: 'glasses',
+      percent: Math.min(100, Math.round((waterGlasses / waterGoal) * 100)),
+      gradient: 'from-cyan-700 via-sky-700 to-blue-900',
+      ringColor: '#38bdf8',
+      badgeBg: 'bg-cyan-900/50 text-cyan-200 border-cyan-400/30',
+      title: `${waterGlasses} of ${waterGoal} glasses (${(waterGlasses * 0.25).toFixed(1)}L / ${(waterGoal * 0.25).toFixed(1)}L)`,
+      subtitle: waterGlasses < waterGoal
+        ? `${waterGoal - waterGlasses} glasses remaining • Hydration boosts kidney filtration, digestion & energy.`
+        : 'Hydration goal completed! 2.0L of pure hydration logged.',
+      ctaText: waterGlasses < waterGoal ? '+ Drink 250ml Glass' : '✓ Hydration Done',
+      actionType: 'water',
+      ctaAction: () => handleSetWater(waterGlasses + 1)
+    }
+  ];
+
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+
+  // Auto-rotate every 4.5 seconds
+  useEffect(() => {
+    if (isPaused) return;
+    const timer = setInterval(() => {
+      setActiveSlide(prev => (prev + 1) % carouselSlides.length);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, [isPaused, carouselSlides.length]);
+
+  const currentSlide = carouselSlides[activeSlide];
+
+  // SVG Ring calculation: Radius = 42, Circumference = 2 * PI * 42 ~= 263.89
+  const ringRadius = 42;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  const strokeOffset = ringCircumference - (ringCircumference * Math.min(100, Math.max(0, currentSlide.percent))) / 100;
 
   const formattedDate = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -192,87 +446,346 @@ export default function PatientOverview() {
         </div>
       </div>
 
-      {/* 2. Today's Vibrant Nutrition & Macro Ring Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-        {/* Calories Card */}
-        <div className="bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-white border border-amber-200/90 rounded-2xl p-4 shadow-sm">
-          <div className="flex items-center justify-between text-amber-700 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Calories</span>
-            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
-              <Flame className="w-4 h-4 fill-current" />
+      {/* 2. Interactive Circular Progress Meter Carousel */}
+      <div 
+        className={`relative overflow-hidden rounded-3xl p-6 md:p-8 text-white shadow-2xl transition-all duration-700 bg-gradient-to-br ${currentSlide.gradient}`}
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+        onTouchStart={() => setIsPaused(true)}
+      >
+        {/* Ambient atmospheric glows */}
+        <div className="absolute -top-24 -right-24 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-black/20 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Top Header of the Carousel: Badge + Auto-play indicator + Navigation Arrows */}
+        <div className="flex items-center justify-between gap-4 mb-6 relative z-10">
+          <div className="flex items-center gap-2.5">
+            <span className={`text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full border backdrop-blur-md inline-flex items-center gap-1.5 shadow-2xs ${currentSlide.badgeBg}`}>
+              <currentSlide.icon className="w-3.5 h-3.5" />
+              {currentSlide.label}
+            </span>
+            <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-white/80 bg-black/25 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10">
+              <button
+                onClick={() => setIsPaused(!isPaused)}
+                className="hover:text-white transition-colors flex items-center gap-1"
+                title={isPaused ? "Resume auto-rotation" : "Pause auto-rotation"}
+              >
+                {isPaused ? <Play className="w-3 h-3 text-amber-300" /> : <Pause className="w-3 h-3 text-emerald-300" />}
+                <span>{isPaused ? 'Paused' : 'Auto-rotating'}</span>
+              </button>
             </div>
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-amber-950">{totalCalories}</span>
-            <span className="text-xs text-amber-700 font-semibold">/ {targetCalories} kcal</span>
-          </div>
-          <div className="w-full bg-amber-100/70 h-2 rounded-full overflow-hidden mt-2.5">
-            <div 
-              className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(100, Math.round((totalCalories / targetCalories) * 100))}%` }}
-            />
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveSlide(prev => (prev - 1 + carouselSlides.length) % carouselSlides.length)}
+              className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 border border-white/20 flex items-center justify-center text-white transition-all backdrop-blur-md shadow-xs cursor-pointer"
+              title="Previous metric"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-xs font-bold text-white/75 min-w-[36px] text-center">
+              {activeSlide + 1} / {carouselSlides.length}
+            </span>
+            <button
+              onClick={() => setActiveSlide(prev => (prev + 1) % carouselSlides.length)}
+              className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 border border-white/20 flex items-center justify-center text-white transition-all backdrop-blur-md shadow-xs cursor-pointer"
+              title="Next metric"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        {/* Protein Card */}
-        <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-white border border-emerald-200/90 rounded-2xl p-4 shadow-sm">
-          <div className="flex items-center justify-between text-emerald-700 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Protein Target</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-xs">
-              P
+        {/* Carousel Body: Left Circular Meter + Right Content */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center relative z-10">
+          
+          {/* Circular Progress Ring */}
+          <div className="md:col-span-4 flex items-center justify-center">
+            <div className="relative w-36 h-36 md:w-44 md:h-44 flex items-center justify-center">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                {/* Background Ring Track */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r={ringRadius}
+                  stroke="rgba(255, 255, 255, 0.16)"
+                  strokeWidth="8.5"
+                  fill="transparent"
+                />
+                {/* Active Colored Progress Arc */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r={ringRadius}
+                  stroke={currentSlide.ringColor}
+                  strokeWidth="8.5"
+                  strokeDasharray={ringCircumference}
+                  strokeDashoffset={strokeOffset}
+                  strokeLinecap="round"
+                  fill="transparent"
+                  className="transition-all duration-700 ease-out"
+                />
+              </svg>
+
+              {/* Center Content */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none">
+                <span className="text-3xl md:text-4xl font-serif font-black tracking-tight text-white drop-shadow-md">
+                  {currentSlide.percent}%
+                </span>
+                <span className="text-[10px] md:text-[11px] font-bold text-white/80 uppercase tracking-wider mt-0.5">
+                  {currentSlide.current} / {currentSlide.total}
+                </span>
+              </div>
             </div>
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-emerald-950">{Math.round(loggedProtein)}</span>
-            <span className="text-xs text-emerald-700 font-semibold">/ {targetProtein} g</span>
-          </div>
-          <div className="w-full bg-emerald-100/70 h-2 rounded-full overflow-hidden mt-2.5">
-            <div 
-              className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(100, Math.round((loggedProtein / targetProtein) * 100))}%` }}
-            />
+
+          {/* Right Text and CTA */}
+          <div className="md:col-span-8 flex flex-col justify-center space-y-3">
+            <h2 className="text-2xl md:text-3xl font-serif font-black tracking-tight text-white drop-shadow-sm leading-tight">
+              {currentSlide.title}
+            </h2>
+            <p className="text-xs md:text-sm text-white/90 font-medium leading-relaxed max-w-xl">
+              {currentSlide.subtitle}
+            </p>
+
+            <div className="pt-2 flex flex-wrap items-center gap-3">
+              {currentSlide.actionType === 'water' ? (
+                <button
+                  onClick={currentSlide.ctaAction}
+                  className="px-5 py-2.5 bg-white hover:bg-sky-50 active:scale-95 text-sky-900 font-extrabold rounded-xl text-xs md:text-sm shadow-lg shadow-black/15 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4 text-sky-600" />
+                  {currentSlide.ctaText}
+                </button>
+              ) : (
+                <Link
+                  to={currentSlide.ctaLink}
+                  className="px-5 py-2.5 bg-white hover:bg-white/90 active:scale-95 text-stone-900 font-extrabold rounded-xl text-xs md:text-sm shadow-lg shadow-black/15 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <span>{currentSlide.ctaText}</span>
+                  <ArrowRight className="w-4 h-4 text-stone-600" />
+                </Link>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Meals Eaten Card */}
-        <div className="bg-gradient-to-br from-rose-500/10 via-pink-500/5 to-white border border-rose-200/90 rounded-2xl p-4 shadow-sm">
-          <div className="flex items-center justify-between text-rose-700 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Meals Eaten</span>
-            <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4" />
+        {/* Bottom Carousel Category Tabs / Navigation Pills */}
+        <div className="mt-8 pt-5 border-t border-white/15 relative z-10">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {carouselSlides.map((slide, index) => {
+              const isActive = index === activeSlide;
+              const SlideIcon = slide.icon;
+              return (
+                <button
+                  key={slide.id}
+                  onClick={() => {
+                    setActiveSlide(index);
+                    setIsPaused(true);
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer shrink-0 ${
+                    isActive
+                      ? 'bg-white text-stone-900 shadow-md shadow-black/10 scale-102 font-black'
+                      : 'bg-white/15 hover:bg-white/25 text-white/90 border border-white/10'
+                  }`}
+                >
+                  <SlideIcon className={`w-3.5 h-3.5 ${isActive ? 'text-stone-900' : 'text-white'}`} />
+                  <span>{slide.tabName}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                    isActive ? 'bg-stone-200 text-stone-900' : 'bg-black/25 text-white/90'
+                  }`}>
+                    {slide.percent}%
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* 2.5 Complementary Widgets: Today's Meals Quick-Checklist + Interactive Water Tracker */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        
+        {/* Today's Prescribed Meals Quick Checklist (7 Cols) */}
+        <div className="lg:col-span-7 bg-white rounded-3xl border border-stone-200/80 p-5 md:p-6 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shadow-xs">
+                  <Utensils className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-black text-stone-900 text-base">Today's Meals Checklist</h3>
+                  <p className="text-[11px] text-stone-500 font-medium">One-tap completion for today's prescribed nutrition</p>
+                </div>
+              </div>
+              <span className="text-xs font-black text-orange-700 bg-orange-50 border border-orange-200/80 px-2.5 py-1 rounded-full">
+                {checkedItemsCount} of {totalAssignedMeals} Eaten
+              </span>
+            </div>
+
+            {/* Checklist Meal Rows */}
+            <div className="space-y-2.5 mt-2">
+              {checklistItems.length > 0 ? (
+                checklistItems.map(item => (
+                  <div
+                    key={item.id}
+                    onClick={() => handleToggleMeal(item.id)}
+                    className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 cursor-pointer group ${
+                      item.completed
+                        ? 'bg-emerald-50/70 border-emerald-200/80'
+                        : 'bg-stone-50/70 hover:bg-white hover:border-orange-300 border-stone-200/70'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleMeal(item.id);
+                        }}
+                        className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all shrink-0 cursor-pointer ${
+                          item.completed
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'border-2 border-stone-300 group-hover:border-orange-400 bg-white'
+                        }`}
+                      >
+                        {item.completed ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : null}
+                      </button>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md ${
+                            item.completed 
+                              ? 'bg-emerald-200/70 text-emerald-800' 
+                              : 'bg-stone-200 text-stone-700'
+                          }`}>
+                            {item.mealType}
+                          </span>
+                          <span className={`text-xs font-bold truncate ${
+                            item.completed ? 'text-stone-500 line-through' : 'text-stone-900'
+                          }`}>
+                            {item.name}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-stone-500 mt-0.5">
+                          {item.calories} kcal • {item.protein}g P • {item.carbs}g C • {item.portion || '1 serving'}
+                          {item.completedAt && (
+                            <span className="ml-1.5 text-emerald-700 font-semibold">• Done at {item.completedAt}</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className="text-[11px] text-stone-400 shrink-0 font-medium">
+                      {item.completed ? '✓ Logged' : 'Tap to complete'}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="p-6 text-center bg-stone-50 rounded-2xl border border-dashed border-stone-200 text-stone-500 text-xs">
+                  Your personalized clinical meal schedule will appear here once published by your dietician.
+                </div>
+              )}
             </div>
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-rose-950">{checkedItemsCount}</span>
-            <span className="text-xs text-rose-700 font-semibold">/ {totalAssignedMeals || 4} logged</span>
-          </div>
-          <div className="w-full bg-rose-100/70 h-2 rounded-full overflow-hidden mt-2.5">
-            <div 
-              className="h-full bg-gradient-to-r from-rose-400 to-pink-500 rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(100, Math.round((checkedItemsCount / (totalAssignedMeals || 4)) * 100))}%` }}
-            />
+
+          <div className="pt-4 mt-4 border-t border-stone-100 flex items-center justify-between">
+            <span className="text-[11px] text-stone-500 font-medium">
+              Synchronized with your lead dietician's dashboard
+            </span>
+            <Link
+              to="/patient/meals"
+              className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 group"
+            >
+              <span>View full meal notepad & recipes</span>
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
           </div>
         </div>
 
-        {/* Carbohydrates Target Card */}
-        <div className="bg-gradient-to-br from-sky-500/10 via-cyan-500/5 to-white border border-sky-200/90 rounded-2xl p-4 shadow-sm">
-          <div className="flex items-center justify-between text-sky-700 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Carbs Target</span>
-            <div className="w-7 h-7 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center font-bold text-xs">
-              <Wheat className="w-4 h-4" />
+        {/* Interactive Water Hydration Tracker (5 Cols) */}
+        <div className="lg:col-span-5 bg-gradient-to-br from-cyan-50/70 via-sky-50/40 to-white rounded-3xl border border-cyan-200/90 p-5 md:p-6 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-100 text-cyan-600 flex items-center justify-center shadow-xs">
+                  <Droplets className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-black text-stone-900 text-base">Water Tracker</h3>
+                  <p className="text-[11px] text-stone-500 font-medium">Goal: 8 glasses (2.0 Litres) daily</p>
+                </div>
+              </div>
+              <span className="text-xs font-black text-cyan-700 bg-cyan-100/70 border border-cyan-200 px-2.5 py-1 rounded-full">
+                {waterGlasses} / 8 glasses
+              </span>
+            </div>
+
+            {/* 8 Clickable Glass Tiles Grid */}
+            <div className="grid grid-cols-4 gap-2.5 my-3">
+              {Array.from({ length: 8 }).map((_, index) => {
+                const isDrunk = index < waterGlasses;
+                return (
+                  <button
+                    key={index}
+                    onClick={() => handleSetWater(isDrunk && index === waterGlasses - 1 ? index : index + 1)}
+                    className={`py-3 px-2 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1 cursor-pointer group ${
+                      isDrunk
+                        ? 'bg-gradient-to-b from-sky-400 to-cyan-500 border-sky-400 text-white shadow-md shadow-sky-500/20 scale-102'
+                        : 'bg-white hover:bg-sky-50/60 border-stone-200/90 text-stone-600 hover:border-sky-300'
+                    }`}
+                    title={`Glass ${index + 1} (250ml) - click to toggle`}
+                  >
+                    <GlassWater className={`w-5 h-5 transition-transform group-hover:scale-110 ${
+                      isDrunk ? 'text-white' : 'text-stone-400'
+                    }`} />
+                    <span className="text-[10px] font-black uppercase tracking-tight">
+                      #{index + 1}
+                    </span>
+                    <span className={`text-[9px] font-semibold ${isDrunk ? 'text-white/90' : 'text-stone-400'}`}>
+                      250ml
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Hydration Status Bar */}
+            <div className="w-full bg-cyan-100/70 h-2 rounded-full overflow-hidden mt-3">
+              <div 
+                className="h-full bg-gradient-to-r from-sky-400 to-cyan-500 rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, (waterGlasses / 8) * 100)}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] text-stone-500 font-semibold mt-1.5">
+              <span>{(waterGlasses * 0.25).toFixed(1)}L Consumed</span>
+              <span>{Math.max(0, 8 - waterGlasses)} glasses remaining</span>
             </div>
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-sky-950">{Math.round(loggedCarbs)}</span>
-            <span className="text-xs text-sky-700 font-semibold">/ {targetCarbs} g</span>
-          </div>
-          <div className="w-full bg-sky-100/70 h-2 rounded-full overflow-hidden mt-2.5">
-            <div 
-              className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(100, Math.round((loggedCarbs / targetCarbs) * 100))}%` }}
-            />
+
+          <div className="pt-4 mt-3 border-t border-cyan-100/80 flex items-center gap-2">
+            <button
+              onClick={() => handleSetWater(waterGlasses + 1)}
+              disabled={waterGlasses >= 8}
+              className="flex-1 py-2.5 px-3 bg-gradient-to-r from-sky-500 to-cyan-600 hover:from-sky-600 hover:to-cyan-700 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-md shadow-sky-500/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ Drink 1 Glass (250ml)</span>
+            </button>
+            <button
+              onClick={() => handleSetWater(waterGlasses - 1)}
+              disabled={waterGlasses <= 0}
+              className="py-2.5 px-3 bg-white hover:bg-stone-50 disabled:opacity-40 border border-stone-200 text-stone-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              title="Undo last glass"
+            >
+              <Minus className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
+
       </div>
 
       {/* 3. Clinical Assessment & Weight Management Bar */}

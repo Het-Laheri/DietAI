@@ -613,10 +613,16 @@ export default function Progress() {
 
         {allCompletedItems.length === 0 ? (
           <div className="py-12 px-4 border-2 border-dashed border-orange-200 rounded-2xl text-center bg-orange-50/20">
-            <Camera className="w-12 h-12 text-orange-300 mx-auto mb-3" />
+            <Link
+              to="/patient/scanner"
+              title="Open AI Food Scanner"
+              className="w-16 h-16 rounded-2xl bg-orange-100 hover:bg-orange-200 flex items-center justify-center mx-auto mb-3 transition-transform hover:scale-110 active:scale-95 cursor-pointer group shadow-xs"
+            >
+              <Camera className="w-8 h-8 text-orange-500 group-hover:scale-105 transition-transform" />
+            </Link>
             <h3 className="text-base font-black text-stone-900 mb-1">No Food Logs Recorded Yet</h3>
             <p className="text-xs text-stone-500 max-w-sm mx-auto mb-6 font-medium">
-              Check off meals in your Today's Meals plan or use the AI Food Scanner to snap a picture.
+              Check off meals in your Today's Meals plan or click the camera icon above to scan a picture.
             </p>
             <Link 
               to="/patient/meals"

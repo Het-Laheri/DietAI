@@ -17,7 +17,10 @@ import {
   Flame,
   Dna,
   Wheat,
-  Droplet
+  Droplet,
+  Sun,
+  Eye,
+  Info
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -309,15 +312,7 @@ export default function FoodScanner() {
       {/* Main Upload / Camera Box */}
       <div className="bg-gradient-to-br from-white via-orange-50/20 to-amber-50/20 border-2 border-orange-200/80 rounded-3xl p-6 md:p-8 mb-6 shadow-sm hover:shadow-md transition-shadow">
         {!imagePreview ? (
-          <div className="text-center py-8">
-            <div className="w-16 h-16 mx-auto bg-gradient-to-tr from-amber-400 via-orange-500 to-rose-500 text-white rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-orange-500/25 animate-float">
-              <Camera className="w-8 h-8" />
-            </div>
-            <h2 className="text-lg font-serif font-black text-stone-900 mb-1.5">Upload or Snap Photo of Food / Label</h2>
-            <p className="text-stone-500 text-xs max-w-md mx-auto mb-6 font-medium">
-              Ensure the plate or nutrition facts panel is well-lit and clearly in frame. You can add extra details or cooking oils below for pinpoint accuracy.
-            </p>
-
+          <div className="text-center py-6">
             <input 
               type="file" 
               accept="image/*" 
@@ -325,12 +320,53 @@ export default function FoodScanner() {
               className="hidden" 
               onChange={e => handleImageChange(e.target.files?.[0] || null)}
             />
+
+            {/* Clickable Camera Icon */}
+            <label
+              htmlFor="camera-input"
+              role="button"
+              tabIndex={0}
+              title="Click or tap to snap / upload photo"
+              className="w-20 h-20 mx-auto bg-gradient-to-tr from-amber-400 via-orange-500 to-rose-500 text-white rounded-2xl flex items-center justify-center mb-4 shadow-xl shadow-orange-500/30 hover:scale-108 active:scale-95 transition-all cursor-pointer group animate-float border-2 border-white/50"
+            >
+              <Camera className="w-10 h-10 group-hover:scale-110 transition-transform text-white drop-shadow-sm" />
+            </label>
+
+            <h2 className="text-xl font-serif font-black text-stone-900 mb-1.5">
+              Tap Camera to Snap or Upload Photo
+            </h2>
+            <p className="text-stone-500 text-xs max-w-md mx-auto mb-5 font-medium">
+              Click the camera icon above or use the button below to capture or select a photo of your food or nutrition label.
+            </p>
+
+            {/* Clinical Photo Instructions Banner */}
+            <div className="max-w-xl mx-auto mb-6 p-4 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-left shadow-xs">
+              <div className="flex items-center gap-2 mb-2 text-amber-900 font-extrabold text-xs uppercase tracking-wider">
+                <Info className="w-4 h-4 text-orange-600 shrink-0" />
+                <span>Essential Scanning Guidelines for 100% Accuracy:</span>
+              </div>
+              <ul className="space-y-1.5 text-xs text-stone-700">
+                <li className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-orange-200 text-orange-800 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                  <span><strong>Upload One Item at a Time:</strong> Photograph single food items or one plate/packaged product per scan for precise portion and macro measurement.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-orange-200 text-orange-800 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                  <span><strong>Ensure Bright, Visible Light:</strong> Take photos in well-lit natural or bright indoor lighting. Avoid heavy shadows or yellow tints.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-orange-200 text-orange-800 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
+                  <span><strong>Keep it Very Sharp & Clear:</strong> Hold phone steady and focus directly on the food surface or the nutrition table. Avoid blur or glare.</span>
+                </li>
+              </ul>
+            </div>
+
             <label 
               htmlFor="camera-input"
-              className="inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-orange-500 via-rose-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white text-xs md:text-sm font-black rounded-xl hover:scale-102 transition-all cursor-pointer shadow-lg shadow-orange-500/25"
+              className="inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-orange-500 via-rose-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white text-xs md:text-sm font-black rounded-xl hover:scale-102 active:scale-98 transition-all cursor-pointer shadow-lg shadow-orange-500/25"
             >
               <Upload className="w-4 h-4" />
-              Choose Photo / Camera
+              Choose Photo / Open Camera
             </label>
           </div>
         ) : (

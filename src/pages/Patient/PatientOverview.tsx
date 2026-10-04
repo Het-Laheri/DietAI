@@ -453,9 +453,13 @@ export default function PatientOverview() {
         <div className="absolute top-0 right-1/4 w-60 h-60 bg-pink-500/20 rounded-full blur-2xl pointer-events-none" />
 
         <div className="flex items-start gap-4 relative z-10">
-          <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 text-amber-300 flex items-center justify-center shrink-0 shadow-md">
-            <Camera className="w-6 h-6 text-amber-300" />
-          </div>
+          <Link
+            to="/patient/scanner"
+            title="Open AI Food Scanner"
+            className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 text-amber-300 flex items-center justify-center shrink-0 shadow-md hover:scale-110 active:scale-95 transition-all cursor-pointer group"
+          >
+            <Camera className="w-6 h-6 text-amber-300 group-hover:text-white transition-colors" />
+          </Link>
           <div>
             <div className="flex items-center gap-2 mb-1">
               <h3 className="font-serif font-black text-white text-base md:text-lg">

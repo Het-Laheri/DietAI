@@ -33,7 +33,7 @@ const FEATURES = [
   {
     icon: Activity,
     title: 'Progress Tracking',
-    desc: 'Monitor calorie budgets, macro breakdowns, weight trends, and hydration logs with interactive charts and real-time adherence scoring.',
+    desc: 'Monitor calorie budgets, macro breakdowns, weight trends, and wellness routines with interactive charts and real-time adherence scoring.',
     gradient: 'from-pink-500 to-fuchsia-600'
   },
   {

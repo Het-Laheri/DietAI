@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMealPlans, getFoodLogs, getQueries, getPatientProfile, getPatientWeekPlan, getPatientChecklist, calculatePatientProgramTimeline, ChecklistMealItem, MealPlan, FoodLog, Query, PatientProfile, PatientWeekPlan } from '../../services/db';
 import { isPatientSubscribed, getLocalSubscription } from '../../services/subscription';
+import YogaPoseCard from '../../components/YogaPoseCard';
 import { 
   Home, 
   Utensils, 
@@ -11,7 +12,7 @@ import {
   MessageCircle, 
   CheckCircle2, 
   Circle, 
-  Droplet, 
+  Wheat, 
   Sparkles, 
   ArrowRight, 
   Lock, 
@@ -29,12 +30,6 @@ export default function PatientOverview() {
   const [todayLogs, setTodayLogs] = useState<FoodLog[]>([]);
   const [checklistItems, setChecklistItems] = useState<ChecklistMealItem[]>([]);
   const [recentQuery, setRecentQuery] = useState<Query | null>(null);
-  const [waterGlasses, setWaterGlasses] = useState<number>(() => {
-    if (typeof window === 'undefined') return 3;
-    const today = new Date().toISOString().split('T')[0];
-    const saved = localStorage.getItem(`nutrisnap_water_${profile?.uid}_${today}`);
-    return saved ? parseInt(saved, 10) : 3;
-  });
   const [weekPlan, setWeekPlan] = useState<PatientWeekPlan | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -95,14 +90,6 @@ export default function PatientOverview() {
     };
   }, [profile, todayStr]);
 
-  const toggleWater = (index: number) => {
-    const newCount = index + 1 === waterGlasses ? index : index + 1;
-    setWaterGlasses(newCount);
-    if (typeof window !== 'undefined' && profile?.uid) {
-      localStorage.setItem(`nutrisnap_water_${profile.uid}_${todayStr}`, newCount.toString());
-    }
-  };
-
   const completedChecklist = checklistItems.filter(i => i.completed);
   const assignedCompleted = completedChecklist.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
   const extraCompleted = completedChecklist.filter(i => i.isExtra || i.mealType?.toLowerCase().includes('extra'));
@@ -123,10 +110,14 @@ export default function PatientOverview() {
   const assignedPrescribed = checklistItems.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
   const plannedDailyCalories = assignedPrescribed.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
   const plannedDailyProtein = assignedPrescribed.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
+  const plannedDailyCarbs = assignedPrescribed.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
 
   const targetCalories = plannedDailyCalories > 0 ? plannedDailyCalories : (activePlan?.targets?.calories || 2000);
   const targetProtein = plannedDailyProtein > 0 ? plannedDailyProtein : (activePlan?.targets?.protein || 90);
+  const targetCarbs = plannedDailyCarbs > 0 ? plannedDailyCarbs : (activePlan?.targets?.carbs || 180);
+
   const loggedProtein = completedChecklist.reduce((sum, i) => sum + (Number(i.protein) || 0), 0) + scannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.protein) || 0), 0);
+  const loggedCarbs = completedChecklist.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0) + scannedLogs.reduce((sum, l) => sum + (Number(l.nutrition?.carbs) || 0), 0);
 
   // Get checked items count
   const checkedItemsCount = completedChecklist.length;
@@ -176,7 +167,7 @@ export default function PatientOverview() {
             Welcome back, {profile?.name.split(' ')[0] || 'Patient'} 👋
           </h1>
           <p className="text-orange-50/95 text-xs md:text-sm mt-1.5 max-w-xl font-medium leading-relaxed">
-            Your personalized nutrition & wellness command center. Check off prescribed meals, log hydration, review macro targets, or consult your lead dietician.
+            Your personalized nutrition & wellness command center. Check off prescribed meals, practice daily yoga poses, review macro targets, or consult your lead dietician.
           </p>
         </div>
 
@@ -263,22 +254,22 @@ export default function PatientOverview() {
           </div>
         </div>
 
-        {/* Water Fluid Card */}
+        {/* Carbohydrates Target Card */}
         <div className="bg-gradient-to-br from-sky-500/10 via-cyan-500/5 to-white border border-sky-200/90 rounded-2xl p-4 shadow-sm">
           <div className="flex items-center justify-between text-sky-700 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Hydration</span>
-            <div className="w-7 h-7 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center">
-              <Droplet className="w-4 h-4 fill-current" />
+            <span className="text-[11px] font-bold uppercase tracking-wider">Carbs Target</span>
+            <div className="w-7 h-7 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center font-bold text-xs">
+              <Wheat className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-sky-950">{waterGlasses * 250}</span>
-            <span className="text-xs text-sky-700 font-semibold">/ 2000 ml</span>
+            <span className="text-2xl font-black text-sky-950">{Math.round(loggedCarbs)}</span>
+            <span className="text-xs text-sky-700 font-semibold">/ {targetCarbs} g</span>
           </div>
           <div className="w-full bg-sky-100/70 h-2 rounded-full overflow-hidden mt-2.5">
             <div 
               className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(100, Math.round(((waterGlasses * 250) / 2000) * 100))}%` }}
+              style={{ width: `${Math.min(100, Math.round((loggedCarbs / targetCarbs) * 100))}%` }}
             />
           </div>
         </div>
@@ -398,46 +389,8 @@ export default function PatientOverview() {
           )}
         </div>
 
-        {/* Card 2: Interactive Water Tracker Card */}
-        <div className="bg-gradient-to-br from-sky-50/60 via-white to-cyan-50/40 rounded-2xl border border-sky-200/90 p-5 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex flex-col justify-between group">
-          <div>
-            <div className="flex items-center justify-between mb-3.5">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-400 to-blue-500 text-white flex items-center justify-center shadow-md shadow-sky-500/25 group-hover:scale-105 transition-transform">
-                <Droplet className="w-5 h-5 fill-current" />
-              </div>
-              <span className="text-xs font-black text-sky-800 bg-sky-100/80 border border-sky-200 px-2.5 py-0.5 rounded-full">
-                {waterGlasses * 250} / 2000 ml
-              </span>
-            </div>
-
-            <h3 className="font-serif font-black text-stone-900 text-base mb-1">Daily Hydration</h3>
-            <p className="text-xs text-stone-600 mb-4 font-medium">
-              Click glasses to log each glass of water (250ml each):
-            </p>
-
-            <div className="grid grid-cols-4 gap-2 mb-3">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => toggleWater(i)}
-                  className={`h-9 rounded-xl flex items-center justify-center border transition-all text-xs font-bold cursor-pointer ${
-                    i < waterGlasses
-                      ? 'bg-gradient-to-tr from-sky-400 to-blue-600 border-sky-500 text-white shadow-md shadow-sky-500/30 scale-105'
-                      : 'bg-white border-sky-200 text-sky-300 hover:bg-sky-50 hover:border-sky-400 hover:text-sky-500'
-                  }`}
-                  title={`Glass ${i + 1} (250ml)`}
-                >
-                  <Droplet className={`w-4 h-4 ${i < waterGlasses ? 'fill-current' : ''}`} />
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="text-xs font-bold text-center text-sky-700 bg-sky-50/80 border border-sky-200/60 rounded-lg py-1.5 mt-2">
-            {waterGlasses >= 8 ? '🎉 Target reached! Great job!' : `💧 ${8 - waterGlasses} more glasses to target`}
-          </div>
-        </div>
+        {/* Card 2: Yoga Pose of the Day */}
+        <YogaPoseCard date={todayStr} />
 
         {/* Card 3: Lead Dietician Clinical Consultation */}
         <div className="bg-gradient-to-br from-rose-50/60 via-white to-purple-50/40 rounded-2xl border border-rose-200/90 p-5 shadow-sm hover:shadow-md hover:border-rose-300 transition-all flex flex-col justify-between group">

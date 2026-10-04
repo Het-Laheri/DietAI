@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
@@ -16,8 +16,10 @@ import {
   RecipeDBItem, 
   WeekDay,
   calculatePatientProgramTimeline,
-  createNotification
+  createNotification,
+  ClinicalGuideItem
 } from '../../services/db';
+import { CLINICAL_GUIDES } from '../../data/clinicalGuides';
 import { isPatientSubscribed } from '../../services/subscription';
 import SubscriptionPaywall from '../../components/SubscriptionPaywall';
 import { 
@@ -41,7 +43,10 @@ import {
   Loader2,
   ArrowRight,
   TrendingUp,
-  Info
+  Info,
+  BookOpen,
+  Eye,
+  ExternalLink
 } from 'lucide-react';
 
 interface ExtraFoodEstimate {
@@ -71,6 +76,10 @@ export default function MealNotepad() {
   const [extraResult, setExtraResult] = useState<ExtraFoodEstimate | null>(null);
   const [extraError, setExtraError] = useState<string | null>(null);
   const [extraSuccessToast, setExtraSuccessToast] = useState<string | null>(null);
+
+  // Clinical Educational Guides Modal & Display State
+  const [viewingGuide, setViewingGuide] = useState<ClinicalGuideItem | null>(null);
+  const [showAllGuides, setShowAllGuides] = useState(false);
 
   const todayStr = new Date().toISOString().split('T')[0];
   const storageKey = `nutrisnap_meals_checklist_${profile?.uid}_${todayStr}`;
@@ -423,6 +432,21 @@ export default function MealNotepad() {
     );
   }
 
+  // Clinical Guides attached by dietician or available for patient
+  const attachedGuides: ClinicalGuideItem[] = useMemo(() => {
+    if (activePlan?.clinicalGuides && activePlan.clinicalGuides.length > 0) {
+      return activePlan.clinicalGuides;
+    }
+    if (activePlan?.attachedGuideIds && activePlan.attachedGuideIds.length > 0) {
+      return CLINICAL_GUIDES.filter(g => activePlan.attachedGuideIds!.includes(g.id));
+    }
+    const dietaryType = (profile?.dietaryType || '').toLowerCase();
+    if (dietaryType.includes('keto')) {
+      return CLINICAL_GUIDES.filter(g => g.id === 'keto_food_pyramid' || g.id === 'nutrition_facts_label');
+    }
+    return CLINICAL_GUIDES;
+  }, [activePlan, profile]);
+
   // CALORIC & COMPLIANCE CALCULATIONS
   // 1. Prescribed / Assigned Meals
   const assignedItems = items.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
@@ -636,6 +660,58 @@ export default function MealNotepad() {
             </div>
           </div>
         </div>
+
+        {/* CLINICAL EDUCATION GUIDES & PATIENT HANDOUTS */}
+        {attachedGuides.length > 0 && (
+          <div className="px-6 py-4 border-b border-orange-100 bg-gradient-to-r from-orange-50/40 via-amber-50/30 to-white">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-orange-600" />
+                <h3 className="text-xs font-black uppercase tracking-wider text-stone-900">
+                  Dietician's Clinical Care Handouts & Guidelines ({attachedGuides.length})
+                </h3>
+              </div>
+              <span className="text-[11px] text-stone-500 font-medium">
+                Tap any guide to view high-resolution food charts & clinical instructions
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {attachedGuides.map(guide => (
+                <div
+                  key={guide.id}
+                  onClick={() => setViewingGuide(guide)}
+                  className="bg-white rounded-xl border border-orange-200/80 p-3 shadow-2xs hover:shadow-md hover:border-orange-400 transition-all cursor-pointer flex items-center gap-3 group"
+                >
+                  <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-stone-100 border border-stone-200 relative group-hover:scale-105 transition-transform">
+                    <img
+                      src={guide.imageUrl}
+                      alt={guide.title}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-stone-900/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                      <Eye className="w-4 h-4 text-white" />
+                    </div>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-orange-100/70 text-orange-800 inline-block mb-1">
+                      {guide.category}
+                    </span>
+                    <h4 className="font-bold text-xs text-stone-900 truncate group-hover:text-orange-600 transition-colors">
+                      {guide.title}
+                    </h4>
+                    <p className="text-[10px] text-stone-500 truncate mt-0.5">
+                      {guide.subtitle || guide.description}
+                    </p>
+                  </div>
+
+                  <ArrowRight className="w-4 h-4 text-stone-300 group-hover:text-orange-500 shrink-0 transition-colors" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* TO-DO CHECKLIST ITEMS */}
         <div className="p-4 md:p-6 space-y-4">
@@ -1052,6 +1128,145 @@ export default function MealNotepad() {
 
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* CLINICAL GUIDE MODAL / LIGHTBOX */}
+      {viewingGuide && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl border border-stone-200 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-stone-200">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-800 border border-orange-200">
+                    {viewingGuide.category}
+                  </span>
+                  <h3 className="font-serif font-bold text-stone-900 text-base sm:text-lg">
+                    {viewingGuide.title}
+                  </h3>
+                </div>
+                {viewingGuide.subtitle && (
+                  <p className="text-xs text-stone-500 mt-0.5 font-medium">{viewingGuide.subtitle}</p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={viewingGuide.imageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors flex items-center gap-1 text-xs"
+                  title="Open high-res chart in new tab"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+                <button
+                  onClick={() => setViewingGuide(null)}
+                  className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+              <div className="rounded-xl overflow-hidden border border-stone-200 bg-stone-900/5 flex items-center justify-center max-h-[440px]">
+                <img
+                  src={viewingGuide.imageUrl}
+                  alt={viewingGuide.title}
+                  className="max-h-[440px] w-auto object-contain rounded-lg shadow-sm"
+                />
+              </div>
+
+              <p className="text-xs text-stone-600 leading-relaxed bg-stone-50 p-3.5 rounded-xl border border-stone-200/60">
+                {viewingGuide.description}
+              </p>
+
+              {(viewingGuide.chooseFoods || viewingGuide.goEasyFoods || viewingGuide.avoidFoods) && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  {viewingGuide.chooseFoods && (
+                    <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3.5 space-y-2">
+                      <span className="font-bold text-emerald-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Choose / Prioritize
+                      </span>
+                      <ul className="space-y-1.5 text-[11px] text-emerald-950">
+                        {viewingGuide.chooseFoods.map((item, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5">
+                            <span className="text-emerald-600 font-bold">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {viewingGuide.goEasyFoods && (
+                    <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 space-y-2">
+                      <span className="font-bold text-amber-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span> Go Easy / Moderate
+                      </span>
+                      <ul className="space-y-1.5 text-[11px] text-amber-950">
+                        {viewingGuide.goEasyFoods.map((item, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5">
+                            <span className="text-amber-600 font-bold">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {viewingGuide.avoidFoods && (
+                    <div className="bg-rose-50/80 border border-rose-200 rounded-xl p-3.5 space-y-2">
+                      <span className="font-bold text-rose-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-rose-500"></span> Avoid / Limit
+                      </span>
+                      <ul className="space-y-1.5 text-[11px] text-rose-950">
+                        {viewingGuide.avoidFoods.map((item, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5">
+                            <span className="text-rose-600 font-bold">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {viewingGuide.bulletPoints && (
+                <div className="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3.5 space-y-2">
+                  <span className="font-bold text-blue-900 uppercase tracking-wider text-[10px]">
+                    Clinical Reference Highlights
+                  </span>
+                  <ul className="space-y-1.5 text-xs text-blue-950">
+                    {viewingGuide.bulletPoints.map((pt, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="text-blue-500 font-bold">✓</span>
+                        <span>{pt}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-stone-200 flex items-center justify-between">
+              <span className="text-[11px] text-stone-500">
+                Prescribed by your clinical nutritionist on NutriSnap
+              </span>
+              <button
+                onClick={() => setViewingGuide(null)}
+                className="px-5 py-2 bg-stone-900 hover:bg-black text-white rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Close Guide
+              </button>
+            </div>
           </div>
         </div>
       )}

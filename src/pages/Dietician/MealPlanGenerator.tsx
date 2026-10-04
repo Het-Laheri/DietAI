@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getPatients, PatientProfile, MealPlan, saveMealPlan, getStoredRecipesFromDB, RecipeDBItem,
   savePatientWeekPlan, getAllDraftWeekPlans, PatientWeekPlan, WeekDay, MealSlot, WeekPlanEntry,
-  buildClinicalMealPlanFromRecipes, filterRecipesForPatient, createNotification
+  buildClinicalMealPlanFromRecipes, filterRecipesForPatient, createNotification, ClinicalGuideItem
 } from '../../services/db';
+import { CLINICAL_GUIDES } from '../../data/clinicalGuides';
 import { 
   Loader2, Wand2, Save, BookOpen, Utensils, RefreshCw, 
   Check, Search, Edit3, Trash2, Plus, Copy, Calendar,
   Sparkles, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, ChevronDown, ChevronUp,
-  ShieldAlert, Activity, Flame, X
+  ShieldAlert, Activity, Flame, X, Eye, FileText, CheckSquare, Square, ExternalLink
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -54,6 +55,15 @@ export default function MealPlanGenerator() {
   
   // Caloric Target Clinical Rationale
   const [caloricRationale, setCaloricRationale] = useState<string>('');
+
+  // Attached Clinical Nutrition Guides state
+  const [selectedGuideIds, setSelectedGuideIds] = useState<string[]>([
+    'heart_health_fats_grains',
+    'heart_health_meats_dairy',
+    'nutrition_facts_label'
+  ]);
+  const [previewGuide, setPreviewGuide] = useState<ClinicalGuideItem | null>(null);
+  const [guidesCollapsed, setGuidesCollapsed] = useState(false);
 
   // Universal Dish Selector Modal (for both Tab 1 AI Studio & Tab 2 KB Week Planner)
   const [dishModal, setDishModal] = useState<{
@@ -376,6 +386,7 @@ export default function MealPlanGenerator() {
           dayNumber: parseInt(dNum, 10),
           meals: mList
         }));
+        const selectedGuides = CLINICAL_GUIDES.filter(g => selectedGuideIds.includes(g.id));
         const syncMealPlan: MealPlan = {
           patientId: selectedPatientId,
           startDate: weekStart,
@@ -383,7 +394,9 @@ export default function MealPlanGenerator() {
           status: 'published',
           targets,
           days: syncedDays as any,
-          createdAt: new Date()
+          createdAt: new Date(),
+          clinicalGuides: selectedGuides,
+          attachedGuideIds: selectedGuideIds
         };
         await saveMealPlan(syncMealPlan, 'dietician');
 
@@ -555,6 +568,29 @@ export default function MealPlanGenerator() {
 
   const selectedPatient = patients.find(p => p.id === selectedPatientId);
 
+  // Intelligent pre-selection of clinical guides based on patient's goals and condition
+  useEffect(() => {
+    if (!selectedPatient) return;
+    const dietaryType = (selectedPatient.dietaryType || '').toLowerCase();
+    const condsStr = [
+      ...(selectedPatient.medicalHistory || []),
+      selectedPatient.healthInfo?.conditions || '',
+      selectedPatient.diagnosisOrProcedure || '',
+      ...(selectedPatient.goals || [])
+    ].join(' ').toLowerCase();
+
+    const isKeto = dietaryType.includes('keto') || dietaryType.includes('low-carb');
+    const isHeart = condsStr.includes('heart') || condsStr.includes('cardio') || condsStr.includes('cholesterol') || condsStr.includes('hypertension') || condsStr.includes('bp') || condsStr.includes('lipid');
+
+    if (isKeto) {
+      setSelectedGuideIds(['keto_food_pyramid', 'nutrition_facts_label']);
+    } else if (isHeart) {
+      setSelectedGuideIds(['heart_health_fats_grains', 'heart_health_meats_dairy', 'heart_health_fruits_snacks', 'nutrition_facts_label']);
+    } else {
+      setSelectedGuideIds(['heart_health_fats_grains', 'heart_health_fruits_snacks', 'nutrition_facts_label']);
+    }
+  }, [selectedPatientId, selectedPatient]);
+
   // Clean deduplicated conditions, allergies, and dislikes for selected patient
   const patientConditions = selectedPatient ? [
     ...(selectedPatient.medicalHistory || []),
@@ -716,6 +752,7 @@ export default function MealPlanGenerator() {
     if (!generatedPlan || !selectedPatientId) return;
     setSaving(true);
     try {
+      const selectedGuides = CLINICAL_GUIDES.filter(g => selectedGuideIds.includes(g.id));
       const newPlan: MealPlan = {
         patientId: selectedPatientId,
         startDate: new Date().toISOString().split('T')[0],
@@ -723,7 +760,9 @@ export default function MealPlanGenerator() {
         status: assignStatus,
         targets,
         days: generatedPlan as any,
-        createdAt: new Date()
+        createdAt: new Date(),
+        clinicalGuides: selectedGuides,
+        attachedGuideIds: selectedGuideIds
       };
       await saveMealPlan(newPlan, 'dietician');
 
@@ -735,7 +774,7 @@ export default function MealPlanGenerator() {
           patientName: selectedPatient?.name || 'Patient',
           type: 'MEAL_PLAN_PUBLISHED',
           title: 'New Meal Plan Published 🥗',
-          message: `Your dietician approved and published your customized meal plan (${targets.calories} kcal/day). Tap to explore your recipes!`,
+          message: `Your dietician approved and published your customized meal plan (${targets.calories} kcal/day)${selectedGuides.length > 0 ? ` with ${selectedGuides.length} clinical education guide(s)` : ''}. Tap to explore your recipes!`,
           link: '/patient/meals',
           read: false
         }).catch(console.warn);
@@ -749,6 +788,321 @@ export default function MealPlanGenerator() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const renderClinicalGuidesCard = () => (
+    <div className="bg-white border border-stone-200/90 rounded-xl p-5 shadow-xs space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
+        <div>
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-orange-600" />
+            <h3 className="font-serif font-bold text-stone-900 text-sm">
+              Clinical Nutrition Guides & Patient Infographics
+            </h3>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-800 border border-orange-200">
+              {selectedGuideIds.length} of {CLINICAL_GUIDES.length} Attached to Plan
+            </span>
+          </div>
+          <p className="text-xs text-stone-500 mt-1">
+            Attach clinical visual guides & food selection tables to send directly to {selectedPatient ? selectedPatient.name : 'the client'} with this meal plan.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setSelectedGuideIds(CLINICAL_GUIDES.map(g => g.id))}
+            className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100/70 px-2.5 py-1 rounded-md border border-orange-200/60 transition-colors cursor-pointer"
+          >
+            Select All
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedGuideIds([])}
+            className="text-[11px] font-semibold text-stone-500 hover:text-stone-700 bg-stone-100 hover:bg-stone-200/70 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
+          >
+            Clear All
+          </button>
+          <button
+            type="button"
+            onClick={() => setGuidesCollapsed(!guidesCollapsed)}
+            className="text-stone-400 hover:text-stone-700 p-1 rounded-md border border-stone-200 cursor-pointer"
+            title={guidesCollapsed ? "Expand guides list" : "Collapse guides list"}
+          >
+            {guidesCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {!guidesCollapsed && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {CLINICAL_GUIDES.map(guide => {
+            const isSelected = selectedGuideIds.includes(guide.id);
+            return (
+              <div
+                key={guide.id}
+                className={`rounded-xl border transition-all overflow-hidden flex flex-col justify-between ${
+                  isSelected 
+                    ? 'border-orange-500/80 bg-orange-50/20 shadow-xs ring-1 ring-orange-500/20' 
+                    : 'border-stone-200 bg-stone-50/40 hover:border-stone-300'
+                }`}
+              >
+                <div className="p-3.5 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                      guide.category === 'Heart Health'
+                        ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                        : guide.category === 'Ketogenic Diet'
+                        ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                        : 'bg-blue-50 text-blue-700 border border-blue-200'
+                    }`}>
+                      {guide.category}
+                    </span>
+
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-stone-700 select-none">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedGuideIds(prev => [...prev, guide.id]);
+                          } else {
+                            setSelectedGuideIds(prev => prev.filter(id => id !== guide.id));
+                          }
+                        }}
+                        className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500 border-stone-300 cursor-pointer"
+                      />
+                      <span className="text-[11px] font-medium text-stone-600">Attach</span>
+                    </label>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <div 
+                      onClick={() => setPreviewGuide(guide)}
+                      className="w-16 h-16 rounded-lg overflow-hidden bg-stone-100 shrink-0 border border-stone-200 relative group cursor-pointer shadow-2xs"
+                      title="Click to preview high-res image"
+                    >
+                      <img
+                        src={guide.imageUrl}
+                        alt={guide.title}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-200"
+                      />
+                      <div className="absolute inset-0 bg-stone-900/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <Eye className="w-4 h-4 text-white drop-shadow" />
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold text-xs text-stone-900 line-clamp-2 leading-snug">
+                        {guide.title}
+                      </h4>
+                      <p className="text-[11px] text-stone-500 line-clamp-2 mt-1">
+                        {guide.subtitle || guide.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  {guide.chooseFoods && guide.chooseFoods.length > 0 && (
+                    <div className="text-[10px] text-stone-600 bg-white/90 p-2 rounded-lg border border-stone-200/80 space-y-0.5">
+                      <p className="font-semibold text-emerald-800 flex items-center gap-1 truncate">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                        Choose: {guide.chooseFoods.slice(0, 2).join(', ')}...
+                      </p>
+                      {guide.avoidFoods && guide.avoidFoods.length > 0 && (
+                        <p className="font-semibold text-rose-800 flex items-center gap-1 truncate">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                          Avoid: {guide.avoidFoods.slice(0, 2).join(', ')}...
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="px-3.5 py-2 bg-stone-50/80 border-t border-stone-100 flex items-center justify-between text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewGuide(guide)}
+                    className="text-[11px] font-semibold text-stone-600 hover:text-stone-900 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-stone-500" />
+                    View Full Chart
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedGuideIds(prev => prev.filter(id => id !== guide.id));
+                      } else {
+                        setSelectedGuideIds(prev => [...prev, guide.id]);
+                      }
+                    }}
+                    className={`text-[11px] font-bold px-2 py-0.5 rounded transition-colors cursor-pointer ${
+                      isSelected 
+                        ? 'text-orange-700 hover:text-orange-900 bg-orange-100/70' 
+                        : 'text-stone-600 hover:text-stone-800 bg-stone-200/60'
+                    }`}
+                  >
+                    {isSelected ? '✓ Attached' : '+ Add to Plan'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderPreviewModal = () => {
+    if (!previewGuide) return null;
+    return (
+      <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5">
+        <div className="bg-white rounded-2xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl border border-stone-200 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-start justify-between gap-3 pb-3 border-b border-stone-200">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-800 border border-orange-200">
+                  {previewGuide.category}
+                </span>
+                <h3 className="font-serif font-bold text-stone-900 text-base">
+                  {previewGuide.title}
+                </h3>
+              </div>
+              {previewGuide.subtitle && (
+                <p className="text-xs text-stone-500 mt-0.5 font-medium">{previewGuide.subtitle}</p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <a
+                href={previewGuide.imageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors flex items-center gap-1 text-xs"
+                title="Open high-res chart in new tab"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+              <button
+                onClick={() => setPreviewGuide(null)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto py-4 space-y-4">
+            <div className="rounded-xl overflow-hidden border border-stone-200 bg-stone-900/5 flex items-center justify-center max-h-[420px]">
+              <img
+                src={previewGuide.imageUrl}
+                alt={previewGuide.title}
+                className="max-h-[420px] w-auto object-contain rounded-lg shadow-sm"
+              />
+            </div>
+
+            <p className="text-xs text-stone-600 leading-relaxed bg-stone-50 p-3 rounded-lg border border-stone-200/60">
+              {previewGuide.description}
+            </p>
+
+            {(previewGuide.chooseFoods || previewGuide.goEasyFoods || previewGuide.avoidFoods) && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                {previewGuide.chooseFoods && (
+                  <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3.5 space-y-2">
+                    <span className="font-bold text-emerald-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Choose / Prioritize
+                    </span>
+                    <ul className="space-y-1.5 text-[11px] text-emerald-950">
+                      {previewGuide.chooseFoods.map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-1.5">
+                          <span className="text-emerald-600 font-bold">•</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {previewGuide.goEasyFoods && (
+                  <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 space-y-2">
+                    <span className="font-bold text-amber-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-500"></span> Go Easy / Moderate
+                    </span>
+                    <ul className="space-y-1.5 text-[11px] text-amber-950">
+                      {previewGuide.goEasyFoods.map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-1.5">
+                          <span className="text-amber-600 font-bold">•</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {previewGuide.avoidFoods && (
+                  <div className="bg-rose-50/80 border border-rose-200 rounded-xl p-3.5 space-y-2">
+                    <span className="font-bold text-rose-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-rose-500"></span> Avoid / Limit
+                    </span>
+                    <ul className="space-y-1.5 text-[11px] text-rose-950">
+                      {previewGuide.avoidFoods.map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-1.5">
+                          <span className="text-rose-600 font-bold">•</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {previewGuide.bulletPoints && (
+              <div className="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3.5 space-y-2">
+                <span className="font-bold text-blue-900 uppercase tracking-wider text-[10px]">
+                  Key Clinical Instructions
+                </span>
+                <ul className="space-y-1.5 text-xs text-blue-950">
+                  {previewGuide.bulletPoints.map((pt, idx) => (
+                    <li key={idx} className="flex items-start gap-2">
+                      <span className="text-blue-500 font-bold">✓</span>
+                      <span>{pt}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-3 border-t border-stone-200 flex items-center justify-between">
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-stone-700">
+              <input
+                type="checkbox"
+                checked={selectedGuideIds.includes(previewGuide.id)}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setSelectedGuideIds(prev => [...prev, previewGuide.id]);
+                  } else {
+                    setSelectedGuideIds(prev => prev.filter(id => id !== previewGuide.id));
+                  }
+                }}
+                className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500 border-stone-300"
+              />
+              <span>Attach this guide to patient's meal plan</span>
+            </label>
+
+            <button
+              onClick={() => setPreviewGuide(null)}
+              className="px-4 py-2 bg-stone-900 hover:bg-black text-white rounded-lg text-xs font-semibold cursor-pointer"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const filteredDbRecipes = dbRecipes.filter(r => {
@@ -1021,6 +1375,11 @@ export default function MealPlanGenerator() {
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            {/* Attached Clinical Guides Section in KB Planner */}
+            <div className="p-5 border-t border-stone-200 bg-stone-50/40">
+              {renderClinicalGuidesCard()}
             </div>
 
             {/* Save buttons */}
@@ -1627,6 +1986,13 @@ export default function MealPlanGenerator() {
         </div>
       </div>
 
+      {/* Attached Clinical Guides Section in AI Studio */}
+      {selectedPatient && (
+        <div className="mt-6">
+          {renderClinicalGuidesCard()}
+        </div>
+      )}
+
       {/* Edit Meal Modal */}
       {editingMeal && (
         <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -2048,6 +2414,9 @@ export default function MealPlanGenerator() {
           </div>
         </div>
       )}
+
+      {/* Lightbox / High-Res Preview Modal for Clinical Guides */}
+      {renderPreviewModal()}
     </div>
   );
 }

@@ -82,6 +82,19 @@ export interface ClinicalNote {
   createdAt?: any;
 }
 
+export interface ClinicalGuideItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  category: 'Heart Health' | 'Keto' | 'Nutrition Facts' | 'General';
+  imageUrl: string;
+  description: string;
+  chooseFoods?: string[];
+  goEasyFoods?: string[];
+  avoidFoods?: string[];
+  bulletPoints?: string[];
+}
+
 export interface MealPlan {
   id?: string;
   title?: string;
@@ -96,6 +109,8 @@ export interface MealPlan {
   };
   status: 'draft' | 'published';
   instructions?: string;
+  clinicalGuides?: ClinicalGuideItem[];
+  attachedGuideIds?: string[];
   days: MealPlanDay[];
   createdAt?: any;
 }

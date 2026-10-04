@@ -852,7 +852,7 @@ export default function MealPlanGenerator() {
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                       guide.category === 'Heart Health'
                         ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                        : guide.category === 'Ketogenic Diet'
+                        : guide.category === 'Keto'
                         ? 'bg-amber-50 text-amber-800 border border-amber-200'
                         : 'bg-blue-50 text-blue-700 border border-blue-200'
                     }`}>

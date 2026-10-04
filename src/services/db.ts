@@ -273,6 +273,7 @@ export interface WeekPlanEntry {
 
 export interface PatientWeekPlan {
   id?: string;
+  title?: string;
   patientId: string;
   weekStartDate: string;  // ISO date of Monday
   entries: WeekPlanEntry[];

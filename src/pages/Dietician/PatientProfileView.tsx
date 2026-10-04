@@ -371,6 +371,8 @@ export default function PatientProfileView() {
 
   // Sort dates descending
   const groupedDates = Object.keys(groupedLogs).sort((a, b) => b.localeCompare(a));
+  const assignedTotalCount = combinedEatingLogs.filter(l => l.type === 'assigned' || (!l.isExtra && l.type !== 'extra')).length;
+  const extraTotalCount = combinedEatingLogs.filter(l => l.isExtra || l.type === 'extra').length;
   // Chronological day-by-day program timeline (e.g. 10 days if enrolled 10 days ago)
   const timeline = calculatePatientProgramTimeline(profile, activePlan, combinedEatingLogs);
   const adherence = timeline.overallAdherence > 0

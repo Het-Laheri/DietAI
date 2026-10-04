@@ -4,7 +4,7 @@ export interface YogaPose {
   sanskritName: string;
   sanskritScript?: string;
   category: string;
-  level: 'Beginner' | 'Intermediate' | 'All Levels' | 'Advanced';
+  level: 'Beginner' | 'Intermediate' | 'All Levels' | 'Advanced' | 'Beginner to Intermediate';
   targetFocus: string;
   duration: string;
   imageUrl: string;

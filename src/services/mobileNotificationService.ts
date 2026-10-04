@@ -240,7 +240,7 @@ class MobileNotificationService {
    */
   private async dispatchNativePopup(payload: MobileNotificationPayload): Promise<boolean> {
     const notifTitle = payload.title || 'NutriSnap Health Alert';
-    const notifOptions: NotificationOptions = {
+    const notifOptions: NotificationOptions & { renotify?: boolean } = {
       body: payload.message,
       icon: '/pwa-192x192.png',
       badge: '/favicon-48x48.png',

@@ -339,20 +339,30 @@ export default function FoodScanner() {
       <div className="bg-gradient-to-br from-white via-orange-50/20 to-amber-50/20 border-2 border-orange-200/80 rounded-3xl p-6 md:p-8 mb-6 shadow-sm hover:shadow-md transition-shadow">
         {!imagePreview ? (
           <div className="text-center py-6">
+            {/* Direct Mobile Camera Capture */}
             <input 
               type="file" 
               accept="image/*" 
-              id="camera-input" 
+              capture="environment"
+              id="camera-snap-input" 
+              className="hidden" 
+              onChange={e => handleImageChange(e.target.files?.[0] || null)}
+            />
+            {/* Gallery / File Picker */}
+            <input 
+              type="file" 
+              accept="image/*" 
+              id="camera-gallery-input" 
               className="hidden" 
               onChange={e => handleImageChange(e.target.files?.[0] || null)}
             />
 
             {/* Clickable Camera Icon */}
             <label
-              htmlFor="camera-input"
+              htmlFor="camera-snap-input"
               role="button"
               tabIndex={0}
-              title="Click or tap to snap / upload photo"
+              title="Click or tap to snap with camera directly"
               className="w-20 h-20 mx-auto bg-gradient-to-tr from-amber-400 via-orange-500 to-rose-500 text-white rounded-2xl flex items-center justify-center mb-4 shadow-xl shadow-orange-500/30 hover:scale-108 active:scale-95 transition-all cursor-pointer group animate-float border-2 border-white/50"
             >
               <Camera className="w-10 h-10 group-hover:scale-110 transition-transform text-white drop-shadow-sm" />
@@ -362,7 +372,7 @@ export default function FoodScanner() {
               Tap Camera to Snap or Upload Photo
             </h2>
             <p className="text-stone-500 text-xs max-w-md mx-auto mb-5 font-medium">
-              Click the camera icon above or use the button below to capture or select a photo of your food or nutrition label.
+              Snap a live picture of your food plate or select an existing photo from your gallery.
             </p>
 
             {/* Clinical Photo Instructions Banner */}
@@ -387,13 +397,23 @@ export default function FoodScanner() {
               </ul>
             </div>
 
-            <label 
-              htmlFor="camera-input"
-              className="inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-orange-500 via-rose-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white text-xs md:text-sm font-black rounded-xl hover:scale-102 active:scale-98 transition-all cursor-pointer shadow-lg shadow-orange-500/25"
-            >
-              <Upload className="w-4 h-4" />
-              Choose Photo / Open Camera
-            </label>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md mx-auto">
+              <label 
+                htmlFor="camera-snap-input"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-orange-500 via-rose-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white text-xs md:text-sm font-black rounded-xl active:scale-95 transition-all cursor-pointer shadow-lg shadow-orange-500/25"
+              >
+                <Camera className="w-4 h-4" />
+                Take Photo with Camera
+              </label>
+
+              <label 
+                htmlFor="camera-gallery-input"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-white hover:bg-stone-50 border border-stone-200 text-stone-700 text-xs md:text-sm font-bold rounded-xl active:scale-95 transition-all cursor-pointer shadow-2xs"
+              >
+                <Upload className="w-4 h-4 text-stone-500" />
+                Upload from Gallery
+              </label>
+            </div>
           </div>
         ) : (
           <div className="space-y-6">

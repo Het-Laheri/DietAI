@@ -371,7 +371,7 @@ export default function PatientDashboard() {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto pb-24 md:pb-8 bg-gradient-to-br from-amber-50/40 via-slate-50 to-orange-50/30 relative">
+      <main className="flex-1 overflow-auto pb-28 md:pb-8 bg-gradient-to-br from-amber-50/40 via-slate-50 to-orange-50/30 relative">
         {/* Ambient atmospheric color glows */}
         <div className="fixed top-0 right-0 w-[450px] h-[450px] bg-gradient-to-bl from-orange-300/20 via-pink-300/15 to-transparent rounded-full blur-3xl pointer-events-none -z-0" />
         <div className="fixed bottom-0 left-64 w-[450px] h-[450px] bg-gradient-to-tr from-emerald-300/20 via-teal-300/15 to-transparent rounded-full blur-3xl pointer-events-none -z-0" />
@@ -401,26 +401,56 @@ export default function PatientDashboard() {
         </div>
       </main>
 
-      {/* Mobile Fixed Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-orange-100 flex items-center justify-around py-2 px-1 shadow-[0_-4px_16px_rgba(249,115,22,0.08)]">
-        {navItems.map(item => {
-          const active = location.pathname === item.path;
+      {/* Mobile Fixed Bottom Nav with Elevated Center Scanner Action */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-orange-100/90 flex items-center justify-around pt-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] px-2 shadow-[0_-4px_20px_rgba(249,115,22,0.1)]">
+        {[
+          { name: 'Dashboard', path: '/patient', icon: Home, isCenter: false },
+          { name: 'Meals', path: '/patient/meals', icon: ClipboardList, isCenter: false, locked: !isSubscribed },
+          { name: 'AI Scan', path: '/patient/scanner', icon: Camera, isCenter: true },
+          { name: 'Progress', path: '/patient/progress', icon: Activity, isCenter: false },
+          { name: 'Consult', path: '/patient/inbox', icon: MessageCircle, isCenter: false }
+        ].map(item => {
+          const active = location.pathname === item.path || (item.path === '/patient' && location.pathname === '/patient/overview');
           const Icon = item.icon;
+
+          if (item.isCenter) {
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className="flex flex-col items-center justify-center -mt-5 relative z-10 group"
+              >
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg border-2 border-white transition-all active:scale-90 ${
+                  active
+                    ? 'bg-gradient-to-tr from-orange-600 via-rose-600 to-pink-600 shadow-orange-500/40 text-white scale-105 ring-2 ring-orange-300'
+                    : 'bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500 shadow-orange-500/30 text-white hover:scale-105'
+                }`}>
+                  <Camera className="w-5 h-5 text-white drop-shadow-xs" />
+                </div>
+                <span className={`text-[10px] font-black mt-1 ${
+                  active ? 'text-orange-600 font-extrabold' : 'text-stone-500'
+                }`}>
+                  {item.name}
+                </span>
+              </Link>
+            );
+          }
+
           return (
             <Link
               key={item.path}
               to={item.path}
-              className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl text-[10px] font-bold transition-all relative ${
+              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-bold transition-all relative ${
                 active ? 'text-orange-600 font-extrabold scale-105' : 'text-stone-400 hover:text-stone-700'
               }`}
             >
               <div className={`p-1 rounded-lg transition-colors ${active ? 'bg-orange-50 text-orange-600' : ''}`}>
-                <Icon className={`w-5 h-5 ${active ? item.iconInactive : 'text-stone-400'}`} />
+                <Icon className={`w-5 h-5 ${active ? 'text-orange-600' : 'text-stone-400'}`} />
                 {item.locked && (
                   <Lock className="w-2.5 h-2.5 text-amber-500 absolute -top-0.5 -right-0.5" />
                 )}
               </div>
-              <span className="truncate max-w-[58px] mt-0.5">{item.name}</span>
+              <span className="truncate max-w-[56px] mt-0.5">{item.name}</span>
             </Link>
           );
         })}

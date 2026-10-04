@@ -34,6 +34,8 @@ import Progress from './Patient/Progress';
 import Inbox from './Patient/Inbox';
 import SubscriptionPage from './Patient/SubscriptionPage';
 import PatientProfileModal from '../components/PatientProfileModal';
+import NotificationPermissionBanner from '../components/NotificationPermissionBanner';
+import { mobileNotificationService } from '../services/mobileNotificationService';
 
 function formatRelativeTime(createdAt: any): string {
   if (!createdAt) return 'Just now';
@@ -72,10 +74,35 @@ export default function PatientDashboard() {
     return () => window.removeEventListener('nutrisnap:subscription_change', handleSubChange);
   }, [profile]);
 
-  // Subscribe to real-time notifications for this patient
+  // Subscribe to real-time notifications for this patient & trigger mobile phone popups
   useEffect(() => {
+    let initialLoadDone = false;
     const unsub = subscribeToNotifications('patient', profile?.uid, (notifs) => {
       setNotifications(notifs);
+
+      // On updates, check for any unread notification not yet seen on this phone
+      if (initialLoadDone) {
+        const unreadItems = notifs.filter(n => !n.read);
+        for (const n of unreadItems) {
+          if (n.id && !mobileNotificationService.isSeen(n.id)) {
+            mobileNotificationService.showMobilePopup({
+              id: n.id,
+              title: n.title || 'NutriSnap Health Alert',
+              message: n.message || 'You have an update from your dietician.',
+              link: n.link || '/patient/meals'
+            });
+          }
+        }
+      } else {
+        // First load: mark existing items as seen so we don't bombard user with old historical alerts
+        notifs.forEach(n => {
+          if (n.id) {
+            // mark seen internally
+            (mobileNotificationService as any).seenNotificationIds?.add?.(n.id);
+          }
+        });
+        initialLoadDone = true;
+      }
     });
     return () => unsub();
   }, [profile?.uid]);
@@ -348,6 +375,10 @@ export default function PatientDashboard() {
         <div className="fixed top-0 right-0 w-[450px] h-[450px] bg-gradient-to-bl from-orange-300/20 via-pink-300/15 to-transparent rounded-full blur-3xl pointer-events-none -z-0" />
         <div className="fixed bottom-0 left-64 w-[450px] h-[450px] bg-gradient-to-tr from-emerald-300/20 via-teal-300/15 to-transparent rounded-full blur-3xl pointer-events-none -z-0" />
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-gradient-to-r from-sky-300/10 via-violet-300/10 to-transparent rounded-full blur-3xl pointer-events-none -z-0" />
+
+        <div className="relative z-10 p-4 md:p-6 pb-0">
+          <NotificationPermissionBanner userRole="patient" userName={profile?.name} className="mb-4" />
+        </div>
 
         <div className="relative z-10">
           <Routes>

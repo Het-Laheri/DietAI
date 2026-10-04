@@ -28,7 +28,8 @@ import {
   RecipeDBItem,
   buildClinicalMealPlanFromRecipes,
   filterRecipesForPatient,
-  calculatePatientProgramTimeline
+  calculatePatientProgramTimeline,
+  createNotification
 } from '../../services/db';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { 
@@ -514,6 +515,20 @@ export default function PatientProfileView() {
     const updated = await getMealPlans(profile.id);
     setMealPlans(updated);
     setEditingMeal(null);
+
+    // Notify patient's phone of meal modification
+    if (profile?.id) {
+      createNotification({
+        recipientRole: 'patient',
+        recipientId: profile.id,
+        type: 'MEAL_PLAN_PUBLISHED',
+        title: 'Dietician Updated Your Meal',
+        patientId: profile.id,
+        message: `Your dietician adjusted Day ${dayIdx + 1} (${updatedMeal.name || 'Meal'}). Review your updated plan!`,
+        link: '/patient/meals',
+        read: false
+      }).catch(console.warn);
+    }
   };
 
   const handlePublishPlan = async (planToPublish: MealPlan) => {
@@ -521,6 +536,20 @@ export default function PatientProfileView() {
     await saveMealPlan(published, 'dietician');
     const updated = await getMealPlans(profile.id);
     setMealPlans(updated);
+
+    // Notify patient's phone that complete meal plan was published
+    if (profile?.id) {
+      createNotification({
+        recipientRole: 'patient',
+        recipientId: profile.id,
+        type: 'MEAL_PLAN_PUBLISHED',
+        title: 'New Meal Plan Assigned!',
+        patientId: profile.id,
+        message: `Your dietician has published a personalized clinical meal plan for you (${published.title || 'Weekly Plan'}).`,
+        link: '/patient/meals',
+        read: false
+      }).catch(console.warn);
+    }
   };
 
   return (

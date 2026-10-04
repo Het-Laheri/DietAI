@@ -35,6 +35,8 @@ import MessageInbox from './Dietician/MessageInbox';
 import AiAssistant from './Dietician/AiAssistant';
 import KnowledgeBase from './Dietician/KnowledgeBase';
 import MealPlanGenerator from './Dietician/MealPlanGenerator';
+import NotificationPermissionBanner from '../components/NotificationPermissionBanner';
+import { mobileNotificationService } from '../services/mobileNotificationService';
 
 function formatRelativeTime(createdAt: any): string {
   if (!createdAt) return 'Just now';
@@ -80,10 +82,33 @@ export default function DieticianDashboard() {
     return () => unsubscribe();
   }, []);
 
-  // Real-time listener for dietician notifications
+  // Real-time listener for dietician notifications & mobile phone popups
   useEffect(() => {
+    let initialLoadDone = false;
     const unsubscribe = subscribeToNotifications('dietician', undefined, (notifs) => {
       setNotifications(notifs);
+
+      // On updates, pop system notification on phone if unread and not yet seen
+      if (initialLoadDone) {
+        const unreadItems = notifs.filter(n => !n.read);
+        for (const n of unreadItems) {
+          if (n.id && !mobileNotificationService.isSeen(n.id)) {
+            mobileNotificationService.showMobilePopup({
+              id: n.id,
+              title: n.title || 'NutriSnap Practice Alert',
+              message: n.message || 'You have a new patient inquiry or clinical event.',
+              link: n.link || '/dietician/inbox'
+            });
+          }
+        }
+      } else {
+        notifs.forEach(n => {
+          if (n.id) {
+            (mobileNotificationService as any).seenNotificationIds?.add?.(n.id);
+          }
+        });
+        initialLoadDone = true;
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -321,6 +346,9 @@ export default function DieticianDashboard() {
         </header>
 
         <div className="flex-1 overflow-auto">
+          <div className="p-4 sm:p-6 pb-0 max-w-7xl mx-auto">
+            <NotificationPermissionBanner userRole="dietician" userName={profile?.name} className="mb-2" />
+          </div>
           <Routes>
             <Route path="/" element={<Overview />} />
             <Route path="/patients" element={<PatientsList />} />

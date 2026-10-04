@@ -15,7 +15,8 @@ import {
   PatientWeekPlan, 
   RecipeDBItem, 
   WeekDay,
-  calculatePatientProgramTimeline
+  calculatePatientProgramTimeline,
+  createNotification
 } from '../../services/db';
 import { isPatientSubscribed } from '../../services/subscription';
 import SubscriptionPaywall from '../../components/SubscriptionPaywall';
@@ -227,6 +228,21 @@ export default function MealNotepad() {
         console.warn('savePatientChecklist error:', err);
       });
       window.dispatchEvent(new CustomEvent('nutrisnap:checklist_updated'));
+
+      // If item was checked as completed, notify dietician phone
+      const targetItem = updated.find(it => it.id === id);
+      if (targetItem && targetItem.completed) {
+        createNotification({
+          recipientRole: 'dietician',
+          type: 'MEAL_LOGGED',
+          title: 'Meal Completed',
+          patientId: profile.uid,
+          patientName: profile.name || 'Patient',
+          message: `${profile.name || 'Patient'} completed ${targetItem.mealType}: ${targetItem.name}.`,
+          link: `/dietician/patients/${profile.uid}`,
+          read: false
+        }).catch(console.warn);
+      }
     }
   };
 
@@ -379,6 +395,19 @@ export default function MealNotepad() {
     localStorage.setItem(reflectionKey, patientReflection);
     setNotesSavedToast(true);
     setTimeout(() => setNotesSavedToast(false), 3000);
+
+    if (patientReflection.trim()) {
+      createNotification({
+        recipientRole: 'dietician',
+        type: 'CLINICAL_NOTE',
+        title: 'Patient Meal Note Added',
+        patientId: profile.uid,
+        patientName: profile.name || 'Patient',
+        message: `${profile.name || 'Patient'} added daily notes: "${patientReflection.slice(0, 80)}${patientReflection.length > 80 ? '...' : ''}"`,
+        link: `/dietician/patients/${profile.uid}`,
+        read: false
+      }).catch(console.warn);
+    }
   };
 
   if (loading) {

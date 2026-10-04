@@ -1,0 +1,23 @@
+{
+  "name": "NutriSnap — Clinical Nutrition & Diet AI",
+  "short_name": "NutriSnap",
+  "description": "AI-powered clinical nutrition platform connecting patients and dietitians through smart meal planning, food scanning, and real-time clinical notifications.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#f97316",
+  "icons": [
+    {
+      "src": "/Nutrisnap.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/Nutrisnap.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -81,6 +81,21 @@ export default function MealNotepad() {
   const [viewingGuide, setViewingGuide] = useState<ClinicalGuideItem | null>(null);
   const [showAllGuides, setShowAllGuides] = useState(false);
 
+  // Clinical Guides attached by dietician or available for patient
+  const attachedGuides: ClinicalGuideItem[] = useMemo(() => {
+    if (activePlan?.clinicalGuides && activePlan.clinicalGuides.length > 0) {
+      return activePlan.clinicalGuides;
+    }
+    if (activePlan?.attachedGuideIds && activePlan.attachedGuideIds.length > 0) {
+      return CLINICAL_GUIDES.filter(g => activePlan.attachedGuideIds!.includes(g.id));
+    }
+    const dietaryType = (profile?.dietaryType || '').toLowerCase();
+    if (dietaryType.includes('keto')) {
+      return CLINICAL_GUIDES.filter(g => g.id === 'keto_food_pyramid' || g.id === 'nutrition_facts_label');
+    }
+    return CLINICAL_GUIDES;
+  }, [activePlan, profile]);
+
   const todayStr = new Date().toISOString().split('T')[0];
   const storageKey = `nutrisnap_meals_checklist_${profile?.uid}_${todayStr}`;
   const reflectionKey = `nutrisnap_meals_reflection_${profile?.uid}_${todayStr}`;
@@ -431,21 +446,6 @@ export default function MealNotepad() {
       />
     );
   }
-
-  // Clinical Guides attached by dietician or available for patient
-  const attachedGuides: ClinicalGuideItem[] = useMemo(() => {
-    if (activePlan?.clinicalGuides && activePlan.clinicalGuides.length > 0) {
-      return activePlan.clinicalGuides;
-    }
-    if (activePlan?.attachedGuideIds && activePlan.attachedGuideIds.length > 0) {
-      return CLINICAL_GUIDES.filter(g => activePlan.attachedGuideIds!.includes(g.id));
-    }
-    const dietaryType = (profile?.dietaryType || '').toLowerCase();
-    if (dietaryType.includes('keto')) {
-      return CLINICAL_GUIDES.filter(g => g.id === 'keto_food_pyramid' || g.id === 'nutrition_facts_label');
-    }
-    return CLINICAL_GUIDES;
-  }, [activePlan, profile]);
 
   // CALORIC & COMPLIANCE CALCULATIONS
   // 1. Prescribed / Assigned Meals

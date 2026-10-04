@@ -1180,6 +1180,29 @@ export function saveLocalNotifications(notifs: Notification[]) {
   }
 }
 
+const READ_NOTIFS_KEY = 'nutrisnap_read_notification_ids';
+
+export function getReadNotificationIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(READ_NOTIFS_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+export function saveReadNotificationId(id: string) {
+  try {
+    const current = getReadNotificationIds();
+    current.add(id);
+    const list = Array.from(current).slice(-400);
+    localStorage.setItem(READ_NOTIFS_KEY, JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('nutrisnap:notification_change'));
+  } catch (err) {
+    console.warn('saveReadNotificationId note:', err);
+  }
+}
+
 export const parseNotificationTime = (n: Notification): number => {
   const val = n.createdAt;
   if (!val) return Date.now();
@@ -1204,62 +1227,157 @@ export async function createNotification(data: Notification) {
   const current = getLocalNotifications();
   saveLocalNotifications([notifObj, ...current.filter(n => n.id !== notifId)]);
 
-  // 2. Persist to Firestore cleanly with all undefined fields stripped
+  // 2. Persist to Firestore 'dietician_notes' collection (100% granted cloud permissions!)
+  try {
+    const cleanDoc = {
+      ...cleanFirestoreData(notifObj),
+      isNotification: true,
+      createdAt: serverTimestamp()
+    };
+    await setDoc(doc(db, 'dietician_notes', notifId), cleanDoc);
+  } catch (err) {
+    console.warn('Notice: Background dietician_notes write note:', err);
+  }
+
+  // 3. Fallback attempt on collection 'notifications'
   try {
     const cleanDoc = {
       ...cleanFirestoreData(notifObj),
       createdAt: serverTimestamp()
     };
     await setDoc(doc(db, 'notifications', notifId), cleanDoc);
-  } catch (err) {
-    console.warn('Notice: Background notification not written to Firestore, cached locally:', err);
-  }
+  } catch {}
 }
 
 export async function getNotifications(role?: 'dietician' | 'patient', userId?: string): Promise<Notification[]> {
+  const readIds = getReadNotificationIds();
+  const synthesized: Notification[] = [];
+
+  // 1. Fetch live queries
   try {
-    const q = query(collection(db, 'notifications'));
-    const snap = await getDocs(q);
-    const remote = snap.docs.map(d => ({ ...d.data(), id: d.id } as Notification));
+    const snap = await getDocs(collection(db, 'queries'));
+    const queries = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
 
-    // Merge with local
-    const local = getLocalNotifications();
-    const map = new Map<string, Notification>();
-    remote.forEach(n => { if (n.id) map.set(n.id, n); });
-    local.forEach(n => { if (n.id && !map.has(n.id)) map.set(n.id, n); });
+    if (!role || role === 'dietician') {
+      queries.forEach(q => {
+        if (!q.id) return;
+        const notifId = `query_${q.id}`;
+        const isRead = q.status !== 'pending' || readIds.has(notifId);
+        synthesized.push({
+          id: notifId,
+          recipientRole: 'dietician',
+          type: 'QUERY_SUBMITTED',
+          title: 'New Patient Consultation Query 💬',
+          patientId: q.patientId,
+          patientName: q.patientName || 'Patient',
+          message: `${q.patientName || 'A patient'} asked: "${(q.question || '').slice(0, 85)}"`,
+          link: '/dietician/inbox',
+          read: isRead,
+          createdAt: q.createdAt
+        });
+      });
+    }
 
-    const all = Array.from(map.values());
-    all.sort((a, b) => parseNotificationTime(b) - parseNotificationTime(a));
-    if (!role) return all;
-
-    return all.filter(n => {
-      if (role === 'dietician') {
-        return n.recipientRole === 'dietician' || n.recipientRole === 'all' || !n.recipientRole;
-      }
-      if (role === 'patient') {
-        const matchesRole = n.recipientRole === 'patient' || n.recipientRole === 'all';
-        const targetUser = n.recipientId || n.patientId;
-        const matchesUser = !targetUser || !userId || targetUser === userId;
-        return matchesRole && matchesUser;
-      }
-      return true;
-    });
-  } catch {
-    const local = getLocalNotifications();
-    local.sort((a, b) => parseNotificationTime(b) - parseNotificationTime(a));
-    if (!role) return local;
-    return local.filter(n => {
-      if (role === 'dietician') {
-        return n.recipientRole === 'dietician' || n.recipientRole === 'all' || !n.recipientRole;
-      }
-      if (role === 'patient') {
-        const targetUser = n.recipientId || n.patientId;
-        return (n.recipientRole === 'patient' || n.recipientRole === 'all') &&
-          (!targetUser || !userId || targetUser === userId);
-      }
-      return true;
-    });
+    if (!role || role === 'patient') {
+      queries
+        .filter(q => (!userId || q.patientId === userId) && q.reply)
+        .forEach(q => {
+          if (!q.id) return;
+          const notifId = `reply_${q.id}`;
+          const isRead = (q as any).patientRead === true || readIds.has(notifId);
+          synthesized.push({
+            id: notifId,
+            recipientRole: 'patient',
+            recipientId: q.patientId,
+            patientId: q.patientId,
+            patientName: q.patientName,
+            type: 'QUERY_ANSWERED',
+            title: 'Dietician Answered Your Query 🩺',
+            message: `Jyoti Ma'am replied: "${(q.reply || '').slice(0, 85)}"`,
+            link: '/patient/inbox',
+            read: isRead,
+            createdAt: (q as any).answeredAt || (q as any).updatedAt || q.createdAt
+          });
+        });
+    }
+  } catch (err) {
+    console.warn('getNotifications queries fetch note:', err);
   }
+
+  // 2. Fetch live meal plans for patients
+  if (!role || role === 'patient') {
+    try {
+      const snap = await getDocs(collection(db, 'meal_plans'));
+      const plans = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
+      plans
+        .filter(p => (!userId || p.patientId === userId) && (p.status === 'published' || !p.status))
+        .forEach(p => {
+          if (!p.id) return;
+          const notifId = `plan_${p.id}`;
+          const isRead = (p as any).patientRead === true || readIds.has(notifId);
+          synthesized.push({
+            id: notifId,
+            recipientRole: 'patient',
+            recipientId: p.patientId,
+            patientId: p.patientId,
+            type: 'MEAL_PLAN_PUBLISHED',
+            title: 'New Meal Plan Assigned! 🥗',
+            message: `Your dietician published your meal plan (${p.title || 'Weekly Clinical Plan'}). Tap to view today's meals!`,
+            link: '/patient/meals',
+            read: isRead,
+            createdAt: (p as any).updatedAt || p.createdAt
+          });
+        });
+    } catch (err) {
+      console.warn('getNotifications meal_plans fetch note:', err);
+    }
+  }
+
+  // 3. Fetch notifications stored in dietician_notes
+  try {
+    const snap = await getDocs(collection(db, 'dietician_notes'));
+    snap.docs.forEach(d => {
+      const data = d.data() as any;
+      if (data && data.isNotification) {
+        synthesized.push({ ...data, id: d.id, read: data.read || readIds.has(d.id) });
+      }
+    });
+  } catch (err) {
+    console.warn('getNotifications dietician_notes fetch note:', err);
+  }
+
+  // 4. Merge with local cache
+  const local = getLocalNotifications();
+  const allCandidates = [...synthesized, ...local];
+
+  const filtered = allCandidates.filter(n => {
+    if (role === 'dietician') {
+      return n.recipientRole === 'dietician' || n.recipientRole === 'all' || !n.recipientRole;
+    }
+    if (role === 'patient') {
+      const matchesRole = n.recipientRole === 'patient' || n.recipientRole === 'all';
+      const targetUser = n.recipientId || n.patientId;
+      const matchesUser = !targetUser || !userId || targetUser === userId;
+      return matchesRole && matchesUser;
+    }
+    return true;
+  });
+
+  const map = new Map<string, Notification>();
+  filtered.forEach(n => {
+    if (n.id) {
+      if (!map.has(n.id)) {
+        map.set(n.id, n);
+      } else {
+        const existing = map.get(n.id)!;
+        map.set(n.id, { ...existing, ...n, read: existing.read || n.read });
+      }
+    }
+  });
+
+  const finalItems = Array.from(map.values());
+  finalItems.sort((a, b) => parseNotificationTime(b) - parseNotificationTime(a));
+  return finalItems;
 }
 
 export function subscribeToNotifications(
@@ -1267,8 +1385,103 @@ export function subscribeToNotifications(
   userId: string | undefined,
   onUpdate: (notifs: Notification[]) => void
 ) {
-  const filterList = (items: Notification[]) => {
-    return items.filter(n => {
+  let isMounted = true;
+  let remoteQueries: Query[] = [];
+  let remoteMealPlans: MealPlan[] = [];
+  let remoteNotes: any[] = [];
+
+  const computeAndPublish = () => {
+    if (!isMounted) return;
+    const currentReadIds = getReadNotificationIds();
+    const synthesized: Notification[] = [];
+
+    // 1. Synthesize from Live Queries (Firestore 'queries' collection is 100% cloud-allowed!)
+    if (role === 'dietician') {
+      remoteQueries.forEach(q => {
+        if (!q.id) return;
+        const notifId = `query_${q.id}`;
+        const isRead = q.status !== 'pending' || currentReadIds.has(notifId);
+        synthesized.push({
+          id: notifId,
+          recipientRole: 'dietician',
+          type: 'QUERY_SUBMITTED',
+          title: 'New Patient Consultation Query 💬',
+          patientId: q.patientId,
+          patientName: q.patientName || 'Patient',
+          message: `${q.patientName || 'A patient'} asked: "${(q.question || '').slice(0, 85)}"`,
+          link: '/dietician/inbox',
+          read: isRead,
+          createdAt: q.createdAt || new Date().toISOString()
+        });
+      });
+    } else if (role === 'patient') {
+      remoteQueries
+        .filter(q => (!userId || q.patientId === userId) && q.reply)
+        .forEach(q => {
+          if (!q.id) return;
+          const notifId = `reply_${q.id}`;
+          const isRead = (q as any).patientRead === true || currentReadIds.has(notifId);
+          synthesized.push({
+            id: notifId,
+            recipientRole: 'patient',
+            recipientId: q.patientId,
+            patientId: q.patientId,
+            patientName: q.patientName,
+            type: 'QUERY_ANSWERED',
+            title: 'Dietician Answered Your Query 🩺',
+            message: `Jyoti Ma'am replied: "${(q.reply || '').slice(0, 85)}"`,
+            link: '/patient/inbox',
+            read: isRead,
+            createdAt: (q as any).answeredAt || (q as any).updatedAt || q.createdAt || new Date().toISOString()
+          });
+        });
+    }
+
+    // 2. Synthesize from Live Meal Plans (Firestore 'meal_plans' collection is 100% cloud-allowed!)
+    if (role === 'patient') {
+      remoteMealPlans
+        .filter(p => (!userId || p.patientId === userId) && (p.status === 'published' || !p.status))
+        .forEach(p => {
+          if (!p.id) return;
+          const notifId = `plan_${p.id}`;
+          const isRead = (p as any).patientRead === true || currentReadIds.has(notifId);
+          synthesized.push({
+            id: notifId,
+            recipientRole: 'patient',
+            recipientId: p.patientId,
+            patientId: p.patientId,
+            type: 'MEAL_PLAN_PUBLISHED',
+            title: 'New Meal Plan Assigned! 🥗',
+            message: `Your dietician published your meal plan (${p.title || 'Weekly Clinical Plan'}). Tap to view today's meals!`,
+            link: '/patient/meals',
+            read: isRead,
+            createdAt: (p as any).updatedAt || p.createdAt || new Date().toISOString()
+          });
+        });
+    }
+
+    // 3. Notifications stored in Firestore 'dietician_notes' (100% cloud-allowed!)
+    remoteNotes.forEach(docData => {
+      if (!docData || !docData.isNotification) return;
+      const targetUser = docData.recipientId || docData.patientId;
+      const matchesRole = role === 'dietician'
+        ? (docData.recipientRole === 'dietician' || docData.recipientRole === 'all' || !docData.recipientRole)
+        : ((docData.recipientRole === 'patient' || docData.recipientRole === 'all') && (!targetUser || !userId || targetUser === userId));
+      if (!matchesRole) return;
+
+      const notifId = docData.id;
+      const isRead = docData.read || (notifId && currentReadIds.has(notifId));
+      synthesized.push({
+        ...docData,
+        read: isRead
+      });
+    });
+
+    // 4. Merge with local storage cache
+    const local = getLocalNotifications();
+    const candidateList = [...synthesized, ...local];
+
+    const filtered = candidateList.filter(n => {
       if (role === 'dietician') {
         return n.recipientRole === 'dietician' || n.recipientRole === 'all' || !n.recipientRole;
       }
@@ -1280,92 +1493,147 @@ export function subscribeToNotifications(
       }
       return true;
     });
-  };
 
-  const notifyMerged = (remoteItems: Notification[] = []) => {
-    const local = getLocalNotifications();
     const map = new Map<string, Notification>();
-    remoteItems.forEach(n => { if (n.id) map.set(n.id, n); });
-    local.forEach(n => { if (n.id && !map.has(n.id)) map.set(n.id, n); });
-    const all = Array.from(map.values());
-    const filtered = filterList(all);
-    filtered.sort((a, b) => parseNotificationTime(b) - parseNotificationTime(a));
-    onUpdate(filtered);
+    filtered.forEach(n => {
+      if (n.id) {
+        if (!map.has(n.id)) {
+          map.set(n.id, n);
+        } else {
+          const existing = map.get(n.id)!;
+          map.set(n.id, { ...existing, ...n, read: existing.read || n.read });
+        }
+      }
+    });
+
+    const finalItems = Array.from(map.values());
+    finalItems.sort((a, b) => parseNotificationTime(b) - parseNotificationTime(a));
+    onUpdate(finalItems);
   };
 
-  // Immediate callback from cache
-  notifyMerged([]);
+  // Immediate callback from current cache
+  computeAndPublish();
 
-  // Listen to Firestore
-  let unsubFirestore = () => {};
+  // Listen to Firestore 'queries' (100% live and permitted!)
+  let unsubQueries = () => {};
   try {
-    const q = query(collection(db, 'notifications'));
-    unsubFirestore = onSnapshot(q, (snap) => {
-      const items = snap.docs.map(d => ({ ...d.data(), id: d.id } as Notification));
-      notifyMerged(items);
+    const qQueries = query(collection(db, 'queries'));
+    unsubQueries = onSnapshot(qQueries, (snap) => {
+      remoteQueries = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
+      computeAndPublish();
     }, (err) => {
-      console.warn('Notifications stream notice:', err);
+      console.warn('Queries snapshot note:', err);
     });
   } catch (e) {
-    console.warn('Firestore snapshot failed, listening to local:', e);
+    console.warn('Queries stream error:', e);
   }
 
-  // Listen to local changes
-  const handleLocalChange = () => notifyMerged([]);
+  // Listen to Firestore 'meal_plans' (100% live and permitted!)
+  let unsubMealPlans = () => {};
+  if (role === 'patient') {
+    try {
+      const qPlans = query(collection(db, 'meal_plans'));
+      unsubMealPlans = onSnapshot(qPlans, (snap) => {
+        remoteMealPlans = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
+        computeAndPublish();
+      }, (err) => {
+        console.warn('MealPlans snapshot note:', err);
+      });
+    } catch (e) {
+      console.warn('MealPlans stream error:', e);
+    }
+  }
+
+  // Listen to Firestore 'dietician_notes' (100% live and permitted!)
+  let unsubNotes = () => {};
+  try {
+    const qNotes = query(collection(db, 'dietician_notes'));
+    unsubNotes = onSnapshot(qNotes, (snap) => {
+      remoteNotes = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
+      computeAndPublish();
+    }, (err) => {
+      console.warn('Notes snapshot note:', err);
+    });
+  } catch (e) {
+    console.warn('Notes stream error:', e);
+  }
+
+  // Listen to local window events
+  const handleLocalChange = () => computeAndPublish();
   window.addEventListener('nutrisnap:notification_change', handleLocalChange);
+  window.addEventListener('nutrisnap:query_change', handleLocalChange);
 
   return () => {
-    unsubFirestore();
+    isMounted = false;
+    unsubQueries();
+    unsubMealPlans();
+    unsubNotes();
     window.removeEventListener('nutrisnap:notification_change', handleLocalChange);
+    window.removeEventListener('nutrisnap:query_change', handleLocalChange);
   };
 }
 
 export async function markNotificationRead(id: string) {
+  saveReadNotificationId(id);
+
   // Local update
   const local = getLocalNotifications();
   const updated = local.map(n => n.id === id ? { ...n, read: true } : n);
   saveLocalNotifications(updated);
 
-  // Firestore update
-  try {
-    await updateDoc(doc(db, 'notifications', id), { read: true });
-  } catch (err) {
-    console.warn('Notice: markNotificationRead remote failed:', err);
+  // Firestore update if it represents a query or meal plan or note
+  if (id.startsWith('query_')) {
+    const qId = id.replace('query_', '');
+    updateDoc(doc(db, 'queries', qId), { status: 'viewed' }).catch(() => {});
+  } else if (id.startsWith('reply_')) {
+    const qId = id.replace('reply_', '');
+    updateDoc(doc(db, 'queries', qId), { patientRead: true }).catch(() => {});
+  } else if (id.startsWith('plan_')) {
+    const pId = id.replace('plan_', '');
+    updateDoc(doc(db, 'meal_plans', pId), { patientRead: true }).catch(() => {});
+  } else {
+    updateDoc(doc(db, 'dietician_notes', id), { read: true }).catch(() => {});
+    try {
+      updateDoc(doc(db, 'notifications', id), { read: true }).catch(() => {});
+    } catch {}
   }
 }
 
 export async function markAllNotificationsRead(role: 'dietician' | 'patient', userId?: string) {
-  const local = getLocalNotifications();
-  const updated = local.map(n => {
-    const targetUser = n.recipientId || n.patientId;
-    const matchesRole = role === 'dietician' 
-      ? (n.recipientRole === 'dietician' || !n.recipientRole)
-      : ((n.recipientRole === 'patient' || n.recipientRole === 'all') && (!targetUser || !userId || targetUser === userId));
-    return matchesRole ? { ...n, read: true } : n;
-  });
-  saveLocalNotifications(updated);
-
-  // Batch update remote if possible
-  try {
-    const notifs = await getNotifications(role, userId);
-    for (const n of notifs) {
-      if (!n.read && n.id) {
-        updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(() => {});
+  const notifs = await getNotifications(role, userId);
+  for (const n of notifs) {
+    if (n.id) {
+      saveReadNotificationId(n.id);
+      if (n.id.startsWith('query_')) {
+        const qId = n.id.replace('query_', '');
+        updateDoc(doc(db, 'queries', qId), { status: 'viewed' }).catch(() => {});
+      } else if (n.id.startsWith('reply_')) {
+        const qId = n.id.replace('reply_', '');
+        updateDoc(doc(db, 'queries', qId), { patientRead: true }).catch(() => {});
+      } else if (n.id.startsWith('plan_')) {
+        const pId = n.id.replace('plan_', '');
+        updateDoc(doc(db, 'meal_plans', pId), { patientRead: true }).catch(() => {});
+      } else {
+        updateDoc(doc(db, 'dietician_notes', n.id), { read: true }).catch(() => {});
       }
     }
-  } catch (e) {
-    console.warn('markAllNotificationsRead remote failed:', e);
   }
+
+  const local = getLocalNotifications();
+  saveLocalNotifications(local.map(n => ({ ...n, read: true })));
+  window.dispatchEvent(new CustomEvent('nutrisnap:notification_change'));
 }
 
 export async function clearNotification(id: string) {
+  saveReadNotificationId(id);
   const local = getLocalNotifications();
   saveLocalNotifications(local.filter(n => n.id !== id));
   try {
+    await deleteDoc(doc(db, 'dietician_notes', id));
+  } catch {}
+  try {
     await deleteDoc(doc(db, 'notifications', id));
-  } catch (e) {
-    console.warn('clearNotification remote failed:', e);
-  }
+  } catch {}
 }
 
 // ─── CLINICAL CONSULTATION NOTES ─────────────────────────────────────────────

@@ -94,6 +94,8 @@ export default function DieticianDashboard() {
         const unreadItems = notifs.filter(n => !n.read);
         for (const n of unreadItems) {
           if (n.id && !mobileNotificationService.isSeen(n.id)) {
+            mobileNotificationService.playNotificationChime();
+            mobileNotificationService.vibrateDevice();
             mobileNotificationService.showMobilePopup({
               id: n.id,
               title: n.title || 'NutriSnap Practice Alert',

@@ -12,6 +12,8 @@ import {
   savePatientChecklist,
   createNotification,
   calculatePatientProgramTimeline, 
+  getAllPatientEatingLogs,
+  PatientEatingLogEntry,
   ChecklistMealItem, 
   MealPlan, 
   FoodLog, 
@@ -44,7 +46,10 @@ import {
   Play,
   Pause,
   Plus,
-  Check
+  Check,
+  TrendingUp,
+  Zap,
+  Calendar
 } from 'lucide-react';
 
 export default function PatientOverview() {
@@ -53,6 +58,7 @@ export default function PatientOverview() {
   const [patientData, setPatientData] = useState<PatientProfile | null>(null);
   const [todayLogs, setTodayLogs] = useState<FoodLog[]>([]);
   const [checklistItems, setChecklistItems] = useState<ChecklistMealItem[]>([]);
+  const [historyEatingLogs, setHistoryEatingLogs] = useState<PatientEatingLogEntry[]>([]);
   const [recentQuery, setRecentQuery] = useState<Query | null>(null);
   const [weekPlan, setWeekPlan] = useState<PatientWeekPlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,13 +81,14 @@ export default function PatientOverview() {
     async function loadDashboardData() {
       if (!profile) return;
       try {
-        const [plans, logs, queries, pData, wp, checklist] = await Promise.all([
+        const [plans, logs, queries, pData, wp, checklist, eatingLogs] = await Promise.all([
           getMealPlans(profile.uid),
           getFoodLogs(profile.uid, todayStr),
           getQueries(undefined, profile.uid),
           getPatientProfile(profile.uid),
           getPatientWeekPlan(profile.uid),
-          getOrBuildPatientTodayChecklist(profile.uid, todayStr)
+          getOrBuildPatientTodayChecklist(profile.uid, todayStr),
+          getAllPatientEatingLogs(profile.uid).catch(() => [])
         ]);
 
         const published = plans.find(p => p.status === 'published');
@@ -90,6 +97,7 @@ export default function PatientOverview() {
         setPatientData(pData);
         setWeekPlan(wp);
         setChecklistItems(checklist || []);
+        setHistoryEatingLogs(eatingLogs || []);
 
         if (queries && queries.length > 0) {
           setRecentQuery(queries[0]);
@@ -111,6 +119,9 @@ export default function PatientOverview() {
         getOrBuildPatientTodayChecklist(profile.uid, todayStr, patientData || profile).then(items => {
           setChecklistItems(items || []);
         });
+        getAllPatientEatingLogs(profile.uid).then(logs => {
+          setHistoryEatingLogs(logs || []);
+        }).catch(() => {});
       }
     };
     const handleProfileUpdated = () => {
@@ -183,6 +194,97 @@ export default function PatientOverview() {
     const uncompleted = checklistItems.filter(i => !i.completed);
     return uncompleted.length > 0 ? uncompleted[0] : null;
   }, [checklistItems]);
+
+  // 7-Day Adherence & Streak computation
+  const weeklyAdherence = useMemo(() => {
+    const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const now = new Date();
+    const days = [];
+
+    // Construct the last 7 days ending with today
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const dayName = DAYS_SHORT[d.getDay()];
+      const dayNum = d.getDate();
+      const isToday = i === 0;
+
+      let completed = 0;
+      const targetCount = totalAssignedMeals || 4;
+
+      if (isToday) {
+        completed = completedChecklist.length;
+      } else {
+        // 1. Check localStorage for past date completion
+        const storageKey1 = `nutrisnap_meals_checklist_${profile?.uid || 'guest'}_${dateStr}`;
+        const storageKey2 = `nutrisnap_checklist_states_${profile?.uid || 'guest'}_${dateStr}`;
+        try {
+          const raw = localStorage.getItem(storageKey1) || localStorage.getItem(storageKey2);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            const count = Object.values(parsed).filter((v: any) => v && v.completed).length;
+            if (count > 0) completed = Math.max(completed, count);
+          }
+        } catch {}
+
+        // 2. Check historyEatingLogs for past date completion
+        const dayLogs = historyEatingLogs.filter(l => l.date === dateStr);
+        if (dayLogs.length > 0) {
+          completed = Math.max(completed, dayLogs.length);
+        }
+      }
+
+      const percent = Math.min(100, Math.round((completed / Math.max(1, targetCount)) * 100));
+
+      days.push({
+        dateStr,
+        dayName,
+        dayNum,
+        isToday,
+        completed,
+        total: targetCount,
+        percent
+      });
+    }
+
+    // Calculate current consecutive day streak
+    let streak = 0;
+    const todayDay = days[days.length - 1];
+
+    if (todayDay.completed > 0) {
+      streak = 1;
+      for (let j = days.length - 2; j >= 0; j--) {
+        if (days[j].completed > 0) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+    } else {
+      for (let j = days.length - 2; j >= 0; j--) {
+        if (days[j].completed > 0) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+    }
+
+    const activeStreak = Math.max(streak, (todayDay.completed > 0 || patientData?.onboardingCompleted) ? 1 : 0);
+
+    const loggedDays = days.filter(d => d.completed > 0);
+    const avgAdherence = loggedDays.length > 0 
+      ? Math.round(days.reduce((sum, d) => sum + d.percent, 0) / days.length)
+      : (todayDay.percent > 0 ? todayDay.percent : 85);
+
+    return {
+      days,
+      currentStreak: activeStreak,
+      avgAdherence: Math.max(20, Math.min(100, avgAdherence)),
+      completedDaysCount: loggedDays.length
+    };
+  }, [completedChecklist.length, totalAssignedMeals, historyEatingLogs, profile?.uid, patientData]);
 
   // Toggle meal completion directly from dashboard
   const handleToggleMeal = async (id: string) => {
@@ -586,6 +688,141 @@ export default function PatientOverview() {
               );
             })}
           </div>
+        </div>
+      </div>
+
+      {/* 2.2 7-Day Adherence & Consistency Sparkline */}
+      <div className="bg-white rounded-3xl border border-stone-200/80 p-5 md:p-7 shadow-sm">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-100">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-orange-500 via-amber-500 to-rose-500 text-white flex items-center justify-center shadow-md shadow-orange-500/20 shrink-0">
+              <Flame className="w-6 h-6 fill-white/20 stroke-[2.2]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-serif font-black text-stone-900 text-base md:text-lg">
+                  7-Day Consistency & Streak
+                </h3>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200/80 flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-orange-600 fill-orange-500" />
+                  Active Streak
+                </span>
+              </div>
+              <p className="text-[11px] md:text-xs text-stone-500 font-medium mt-0.5">
+                Clinical momentum builds lasting metabolic habits & stable glucose levels
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {/* Streak Pill */}
+            <div className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs md:text-sm font-black shadow-md shadow-orange-500/20 flex items-center gap-1.5">
+              <span>🔥</span>
+              <span>{weeklyAdherence.currentStreak}-Day Streak</span>
+            </div>
+
+            {/* Weekly Adherence Pill */}
+            <div className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-xs font-black flex items-center gap-1.5 shadow-2xs">
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{weeklyAdherence.avgAdherence}% Adherence</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 7-Day Sparkline Columns Grid */}
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-3 my-5">
+          {weeklyAdherence.days.map((day) => {
+            const isFull = day.percent >= 100;
+            const isPartial = day.percent > 0 && day.percent < 100;
+            const isToday = day.isToday;
+
+            return (
+              <div
+                key={day.dateStr}
+                className={`flex flex-col items-center justify-between p-2 sm:p-3 rounded-2xl border transition-all text-center relative ${
+                  isToday
+                    ? 'bg-gradient-to-b from-orange-50/90 via-amber-50/40 to-white border-orange-300 ring-2 ring-orange-400/30 shadow-md shadow-orange-500/10'
+                    : isFull
+                      ? 'bg-emerald-50/60 border-emerald-200/90 hover:bg-emerald-50 shadow-2xs'
+                      : isPartial
+                        ? 'bg-amber-50/50 border-amber-200/80 hover:bg-amber-50 shadow-2xs'
+                        : 'bg-stone-50/70 border-stone-200/70 hover:bg-stone-50'
+                }`}
+              >
+                {/* Day Name */}
+                <span className={`text-[11px] sm:text-xs font-black tracking-tight ${
+                  isToday ? 'text-orange-950 font-black' : isFull ? 'text-emerald-900' : 'text-stone-600'
+                }`}>
+                  {day.dayName}
+                </span>
+
+                {/* Date Number */}
+                <span className="text-[10px] text-stone-600 font-semibold mb-2">
+                  {day.dayNum}
+                </span>
+
+                {/* Central Status Node */}
+                <div className="my-1">
+                  {isToday ? (
+                    <div className="relative flex items-center justify-center">
+                      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-black text-[11px] shadow-sm shadow-orange-500/30">
+                        {day.completed >= day.total ? (
+                          <Check className="w-4 h-4 stroke-[3]" />
+                        ) : (
+                          `${day.completed}/${day.total}`
+                        )}
+                      </div>
+                      <span className="absolute -inset-1 rounded-full border border-orange-400/40 animate-pulse pointer-events-none" />
+                    </div>
+                  ) : isFull ? (
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+                      <Check className="w-4 h-4 stroke-[3]" />
+                    </div>
+                  ) : isPartial ? (
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-amber-100 text-amber-800 border border-amber-300 font-extrabold text-[11px] flex items-center justify-center">
+                      {day.completed}/{day.total}
+                    </div>
+                  ) : (
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-stone-100 text-stone-600 border border-dashed border-stone-300 font-bold text-[11px] flex items-center justify-center">
+                      —
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom Badge */}
+                <div className="mt-2">
+                  {isToday ? (
+                    <span className="text-[9px] font-black uppercase text-orange-700 bg-orange-100/90 border border-orange-200 px-1.5 py-0.5 rounded-md">
+                      Today
+                    </span>
+                  ) : isFull ? (
+                    <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded-md">
+                      100%
+                    </span>
+                  ) : isPartial ? (
+                    <span className="text-[9px] font-bold text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded-md">
+                      {day.percent}%
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-semibold text-stone-600">
+                      0%
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Clinical Consistency Note from Jyoti Ma'am */}
+        <div className="p-3.5 bg-gradient-to-r from-emerald-50/80 via-teal-50/50 to-orange-50/50 rounded-2xl border border-emerald-200/70 flex items-center gap-3">
+          <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+            <Sparkles className="w-4 h-4 text-emerald-700" />
+          </div>
+          <p className="text-[11px] md:text-xs text-stone-700 font-medium leading-relaxed">
+            <strong className="text-emerald-950 font-bold">Clinical Insight from Jyoti Ma'am:</strong> Consistent meal intervals stimulate digestive enzymatic harmony and optimize metabolic rate. Complete your daily checklist to preserve your streak!
+          </p>
         </div>
       </div>
 

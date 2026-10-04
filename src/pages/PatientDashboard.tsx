@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { auth } from '../services/firebase';
 import { 
   Home, 
@@ -381,17 +382,22 @@ export default function PatientDashboard() {
         </div>
 
         <div className="relative z-10">
-          <Routes>
-            <Route path="/" element={<PatientOverview />} />
-            <Route path="/meals" element={<MealNotepad />} />
-            <Route path="/today" element={<MealNotepad />} />
-            <Route path="/scanner" element={<FoodScanner />} />
-            <Route path="/progress" element={<Progress />} />
-            <Route path="/inbox" element={<Inbox />} />
-            <Route path="/ai" element={<Inbox />} />
-            <Route path="/subscription" element={<SubscriptionPage />} />
-            <Route path="/billing" element={<SubscriptionPage />} />
-          </Routes>
+          <ErrorBoundary fallbackTitle="Could not load patient screen">
+            <Routes>
+              <Route path="/" element={<PatientOverview />} />
+              <Route path="/overview" element={<PatientOverview />} />
+              <Route path="/meals" element={<MealNotepad />} />
+              <Route path="/today" element={<MealNotepad />} />
+              <Route path="/scanner" element={<FoodScanner />} />
+              <Route path="/progress" element={<Progress />} />
+              <Route path="/inbox" element={<Inbox />} />
+              <Route path="/ai" element={<Inbox />} />
+              <Route path="/subscription" element={<SubscriptionPage />} />
+              <Route path="/billing" element={<SubscriptionPage />} />
+              {/* Fallback route for any unknown subpath */}
+              <Route path="*" element={<Navigate to="/patient" replace />} />
+            </Routes>
+          </ErrorBoundary>
         </div>
       </main>
 

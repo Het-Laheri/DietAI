@@ -104,7 +104,7 @@ export default function TodayPlan() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto pb-24 md:pb-8">
-      <h1 className="text-2xl font-bold text-stone-900 mb-2">Hello, {profile?.name.split(' ')[0]} 👋</h1>
+      <h1 className="text-2xl font-bold text-stone-900 mb-2">Hello, {profile?.name ? profile.name.split(' ')[0] : 'Patient'} 👋</h1>
       <p className="text-stone-500 mb-6">Your dietician-assigned meal plan and recipes.</p>
 
       {/* Calorie Ring */}
@@ -252,7 +252,7 @@ export default function TodayPlan() {
           )}
 
           {/* Traditional AI meal plan for today */}
-          {todayPlanDay?.meals.map(m => {
+          {todayPlanDay?.meals?.map(m => {
             const cardKey = `ai-${m.type}`;
             const isLogged = logs.some(l => l.mealType === m.type);
             const isExpanded = expandedMeal === cardKey;
@@ -354,13 +354,13 @@ export default function TodayPlan() {
           )}
 
           {/* Additional Logged Meals */}
-          {logs.filter(l => l.source === 'scanner' || !todayPlanDay?.meals.some(m => m.type === l.mealType)).length > 0 && (
+          {logs.filter(l => l.source === 'scanner' || !todayPlanDay?.meals?.some(m => m.type === l.mealType)).length > 0 && (
             <div className="mt-8 bg-white border border-stone-200 p-6 shadow-sm">
               <h3 className="text-sm uppercase tracking-widest font-bold text-stone-700 mb-3 flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-brand-700" /> Additional Meals Logged Today
               </h3>
               <div className="divide-y divide-stone-100">
-                {logs.filter(l => l.source === 'scanner' || !todayPlanDay?.meals.some(m => m.type === l.mealType)).map(log => (
+                {logs.filter(l => l.source === 'scanner' || !todayPlanDay?.meals?.some(m => m.type === l.mealType)).map(log => (
                   <div key={log.id} className="py-3 flex justify-between items-center">
                     <div>
                       <div className="flex items-center gap-2">

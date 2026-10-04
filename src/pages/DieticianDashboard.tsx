@@ -1,5 +1,6 @@
-import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { auth, db } from '../services/firebase';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 import { 
@@ -349,17 +350,22 @@ export default function DieticianDashboard() {
           <div className="p-4 sm:p-6 pb-0 max-w-7xl mx-auto">
             <NotificationPermissionBanner userRole="dietician" userName={profile?.name} className="mb-2" />
           </div>
-          <Routes>
-            <Route path="/" element={<Overview />} />
-            <Route path="/patients" element={<PatientsList />} />
-            <Route path="/patients/new" element={<PatientForm />} />
-            <Route path="/patients/:id/*" element={<PatientProfileView />} />
-            <Route path="/inbox" element={<MessageInbox />} />
-            <Route path="/ai-approvals" element={<MessageInbox />} />
-            <Route path="/generator" element={<MealPlanGenerator />} />
-            <Route path="/knowledge" element={<KnowledgeBase />} />
-            <Route path="/ai" element={<AiAssistant />} />
-          </Routes>
+          <ErrorBoundary fallbackTitle="Could not load dietician view">
+            <Routes>
+              <Route path="/" element={<Overview />} />
+              <Route path="/overview" element={<Overview />} />
+              <Route path="/patients" element={<PatientsList />} />
+              <Route path="/patients/new" element={<PatientForm />} />
+              <Route path="/patients/:id/*" element={<PatientProfileView />} />
+              <Route path="/inbox" element={<MessageInbox />} />
+              <Route path="/ai-approvals" element={<MessageInbox />} />
+              <Route path="/generator" element={<MealPlanGenerator />} />
+              <Route path="/knowledge" element={<KnowledgeBase />} />
+              <Route path="/ai" element={<AiAssistant />} />
+              {/* Fallback route for unknown dietician subpaths */}
+              <Route path="*" element={<Navigate to="/dietician" replace />} />
+            </Routes>
+          </ErrorBoundary>
         </div>
       </main>
     </div>

@@ -38,14 +38,11 @@ import {
   ClipboardList,
   Target,
   Scale,
-  Droplets,
-  GlassWater,
   Dumbbell,
   Heart,
   Play,
   Pause,
   Plus,
-  Minus,
   Check
 } from 'lucide-react';
 
@@ -248,7 +245,7 @@ export default function PatientOverview() {
     }
   };
 
-  // Carousel Definition
+  // Pastel & Vibrant Carousel Definition
   const carouselSlides = [
     {
       id: 'meals',
@@ -259,9 +256,14 @@ export default function PatientOverview() {
       total: totalAssignedMeals,
       unit: 'meals logged',
       percent: Math.min(100, Math.round((checkedItemsCount / totalAssignedMeals) * 100)),
-      gradient: 'from-emerald-700 via-teal-800 to-[#0e4b31]',
-      ringColor: '#34d399',
-      badgeBg: 'bg-emerald-900/50 text-emerald-200 border-emerald-400/30',
+      gradient: 'from-emerald-50 via-teal-50/70 to-emerald-100/90 border border-emerald-200/90',
+      ringColor: '#10b981',
+      ringTrack: 'rgba(16, 185, 129, 0.16)',
+      titleColor: 'text-emerald-950',
+      subColor: 'text-emerald-800/90',
+      badgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      btnBg: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20',
+      activeTabBg: 'bg-emerald-600 text-white shadow-emerald-600/20',
       title: `${checkedItemsCount} of ${totalAssignedMeals} meals done`,
       subtitle: nextMeal 
         ? `Next up: ${nextMeal.mealType} — ${nextMeal.name}` 
@@ -269,8 +271,7 @@ export default function PatientOverview() {
           ? 'All scheduled meals completed! Exceptional clinical discipline today.'
           : 'Ready to stay consistent with your dietician meal plan today.'),
       ctaText: 'Open Meal Checklist',
-      ctaLink: '/patient/meals',
-      actionType: 'link'
+      ctaLink: '/patient/meals'
     },
     {
       id: 'calories',
@@ -281,16 +282,20 @@ export default function PatientOverview() {
       total: targetCalories,
       unit: 'kcal eaten',
       percent: Math.min(100, Math.round((totalCalories / targetCalories) * 100)),
-      gradient: 'from-orange-600 via-rose-600 to-amber-700',
-      ringColor: '#fb923c',
-      badgeBg: 'bg-orange-900/50 text-amber-200 border-orange-400/30',
+      gradient: 'from-orange-50 via-amber-50/70 to-rose-100/90 border border-orange-200/90',
+      ringColor: '#f97316',
+      ringTrack: 'rgba(249, 115, 22, 0.16)',
+      titleColor: 'text-stone-900',
+      subColor: 'text-stone-700',
+      badgeBg: 'bg-orange-100 text-orange-800 border-orange-200',
+      btnBg: 'bg-orange-600 hover:bg-orange-700 text-white shadow-orange-600/20',
+      activeTabBg: 'bg-orange-600 text-white shadow-orange-600/20',
       title: `${totalCalories.toLocaleString()} of ${targetCalories.toLocaleString()} kcal`,
       subtitle: targetCalories > totalCalories 
         ? `${(targetCalories - totalCalories).toLocaleString()} kcal remaining for dinner & wholesome nourishment.` 
         : 'Daily caloric target fulfilled! Great energy balance today.',
       ctaText: 'Scan Food / Plate',
-      ctaLink: '/patient/scanner',
-      actionType: 'link'
+      ctaLink: '/patient/scanner'
     },
     {
       id: 'protein',
@@ -301,16 +306,20 @@ export default function PatientOverview() {
       total: targetProtein,
       unit: 'g Protein',
       percent: Math.min(100, Math.round((loggedProtein / targetProtein) * 100)),
-      gradient: 'from-indigo-700 via-purple-700 to-violet-900',
-      ringColor: '#c084fc',
-      badgeBg: 'bg-indigo-900/50 text-purple-200 border-indigo-400/30',
+      gradient: 'from-purple-50 via-indigo-50/70 to-violet-100/90 border border-purple-200/90',
+      ringColor: '#8b5cf6',
+      ringTrack: 'rgba(139, 92, 246, 0.16)',
+      titleColor: 'text-purple-950',
+      subColor: 'text-purple-850',
+      badgeBg: 'bg-purple-100 text-purple-800 border-purple-200',
+      btnBg: 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-600/20',
+      activeTabBg: 'bg-purple-600 text-white shadow-purple-600/20',
       title: `${Math.round(loggedProtein)}g of ${targetProtein}g Protein`,
       subtitle: targetProtein > loggedProtein
         ? `${Math.max(0, targetProtein - Math.round(loggedProtein))}g needed • Essential for cellular repair, lean muscle & satiety.`
         : 'Protein target hit! Optimal satiety and muscle maintenance.',
       ctaText: 'High-Protein Recipes',
-      ctaLink: '/patient/meals',
-      actionType: 'link'
+      ctaLink: '/patient/meals'
     },
     {
       id: 'carbs',
@@ -321,16 +330,20 @@ export default function PatientOverview() {
       total: targetCarbs,
       unit: 'g Carbs',
       percent: Math.min(100, Math.round((loggedCarbs / targetCarbs) * 100)),
-      gradient: 'from-amber-600 via-yellow-600 to-orange-700',
-      ringColor: '#fde047',
-      badgeBg: 'bg-amber-900/50 text-yellow-200 border-yellow-400/30',
+      gradient: 'from-amber-50 via-yellow-50/70 to-orange-100/90 border border-amber-200/90',
+      ringColor: '#f59e0b',
+      ringTrack: 'rgba(245, 158, 11, 0.16)',
+      titleColor: 'text-amber-950',
+      subColor: 'text-amber-850',
+      badgeBg: 'bg-amber-100 text-amber-800 border-amber-200',
+      btnBg: 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20',
+      activeTabBg: 'bg-amber-600 text-white shadow-amber-600/20',
       title: `${Math.round(loggedCarbs)}g of ${targetCarbs}g Carbs`,
       subtitle: targetCarbs > loggedCarbs
         ? `${Math.max(0, targetCarbs - Math.round(loggedCarbs))}g remaining • Low-GI complex carbs fuel brain & sustained physical energy.`
         : 'Carbohydrate daily target achieved smoothly.',
       ctaText: 'View Complex Carbs',
-      ctaLink: '/patient/meals',
-      actionType: 'link'
+      ctaLink: '/patient/meals'
     },
     {
       id: 'fats',
@@ -341,36 +354,20 @@ export default function PatientOverview() {
       total: targetFat,
       unit: 'g Fats',
       percent: Math.min(100, Math.round((loggedFat / targetFat) * 100)),
-      gradient: 'from-rose-600 via-pink-600 to-fuchsia-800',
-      ringColor: '#fb7185',
-      badgeBg: 'bg-rose-900/50 text-pink-200 border-rose-400/30',
+      gradient: 'from-rose-50 via-pink-50/70 to-fuchsia-100/90 border border-rose-200/90',
+      ringColor: '#ec4899',
+      ringTrack: 'rgba(236, 72, 153, 0.16)',
+      titleColor: 'text-rose-950',
+      subColor: 'text-rose-850',
+      badgeBg: 'bg-rose-100 text-rose-800 border-rose-200',
+      btnBg: 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20',
+      activeTabBg: 'bg-rose-600 text-white shadow-rose-600/20',
       title: `${Math.round(loggedFat)}g of ${targetFat}g Fats`,
       subtitle: targetFat > loggedFat
         ? `${Math.max(0, targetFat - Math.round(loggedFat))}g remaining • Essential fatty acids for hormones, joints & cellular health.`
         : 'Healthy lipid target satisfied today.',
       ctaText: 'Explore Healthy Fats',
-      ctaLink: '/patient/meals',
-      actionType: 'link'
-    },
-    {
-      id: 'water',
-      label: 'Daily Hydration',
-      tabName: 'Water',
-      icon: GlassWater,
-      current: waterGlasses,
-      total: waterGoal,
-      unit: 'glasses',
-      percent: Math.min(100, Math.round((waterGlasses / waterGoal) * 100)),
-      gradient: 'from-cyan-700 via-sky-700 to-blue-900',
-      ringColor: '#38bdf8',
-      badgeBg: 'bg-cyan-900/50 text-cyan-200 border-cyan-400/30',
-      title: `${waterGlasses} of ${waterGoal} glasses (${(waterGlasses * 0.25).toFixed(1)}L / ${(waterGoal * 0.25).toFixed(1)}L)`,
-      subtitle: waterGlasses < waterGoal
-        ? `${waterGoal - waterGlasses} glasses remaining • Hydration boosts kidney filtration, digestion & energy.`
-        : 'Hydration goal completed! 2.0L of pure hydration logged.',
-      ctaText: waterGlasses < waterGoal ? '+ Drink 250ml Glass' : '✓ Hydration Done',
-      actionType: 'water',
-      ctaAction: () => handleSetWater(waterGlasses + 1)
+      ctaLink: '/patient/meals'
     }
   ];
 
@@ -418,7 +415,7 @@ export default function PatientOverview() {
             </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-serif font-black tracking-tight text-white drop-shadow-xs">
-            Welcome back, {profile?.name.split(' ')[0] || 'Patient'} 👋
+            Welcome back, {profile?.name ? profile.name.split(' ')[0] : 'Patient'} 👋
           </h1>
           <p className="text-orange-50/95 text-xs md:text-sm mt-1.5 max-w-xl font-medium leading-relaxed">
             Your personalized nutrition & wellness command center. Check off prescribed meals, practice daily yoga poses, review macro targets, or consult your lead dietician.
@@ -446,16 +443,16 @@ export default function PatientOverview() {
         </div>
       </div>
 
-      {/* 2. Interactive Circular Progress Meter Carousel */}
+      {/* 2. Interactive Circular Progress Meter Carousel - Pastel & Vibrant */}
       <div 
-        className={`relative overflow-hidden rounded-3xl p-6 md:p-8 text-white shadow-2xl transition-all duration-700 bg-gradient-to-br ${currentSlide.gradient}`}
+        className={`relative overflow-hidden rounded-3xl p-6 md:p-8 shadow-md transition-all duration-700 bg-gradient-to-br ${currentSlide.gradient}`}
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
         onTouchStart={() => setIsPaused(true)}
       >
-        {/* Ambient atmospheric glows */}
-        <div className="absolute -top-24 -right-24 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-black/20 rounded-full blur-3xl pointer-events-none" />
+        {/* Soft pastel ambient lighting glow */}
+        <div className="absolute -top-20 -right-20 w-72 h-72 bg-white/60 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-20 -left-20 w-72 h-72 bg-white/40 rounded-full blur-2xl pointer-events-none" />
 
         {/* Top Header of the Carousel: Badge + Auto-play indicator + Navigation Arrows */}
         <div className="flex items-center justify-between gap-4 mb-6 relative z-10">
@@ -464,13 +461,13 @@ export default function PatientOverview() {
               <currentSlide.icon className="w-3.5 h-3.5" />
               {currentSlide.label}
             </span>
-            <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-white/80 bg-black/25 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10">
+            <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-stone-600 bg-white/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-stone-200/60 shadow-2xs">
               <button
                 onClick={() => setIsPaused(!isPaused)}
-                className="hover:text-white transition-colors flex items-center gap-1"
+                className="hover:text-stone-900 transition-colors flex items-center gap-1 cursor-pointer"
                 title={isPaused ? "Resume auto-rotation" : "Pause auto-rotation"}
               >
-                {isPaused ? <Play className="w-3 h-3 text-amber-300" /> : <Pause className="w-3 h-3 text-emerald-300" />}
+                {isPaused ? <Play className="w-3 h-3 text-amber-600" /> : <Pause className="w-3 h-3 text-emerald-600" />}
                 <span>{isPaused ? 'Paused' : 'Auto-rotating'}</span>
               </button>
             </div>
@@ -479,17 +476,17 @@ export default function PatientOverview() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveSlide(prev => (prev - 1 + carouselSlides.length) % carouselSlides.length)}
-              className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 border border-white/20 flex items-center justify-center text-white transition-all backdrop-blur-md shadow-xs cursor-pointer"
+              className="w-8 h-8 rounded-full bg-white/90 hover:bg-white active:scale-95 border border-stone-200/80 flex items-center justify-center text-stone-700 transition-all backdrop-blur-md shadow-xs cursor-pointer"
               title="Previous metric"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-xs font-bold text-white/75 min-w-[36px] text-center">
+            <span className="text-xs font-bold text-stone-600 min-w-[36px] text-center">
               {activeSlide + 1} / {carouselSlides.length}
             </span>
             <button
               onClick={() => setActiveSlide(prev => (prev + 1) % carouselSlides.length)}
-              className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 border border-white/20 flex items-center justify-center text-white transition-all backdrop-blur-md shadow-xs cursor-pointer"
+              className="w-8 h-8 rounded-full bg-white/90 hover:bg-white active:scale-95 border border-stone-200/80 flex items-center justify-center text-stone-700 transition-all backdrop-blur-md shadow-xs cursor-pointer"
               title="Next metric"
             >
               <ChevronRight className="w-4 h-4" />
@@ -509,7 +506,7 @@ export default function PatientOverview() {
                   cx="50"
                   cy="50"
                   r={ringRadius}
-                  stroke="rgba(255, 255, 255, 0.16)"
+                  stroke={currentSlide.ringTrack}
                   strokeWidth="8.5"
                   fill="transparent"
                 />
@@ -530,10 +527,10 @@ export default function PatientOverview() {
 
               {/* Center Content */}
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none">
-                <span className="text-3xl md:text-4xl font-serif font-black tracking-tight text-white drop-shadow-md">
+                <span className={`text-3xl md:text-4xl font-serif font-black tracking-tight ${currentSlide.titleColor}`}>
                   {currentSlide.percent}%
                 </span>
-                <span className="text-[10px] md:text-[11px] font-bold text-white/80 uppercase tracking-wider mt-0.5">
+                <span className="text-[10px] md:text-[11px] font-bold text-stone-500 uppercase tracking-wider mt-0.5">
                   {currentSlide.current} / {currentSlide.total}
                 </span>
               </div>
@@ -542,37 +539,27 @@ export default function PatientOverview() {
 
           {/* Right Text and CTA */}
           <div className="md:col-span-8 flex flex-col justify-center space-y-3">
-            <h2 className="text-2xl md:text-3xl font-serif font-black tracking-tight text-white drop-shadow-sm leading-tight">
+            <h2 className={`text-2xl md:text-3xl font-serif font-black tracking-tight ${currentSlide.titleColor} leading-tight`}>
               {currentSlide.title}
             </h2>
-            <p className="text-xs md:text-sm text-white/90 font-medium leading-relaxed max-w-xl">
+            <p className={`text-xs md:text-sm ${currentSlide.subColor} font-medium leading-relaxed max-w-xl`}>
               {currentSlide.subtitle}
             </p>
 
             <div className="pt-2 flex flex-wrap items-center gap-3">
-              {currentSlide.actionType === 'water' ? (
-                <button
-                  onClick={currentSlide.ctaAction}
-                  className="px-5 py-2.5 bg-white hover:bg-sky-50 active:scale-95 text-sky-900 font-extrabold rounded-xl text-xs md:text-sm shadow-lg shadow-black/15 transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 text-sky-600" />
-                  {currentSlide.ctaText}
-                </button>
-              ) : (
-                <Link
-                  to={currentSlide.ctaLink}
-                  className="px-5 py-2.5 bg-white hover:bg-white/90 active:scale-95 text-stone-900 font-extrabold rounded-xl text-xs md:text-sm shadow-lg shadow-black/15 transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <span>{currentSlide.ctaText}</span>
-                  <ArrowRight className="w-4 h-4 text-stone-600" />
-                </Link>
-              )}
+              <Link
+                to={currentSlide.ctaLink}
+                className={`px-5 py-2.5 ${currentSlide.btnBg} active:scale-95 font-extrabold rounded-xl text-xs md:text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer`}
+              >
+                <span>{currentSlide.ctaText}</span>
+                <ArrowRight className="w-4 h-4 text-white" />
+              </Link>
             </div>
           </div>
         </div>
 
         {/* Bottom Carousel Category Tabs / Navigation Pills */}
-        <div className="mt-8 pt-5 border-t border-white/15 relative z-10">
+        <div className="mt-8 pt-5 border-t border-stone-200/60 relative z-10">
           <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
             {carouselSlides.map((slide, index) => {
               const isActive = index === activeSlide;
@@ -586,14 +573,14 @@ export default function PatientOverview() {
                   }}
                   className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer shrink-0 ${
                     isActive
-                      ? 'bg-white text-stone-900 shadow-md shadow-black/10 scale-102 font-black'
-                      : 'bg-white/15 hover:bg-white/25 text-white/90 border border-white/10'
+                      ? `${slide.activeTabBg} shadow-md scale-102 font-black`
+                      : 'bg-white/80 hover:bg-white text-stone-700 border border-stone-200/80 shadow-2xs'
                   }`}
                 >
-                  <SlideIcon className={`w-3.5 h-3.5 ${isActive ? 'text-stone-900' : 'text-white'}`} />
+                  <SlideIcon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-stone-600'}`} />
                   <span>{slide.tabName}</span>
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                    isActive ? 'bg-stone-200 text-stone-900' : 'bg-black/25 text-white/90'
+                    isActive ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
                   }`}>
                     {slide.percent}%
                   </span>
@@ -604,188 +591,102 @@ export default function PatientOverview() {
         </div>
       </div>
 
-      {/* 2.5 Complementary Widgets: Today's Meals Quick-Checklist + Interactive Water Tracker */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        
-        {/* Today's Prescribed Meals Quick Checklist (7 Cols) */}
-        <div className="lg:col-span-7 bg-white rounded-3xl border border-stone-200/80 p-5 md:p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shadow-xs">
-                  <Utensils className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-serif font-black text-stone-900 text-base">Today's Meals Checklist</h3>
-                  <p className="text-[11px] text-stone-500 font-medium">One-tap completion for today's prescribed nutrition</p>
-                </div>
+      {/* 2.5 Today's Prescribed Meals Quick Checklist (Full Width) */}
+      <div className="bg-white rounded-3xl border border-stone-200/80 p-5 md:p-7 shadow-sm flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shadow-xs">
+                <Utensils className="w-5 h-5" />
               </div>
-              <span className="text-xs font-black text-orange-700 bg-orange-50 border border-orange-200/80 px-2.5 py-1 rounded-full">
-                {checkedItemsCount} of {totalAssignedMeals} Eaten
-              </span>
+              <div>
+                <h3 className="font-serif font-black text-stone-900 text-base md:text-lg">Today's Meals Checklist</h3>
+                <p className="text-[11px] md:text-xs text-stone-500 font-medium">One-tap completion for today's prescribed nutrition schedule</p>
+              </div>
             </div>
-
-            {/* Checklist Meal Rows */}
-            <div className="space-y-2.5 mt-2">
-              {checklistItems.length > 0 ? (
-                checklistItems.map(item => (
-                  <div
-                    key={item.id}
-                    onClick={() => handleToggleMeal(item.id)}
-                    className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 cursor-pointer group ${
-                      item.completed
-                        ? 'bg-emerald-50/70 border-emerald-200/80'
-                        : 'bg-stone-50/70 hover:bg-white hover:border-orange-300 border-stone-200/70'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleMeal(item.id);
-                        }}
-                        className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all shrink-0 cursor-pointer ${
-                          item.completed
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'border-2 border-stone-300 group-hover:border-orange-400 bg-white'
-                        }`}
-                      >
-                        {item.completed ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : null}
-                      </button>
-
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md ${
-                            item.completed 
-                              ? 'bg-emerald-200/70 text-emerald-800' 
-                              : 'bg-stone-200 text-stone-700'
-                          }`}>
-                            {item.mealType}
-                          </span>
-                          <span className={`text-xs font-bold truncate ${
-                            item.completed ? 'text-stone-500 line-through' : 'text-stone-900'
-                          }`}>
-                            {item.name}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-stone-500 mt-0.5">
-                          {item.calories} kcal • {item.protein}g P • {item.carbs}g C • {item.portion || '1 serving'}
-                          {item.completedAt && (
-                            <span className="ml-1.5 text-emerald-700 font-semibold">• Done at {item.completedAt}</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-
-                    <span className="text-[11px] text-stone-400 shrink-0 font-medium">
-                      {item.completed ? '✓ Logged' : 'Tap to complete'}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <div className="p-6 text-center bg-stone-50 rounded-2xl border border-dashed border-stone-200 text-stone-500 text-xs">
-                  Your personalized clinical meal schedule will appear here once published by your dietician.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="pt-4 mt-4 border-t border-stone-100 flex items-center justify-between">
-            <span className="text-[11px] text-stone-500 font-medium">
-              Synchronized with your lead dietician's dashboard
+            <span className="text-xs font-black text-orange-700 bg-orange-50 border border-orange-200/80 px-3 py-1 rounded-full">
+              {checkedItemsCount} of {totalAssignedMeals} Eaten
             </span>
-            <Link
-              to="/patient/meals"
-              className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 group"
-            >
-              <span>View full meal notepad & recipes</span>
-              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-            </Link>
           </div>
-        </div>
 
-        {/* Interactive Water Hydration Tracker (5 Cols) */}
-        <div className="lg:col-span-5 bg-gradient-to-br from-cyan-50/70 via-sky-50/40 to-white rounded-3xl border border-cyan-200/90 p-5 md:p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-cyan-100 text-cyan-600 flex items-center justify-center shadow-xs">
-                  <Droplets className="w-4 h-4" />
+          {/* Checklist Meal Rows */}
+          <div className="space-y-2.5 mt-3">
+            {checklistItems.length > 0 ? (
+              checklistItems.map(item => (
+                <div
+                  key={item.id}
+                  onClick={() => handleToggleMeal(item.id)}
+                  className={`p-4 rounded-2xl border transition-all flex items-center justify-between gap-3 cursor-pointer group ${
+                    item.completed
+                      ? 'bg-emerald-50/70 border-emerald-200/80'
+                      : 'bg-stone-50/70 hover:bg-white hover:border-orange-300 border-stone-200/70'
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleMeal(item.id);
+                      }}
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all shrink-0 cursor-pointer ${
+                        item.completed
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'border-2 border-stone-300 group-hover:border-orange-400 bg-white'
+                      }`}
+                    >
+                      {item.completed ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : null}
+                    </button>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md ${
+                          item.completed 
+                            ? 'bg-emerald-200/70 text-emerald-800' 
+                            : 'bg-stone-200 text-stone-700'
+                        }`}>
+                          {item.mealType}
+                        </span>
+                        <span className={`text-xs md:text-sm font-bold truncate ${
+                          item.completed ? 'text-stone-500 line-through' : 'text-stone-900'
+                        }`}>
+                          {item.name}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-stone-500 mt-0.5">
+                        {item.calories} kcal • {item.protein}g P • {item.carbs}g C • {item.portion || '1 serving'}
+                        {item.completedAt && (
+                          <span className="ml-1.5 text-emerald-700 font-semibold">• Done at {item.completedAt}</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-[11px] text-stone-400 shrink-0 font-medium">
+                    {item.completed ? '✓ Logged' : 'Tap to complete'}
+                  </span>
                 </div>
-                <div>
-                  <h3 className="font-serif font-black text-stone-900 text-base">Water Tracker</h3>
-                  <p className="text-[11px] text-stone-500 font-medium">Goal: 8 glasses (2.0 Litres) daily</p>
-                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center bg-stone-50 rounded-2xl border border-dashed border-stone-200 text-stone-500 text-xs md:text-sm">
+                Your personalized clinical meal schedule will appear here once published by your dietician.
               </div>
-              <span className="text-xs font-black text-cyan-700 bg-cyan-100/70 border border-cyan-200 px-2.5 py-1 rounded-full">
-                {waterGlasses} / 8 glasses
-              </span>
-            </div>
-
-            {/* 8 Clickable Glass Tiles Grid */}
-            <div className="grid grid-cols-4 gap-2.5 my-3">
-              {Array.from({ length: 8 }).map((_, index) => {
-                const isDrunk = index < waterGlasses;
-                return (
-                  <button
-                    key={index}
-                    onClick={() => handleSetWater(isDrunk && index === waterGlasses - 1 ? index : index + 1)}
-                    className={`py-3 px-2 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1 cursor-pointer group ${
-                      isDrunk
-                        ? 'bg-gradient-to-b from-sky-400 to-cyan-500 border-sky-400 text-white shadow-md shadow-sky-500/20 scale-102'
-                        : 'bg-white hover:bg-sky-50/60 border-stone-200/90 text-stone-600 hover:border-sky-300'
-                    }`}
-                    title={`Glass ${index + 1} (250ml) - click to toggle`}
-                  >
-                    <GlassWater className={`w-5 h-5 transition-transform group-hover:scale-110 ${
-                      isDrunk ? 'text-white' : 'text-stone-400'
-                    }`} />
-                    <span className="text-[10px] font-black uppercase tracking-tight">
-                      #{index + 1}
-                    </span>
-                    <span className={`text-[9px] font-semibold ${isDrunk ? 'text-white/90' : 'text-stone-400'}`}>
-                      250ml
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Hydration Status Bar */}
-            <div className="w-full bg-cyan-100/70 h-2 rounded-full overflow-hidden mt-3">
-              <div 
-                className="h-full bg-gradient-to-r from-sky-400 to-cyan-500 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, (waterGlasses / 8) * 100)}%` }}
-              />
-            </div>
-
-            <div className="flex items-center justify-between text-[11px] text-stone-500 font-semibold mt-1.5">
-              <span>{(waterGlasses * 0.25).toFixed(1)}L Consumed</span>
-              <span>{Math.max(0, 8 - waterGlasses)} glasses remaining</span>
-            </div>
-          </div>
-
-          <div className="pt-4 mt-3 border-t border-cyan-100/80 flex items-center gap-2">
-            <button
-              onClick={() => handleSetWater(waterGlasses + 1)}
-              disabled={waterGlasses >= 8}
-              className="flex-1 py-2.5 px-3 bg-gradient-to-r from-sky-500 to-cyan-600 hover:from-sky-600 hover:to-cyan-700 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-md shadow-sky-500/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Drink 1 Glass (250ml)</span>
-            </button>
-            <button
-              onClick={() => handleSetWater(waterGlasses - 1)}
-              disabled={waterGlasses <= 0}
-              className="py-2.5 px-3 bg-white hover:bg-stone-50 disabled:opacity-40 border border-stone-200 text-stone-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
-              title="Undo last glass"
-            >
-              <Minus className="w-3.5 h-3.5" />
-            </button>
+            )}
           </div>
         </div>
 
+        <div className="pt-4 mt-5 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <span className="text-[11px] text-stone-500 font-medium">
+            Real-time synchronization with your lead dietician's clinical station
+          </span>
+          <Link
+            to="/patient/meals"
+            className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 group self-start sm:self-auto"
+          >
+            <span>View full meal notepad & clinical recipes</span>
+            <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
       </div>
 
       {/* 3. Clinical Assessment & Weight Management Bar */}

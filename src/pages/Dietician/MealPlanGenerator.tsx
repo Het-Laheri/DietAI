@@ -270,7 +270,7 @@ export default function MealPlanGenerator() {
     if (!dishModal) return 0;
     if (dishModal.context === 'ai' && dishModal.dayNumber && generatedPlan) {
       const day = generatedPlan.find(d => d.dayNumber === dishModal.dayNumber);
-      return day?.meals.reduce((sum, m) => sum + (Number(m.calories) || 0), 0) || 0;
+      return day?.meals?.reduce((sum, m) => sum + (Number(m.calories) || 0), 0) || 0;
     }
     if (dishModal.context === 'kb' && dishModal.dayName) {
       return getKbDayCalories(dishModal.dayName);
@@ -1114,10 +1114,10 @@ export default function MealPlanGenerator() {
 
   // Compute daily macro totals for active day
   const currentDay = generatedPlan?.find(d => d.dayNumber === activeDayTab);
-  const dayCalories = currentDay?.meals.reduce((sum, m) => sum + (Number(m.calories) || 0), 0) || 0;
-  const dayProtein = currentDay?.meals.reduce((sum, m) => sum + (Number(m.protein) || 0), 0) || 0;
-  const dayCarbs = currentDay?.meals.reduce((sum, m) => sum + (Number(m.carbs) || 0), 0) || 0;
-  const dayFat = currentDay?.meals.reduce((sum, m) => sum + (Number(m.fat) || 0), 0) || 0;
+  const dayCalories = currentDay?.meals?.reduce((sum, m) => sum + (Number(m.calories) || 0), 0) || 0;
+  const dayProtein = currentDay?.meals?.reduce((sum, m) => sum + (Number(m.protein) || 0), 0) || 0;
+  const dayCarbs = currentDay?.meals?.reduce((sum, m) => sum + (Number(m.carbs) || 0), 0) || 0;
+  const dayFat = currentDay?.meals?.reduce((sum, m) => sum + (Number(m.fat) || 0), 0) || 0;
 
   const calDiff = dayCalories - targets.calories;
   const calStatus = Math.abs(calDiff) <= 100 ? 'optimal' : calDiff > 100 ? 'over' : 'under';

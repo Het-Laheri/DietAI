@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import DieticianDashboard from './pages/DieticianDashboard';
 import PatientDashboard from './pages/PatientDashboard';
+import ErrorBoundary from './components/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
 
 function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode, requiredRole: 'dietician' | 'patient' }) {
@@ -39,16 +40,21 @@ function AppRoutes() {
       
       <Route path="/dietician/*" element={<ProtectedRoute requiredRole="dietician"><DieticianDashboard /></ProtectedRoute>} />
       <Route path="/patient/*" element={<ProtectedRoute requiredRole="patient"><PatientDashboard /></ProtectedRoute>} />
+
+      {/* Global Fallback Route: prevents white page on any unmatched route */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

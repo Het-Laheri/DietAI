@@ -8,6 +8,7 @@ import {
   getPatientProfile, 
   getPatientWeekPlan, 
   getPatientChecklist, 
+  getOrBuildPatientTodayChecklist,
   savePatientChecklist,
   createNotification,
   calculatePatientProgramTimeline, 
@@ -56,6 +57,8 @@ export default function PatientOverview() {
   const [weekPlan, setWeekPlan] = useState<PatientWeekPlan | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const isLocalUpdating = React.useRef(false);
+
   const todayStr = new Date().toISOString().split('T')[0];
   const [subscribed, setSubscribed] = useState(() => isPatientSubscribed(profile));
   const isSubscribed = subscribed;
@@ -78,7 +81,7 @@ export default function PatientOverview() {
           getQueries(undefined, profile.uid),
           getPatientProfile(profile.uid),
           getPatientWeekPlan(profile.uid),
-          getPatientChecklist(profile.uid, todayStr)
+          getOrBuildPatientTodayChecklist(profile.uid, todayStr)
         ]);
 
         const published = plans.find(p => p.status === 'published');
@@ -100,7 +103,15 @@ export default function PatientOverview() {
     loadDashboardData();
 
     const handleChecklistUpdated = () => {
-      if (profile) getPatientChecklist(profile.uid, todayStr).then(setChecklistItems);
+      if (isLocalUpdating.current) {
+        isLocalUpdating.current = false;
+        return;
+      }
+      if (profile) {
+        getOrBuildPatientTodayChecklist(profile.uid, todayStr, patientData || profile).then(items => {
+          setChecklistItems(items || []);
+        });
+      }
     };
     const handleProfileUpdated = () => {
       if (profile) getPatientProfile(profile.uid).then(setPatientData);
@@ -166,28 +177,6 @@ export default function PatientOverview() {
     return checklistItems.filter(i => !i.isExtra).length || 4;
   })();
 
-  // Water Hydration Tracker State (Persisted in localStorage)
-  const waterStorageKey = `nutrisnap_water_${profile?.uid || 'guest'}_${todayStr}`;
-  const [waterGlasses, setWaterGlasses] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem(waterStorageKey);
-      return saved !== null ? Math.min(8, Math.max(0, parseInt(saved, 10))) : 0;
-    } catch {
-      return 0;
-    }
-  });
-  const waterGoal = 8; // 8 glasses = 2000ml (2.0L)
-
-  const handleSetWater = (count: number) => {
-    const clamped = Math.max(0, Math.min(waterGoal, count));
-    setWaterGlasses(clamped);
-    try {
-      localStorage.setItem(waterStorageKey, clamped.toString());
-    } catch (e) {
-      console.warn('Could not save water tracking:', e);
-    }
-  };
-
   // Next up meal
   const nextMeal = React.useMemo(() => {
     if (!checklistItems || checklistItems.length === 0) return null;
@@ -197,6 +186,7 @@ export default function PatientOverview() {
 
   // Toggle meal completion directly from dashboard
   const handleToggleMeal = async (id: string) => {
+    isLocalUpdating.current = true;
     const updated = checklistItems.map(item => {
       if (item.id === id) {
         const nextState = !item.completed;
@@ -213,13 +203,19 @@ export default function PatientOverview() {
 
     setChecklistItems(updated);
 
-    // Save states to localStorage
-    const storageKey = `nutrisnap_checklist_states_${profile?.uid || 'guest'}_${todayStr}`;
+    // Save states to localStorage for instant UI updates & cross-component sync
+    const storageKey1 = `nutrisnap_meals_checklist_${profile?.uid || 'guest'}_${todayStr}`;
+    const storageKey2 = `nutrisnap_checklist_states_${profile?.uid || 'guest'}_${todayStr}`;
     const stateMap: Record<string, { completed: boolean; completedAt?: string }> = {};
     updated.forEach(it => {
       stateMap[it.id] = { completed: it.completed, completedAt: it.completedAt };
     });
-    localStorage.setItem(storageKey, JSON.stringify(stateMap));
+    try {
+      localStorage.setItem(storageKey1, JSON.stringify(stateMap));
+      localStorage.setItem(storageKey2, JSON.stringify(stateMap));
+    } catch (e) {
+      console.warn('Could not cache checklist locally:', e);
+    }
 
     if (profile) {
       try {

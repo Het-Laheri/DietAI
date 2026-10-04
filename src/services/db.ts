@@ -1804,20 +1804,7 @@ export async function savePatientChecklist(patientId: string, date: string, item
 }
 
 export async function getPatientChecklist(patientId: string, date: string): Promise<ChecklistMealItem[]> {
-  // 1. Try backend API first
-  try {
-    const res = await fetch(getApiUrl(`/api/patient/checklist/${encodeURIComponent(patientId)}/${encodeURIComponent(date)}`));
-    if (res.ok) {
-      const data = await res.json();
-      if (data.items) {
-        return Array.isArray(data.items) ? data.items : Object.values(data.items);
-      }
-    }
-  } catch (apiErr) {
-    // fallback to direct Firestore
-  }
-
-  // 2. Direct Firestore fallback
+  // 1. Direct Firestore read first
   try {
     const d = await getDoc(doc(db, 'food_logs', `checklist_${patientId}_${date}`));
     if (d.exists()) {
@@ -1827,7 +1814,192 @@ export async function getPatientChecklist(patientId: string, date: string): Prom
   } catch (err) {
     console.warn('Notice: getPatientChecklist direct read failed:', err);
   }
+
+  // 2. Try backend API fallback
+  try {
+    const res = await fetch(getApiUrl(`/api/patient/checklist/${encodeURIComponent(patientId)}/${encodeURIComponent(date)}`));
+    if (res.ok) {
+      const data = await res.json();
+      if (data.items) {
+        return Array.isArray(data.items) ? data.items : Object.values(data.items);
+      }
+    }
+  } catch (apiErr) {
+    // ignore
+  }
+
   return [];
+}
+
+/**
+ * Universal Patient Daily Checklist Engine
+ * Guarantees that today's meals, calories, macros, and completion checkmarks
+ * are always consistently populated and synchronized in real-time between
+ * the Patient Dashboard Carousel and the Meal Notepad.
+ */
+export async function getOrBuildPatientTodayChecklist(
+  patientId: string, 
+  date: string, 
+  patientProfile?: any
+): Promise<ChecklistMealItem[]> {
+  const [plans, weekPlan, allDbRecipes, savedFirestoreList] = await Promise.all([
+    getMealPlans(patientId),
+    getPatientWeekPlan(patientId),
+    getStoredRecipesFromDB(),
+    getPatientChecklist(patientId, date)
+  ]);
+
+  const recipePool = allDbRecipes && allDbRecipes.length > 0 ? allDbRecipes : DEFAULT_CLINICAL_RECIPES;
+
+  // Local storage completion map for instant synchronous UI responsiveness
+  const storageKey = `nutrisnap_meals_checklist_${patientId}_${date}`;
+  let localStateMap: Record<string, { completed: boolean; completedAt?: string }> = {};
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) localStateMap = JSON.parse(raw);
+    } catch {}
+  }
+
+  const savedMap: Record<string, ChecklistMealItem> = {};
+  (savedFirestoreList || []).forEach(i => {
+    if (i && i.id) savedMap[i.id] = i;
+  });
+
+  const published = plans.find(p => p.status === 'published');
+  let result: ChecklistMealItem[] = [];
+
+  const DAYS_OF_WEEK: WeekDay[] = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const todayDay = DAYS_OF_WEEK[new Date().getDay()];
+
+  // 1. From WeekPlan assigned by Dietician
+  if (weekPlan && weekPlan.status === 'published' && weekPlan.entries && weekPlan.entries.length > 0) {
+    const todaysEntries = weekPlan.entries.filter(e => e.day === todayDay);
+    const MEAL_SLOT_ORDER = ['Breakfast', 'Morning Snack', 'Lunch', 'Evening Snack', 'Dinner', 'Bedtime Snack'];
+    const sorted = [...todaysEntries].sort(
+      (a, b) => MEAL_SLOT_ORDER.indexOf(a.mealSlot) - MEAL_SLOT_ORDER.indexOf(b.mealSlot)
+    );
+
+    if (sorted.length > 0) {
+      result = sorted.map((entry, idx) => {
+        const itemId = `wp_${entry.day}_${entry.mealSlot}_${idx}`;
+        const detail = recipePool.find(r => r.name.toLowerCase() === entry.recipeName.toLowerCase()) ||
+                       recipePool.find(r => r.id === entry.recipeId);
+        
+        const isCompleted = localStateMap[itemId]?.completed !== undefined 
+          ? localStateMap[itemId].completed 
+          : (savedMap[itemId]?.completed || false);
+        const completedAt = localStateMap[itemId]?.completedAt || savedMap[itemId]?.completedAt;
+
+        const fallbackCal = entry.mealSlot.toLowerCase().includes('snack') ? 180 : entry.mealSlot.toLowerCase().includes('lunch') ? 500 : 380;
+        const fallbackP = entry.mealSlot.toLowerCase().includes('snack') ? 8 : entry.mealSlot.toLowerCase().includes('lunch') ? 22 : 16;
+        const fallbackC = entry.mealSlot.toLowerCase().includes('snack') ? 25 : entry.mealSlot.toLowerCase().includes('lunch') ? 60 : 45;
+        const fallbackF = entry.mealSlot.toLowerCase().includes('snack') ? 6 : entry.mealSlot.toLowerCase().includes('lunch') ? 16 : 12;
+
+        return {
+          id: itemId,
+          mealType: entry.mealSlot,
+          name: entry.recipeName,
+          portion: entry.portion || '1 serving',
+          calories: Number(detail?.calories) || fallbackCal,
+          protein: Number(detail?.protein) || fallbackP,
+          carbs: Number(detail?.carbs) || fallbackC,
+          fat: Number(detail?.fat) || fallbackF,
+          notes: entry.notes || detail?.clinicalFocus,
+          recipe: detail?.recipe || [],
+          ingredients: detail?.ingredients || [],
+          completed: isCompleted,
+          completedAt,
+          isExtra: false
+        };
+      });
+    }
+  }
+
+  // 2. From standard MealPlan if no week plan entries
+  if (result.length === 0 && published && published.days && published.days.length > 0) {
+    const timeline = calculatePatientProgramTimeline(patientProfile || { uid: patientId }, published);
+    const dayIndex = (timeline.totalDays - 1) % published.days.length;
+    const dayPlan = published.days[dayIndex] || published.days[0];
+    
+    result = dayPlan.meals.map((m, idx) => {
+      const cleanType = m.type.toLowerCase().replace(/\s+/g, '_');
+      const itemId = `plan_meal_${idx}_${cleanType}`;
+      const isCompleted = localStateMap[itemId]?.completed !== undefined
+        ? localStateMap[itemId].completed
+        : (savedMap[itemId]?.completed || false);
+      const completedAt = localStateMap[itemId]?.completedAt || savedMap[itemId]?.completedAt;
+
+      const fallbackCal = m.type.toLowerCase().includes('snack') ? 180 : m.type.toLowerCase().includes('lunch') ? 500 : 380;
+      const fallbackP = m.type.toLowerCase().includes('snack') ? 8 : m.type.toLowerCase().includes('lunch') ? 22 : 16;
+      const fallbackC = m.type.toLowerCase().includes('snack') ? 25 : m.type.toLowerCase().includes('lunch') ? 60 : 45;
+      const fallbackF = m.type.toLowerCase().includes('snack') ? 6 : m.type.toLowerCase().includes('lunch') ? 16 : 12;
+
+      return {
+        id: itemId,
+        mealType: m.type,
+        name: m.name,
+        portion: m.portion || '1 serving',
+        calories: Number(m.calories) || fallbackCal,
+        protein: Number(m.protein) || fallbackP,
+        carbs: Number(m.carbs) || fallbackC,
+        fat: Number(m.fat) || fallbackF,
+        notes: m.notes,
+        recipe: Array.isArray(m.recipe) ? m.recipe : (m.recipe ? [m.recipe] : []),
+        ingredients: Array.isArray(m.ingredients) ? m.ingredients : (m.ingredients ? [m.ingredients] : []),
+        completed: isCompleted,
+        completedAt,
+        isExtra: false
+      };
+    });
+  }
+
+  // 3. Fallback standard meals if neither plan nor week plan is configured yet
+  if (result.length === 0) {
+    const defaultSlots = [
+      { slot: 'Breakfast', name: 'Whole Wheat Toast with Paneer & Sprouts', cal: 360, p: 18, c: 45, f: 12 },
+      { slot: 'Morning Snack', name: 'Fresh Seasonal Fruit & Roasted Seeds', cal: 160, p: 4, c: 30, f: 4 },
+      { slot: 'Lunch', name: 'Roti with Dal Tadka & Steamed Vegetables', cal: 520, p: 24, c: 68, f: 16 },
+      { slot: 'Dinner', name: 'Vegetable Khichdi with Low-Fat Curd', cal: 420, p: 18, c: 58, f: 12 }
+    ];
+    result = defaultSlots.map((d, idx) => {
+      const itemId = `default_meal_${idx}_${d.slot.toLowerCase().replace(/\s+/g, '_')}`;
+      const isCompleted = localStateMap[itemId]?.completed !== undefined
+        ? localStateMap[itemId].completed
+        : (savedMap[itemId]?.completed || false);
+      return {
+        id: itemId,
+        mealType: d.slot,
+        name: d.name,
+        portion: '1 standard serving',
+        calories: d.cal,
+        protein: d.p,
+        carbs: d.c,
+        fat: d.f,
+        completed: isCompleted,
+        completedAt: localStateMap[itemId]?.completedAt || savedMap[itemId]?.completedAt,
+        isExtra: false
+      };
+    });
+  }
+
+  // 4. Append saved custom or extra items
+  (savedFirestoreList || []).forEach(item => {
+    if (item.isExtra || item.mealType === 'Extra Food' || !result.some(r => r.id === item.id)) {
+      if (!result.some(r => r.id === item.id)) {
+        const isCompleted = localStateMap[item.id]?.completed !== undefined
+          ? localStateMap[item.id].completed
+          : item.completed;
+        result.push({
+          ...item,
+          completed: isCompleted,
+          completedAt: localStateMap[item.id]?.completedAt || item.completedAt
+        });
+      }
+    }
+  });
+
+  return result;
 }
 
 export async function getAllPatientEatingLogs(patientId: string): Promise<PatientEatingLogEntry[]> {

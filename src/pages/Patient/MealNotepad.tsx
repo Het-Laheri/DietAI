@@ -10,6 +10,7 @@ import {
   ChecklistMealItem, 
   savePatientChecklist, 
   getPatientChecklist,
+  getOrBuildPatientTodayChecklist,
   logMeal,
   deleteFoodLog,
   PatientWeekPlan, 
@@ -100,6 +101,8 @@ export default function MealNotepad() {
   const storageKey = `nutrisnap_meals_checklist_${profile?.uid}_${todayStr}`;
   const reflectionKey = `nutrisnap_meals_reflection_${profile?.uid}_${todayStr}`;
 
+  const isLocalUpdating = React.useRef(false);
+
   useEffect(() => {
     setSubscribed(isPatientSubscribed(profile));
     const handleSubChange = () => setSubscribed(isPatientSubscribed(profile));
@@ -108,110 +111,19 @@ export default function MealNotepad() {
     async function loadPlanAndChecklist() {
       if (!profile) return;
       try {
-        const [plans, weekPlan, allDbRecipes] = await Promise.all([
+        const [plans, checklist] = await Promise.all([
           getMealPlans(profile.uid),
-          getPatientWeekPlan(profile.uid),
-          getStoredRecipesFromDB()
+          getOrBuildPatientTodayChecklist(profile.uid, todayStr, profile)
         ]);
 
         const published = plans.find(p => p.status === 'published');
         setActivePlan(published || null);
 
-        // Load saved checklist state from Firestore & fallback to localStorage
-        const savedStateList = await getPatientChecklist(profile.uid, todayStr);
-        const savedState: Record<string, ChecklistMealItem> = {};
-        savedStateList.forEach(i => savedState[i.id] = i);
-
         // Load reflection notes
         const savedReflection = localStorage.getItem(reflectionKey);
         if (savedReflection) setPatientReflection(savedReflection);
 
-        let initialList: ChecklistMealItem[] = [];
-
-        // 1. Check published Week Plan assigned by Dietician
-        const DAYS_OF_WEEK: WeekDay[] = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const todayDay = DAYS_OF_WEEK[new Date().getDay()];
-
-        if (weekPlan && weekPlan.status === 'published' && weekPlan.entries && weekPlan.entries.length > 0) {
-          const todaysEntries = weekPlan.entries.filter(e => e.day === todayDay);
-          const MEAL_SLOT_ORDER = ['Breakfast', 'Morning Snack', 'Lunch', 'Evening Snack', 'Dinner', 'Bedtime Snack'];
-          const sortedEntries = [...todaysEntries].sort(
-            (a, b) => MEAL_SLOT_ORDER.indexOf(a.mealSlot) - MEAL_SLOT_ORDER.indexOf(b.mealSlot)
-          );
-
-          if (sortedEntries.length > 0) {
-            initialList = sortedEntries.map((entry, idx) => {
-              const itemId = `wp_${entry.day}_${entry.mealSlot}_${idx}`;
-              const detail = allDbRecipes.find(r => r.name.toLowerCase() === entry.recipeName.toLowerCase()) ||
-                             allDbRecipes.find(r => r.id === entry.recipeId);
-              return {
-                id: itemId,
-                mealType: entry.mealSlot,
-                name: entry.recipeName,
-                portion: entry.portion || '1 serving',
-                calories: detail?.calories,
-                protein: detail?.protein,
-                carbs: detail?.carbs,
-                fat: detail?.fat,
-                notes: entry.notes || detail?.clinicalFocus,
-                recipe: detail?.recipe || [],
-                ingredients: detail?.ingredients || [],
-                completed: savedState[itemId]?.completed || false,
-                completedAt: savedState[itemId]?.completedAt,
-                isExtra: false
-              };
-            });
-          }
-        }
-
-        // 2. If no week entries, check published standard MealPlan assigned by Dietician
-        if (initialList.length === 0 && published && published.days && published.days.length > 0) {
-          const timeline = calculatePatientProgramTimeline(profile, published);
-          const dayIndex = (timeline.totalDays - 1) % published.days.length;
-          const dayPlan = published.days[dayIndex] || published.days[0];
-          initialList = dayPlan.meals.map((m, idx) => {
-            const cleanType = m.type.toLowerCase().replace(/\s+/g, '_');
-            const itemId = `plan_meal_${idx}_${cleanType}`;
-            // Match against savedState by exact id or normalized id
-            const state = savedState[itemId] || 
-                          Object.values(savedState).find(s => s.mealType.toLowerCase().replace(/\s+/g, '_') === cleanType && s.name.toLowerCase() === m.name.toLowerCase());
-            return {
-              id: itemId,
-              mealType: m.type,
-              name: m.name,
-              portion: m.portion || '1 serving',
-              calories: Number(m.calories) || 0,
-              protein: Number(m.protein) || 0,
-              carbs: Number(m.carbs) || 0,
-              fat: Number(m.fat) || 0,
-              notes: m.notes,
-              recipe: Array.isArray(m.recipe) ? m.recipe : (m.recipe ? [m.recipe] : []),
-              ingredients: Array.isArray(m.ingredients) ? m.ingredients : (m.ingredients ? [m.ingredients] : []),
-              completed: state?.completed || false,
-              completedAt: state?.completedAt,
-              isExtra: false
-            };
-          });
-        }
-
-        // 3. Append saved extra/custom items from savedStateList
-        savedStateList.forEach(item => {
-          const cleanItemType = item.mealType.toLowerCase().replace(/\s+/g, '_');
-          const match = initialList.find(i => 
-            i.id === item.id || 
-            (i.id.replace(/\s+/g, '_') === item.id.replace(/\s+/g, '_')) ||
-            (!item.isExtra && i.mealType.toLowerCase().replace(/\s+/g, '_') === cleanItemType && i.name.toLowerCase() === item.name.toLowerCase())
-          );
-          if (match) {
-            match.completed = item.completed;
-            match.completedAt = item.completedAt;
-          } else if (item.isExtra || item.mealType === 'Extra Food') {
-            if (!initialList.some(i => i.id === item.id)) {
-              initialList.push(item);
-            }
-          }
-        });
-        setItems(initialList);
+        setItems(checklist);
       } catch (err) {
         console.error('Failed to load meal checklist:', err);
       } finally {
@@ -221,10 +133,25 @@ export default function MealNotepad() {
 
     loadPlanAndChecklist();
 
-    return () => window.removeEventListener('nutrisnap:subscription_change', handleSubChange);
+    const handleChecklistUpdated = () => {
+      if (isLocalUpdating.current) {
+        isLocalUpdating.current = false;
+        return;
+      }
+      if (profile) {
+        getOrBuildPatientTodayChecklist(profile.uid, todayStr, profile).then(setItems);
+      }
+    };
+    window.addEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
+
+    return () => {
+      window.removeEventListener('nutrisnap:subscription_change', handleSubChange);
+      window.removeEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
+    };
   }, [profile, todayStr]);
 
   const toggleItem = (id: string) => {
+    isLocalUpdating.current = true;
     const updated = items.map(item => {
       if (item.id === id) {
         const nextState = !item.completed;
@@ -246,7 +173,11 @@ export default function MealNotepad() {
     updated.forEach(it => {
       stateMap[it.id] = { completed: it.completed, completedAt: it.completedAt };
     });
-    localStorage.setItem(storageKey, JSON.stringify(stateMap));
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(stateMap));
+      localStorage.setItem(`nutrisnap_checklist_states_${profile?.uid}_${todayStr}`, JSON.stringify(stateMap));
+    } catch {}
+
     if (profile) {
       savePatientChecklist(profile.uid, todayStr, updated).catch(err => {
         console.warn('savePatientChecklist error:', err);
@@ -376,6 +307,7 @@ export default function MealNotepad() {
       console.warn('Could not add to logMeal:', e);
     }
 
+    isLocalUpdating.current = true;
     // Save to Firestore checklist (server bridge bypasses patient client restrictions)
     await savePatientChecklist(profile.uid, todayStr, updated);
 
@@ -384,7 +316,10 @@ export default function MealNotepad() {
     updated.forEach(it => {
       stateMap[it.id] = { completed: it.completed, completedAt: it.completedAt };
     });
-    localStorage.setItem(storageKey, JSON.stringify(stateMap));
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(stateMap));
+      localStorage.setItem(`nutrisnap_checklist_states_${profile?.uid}_${todayStr}`, JSON.stringify(stateMap));
+    } catch {}
 
     // Reset modal state
     setIsExtraModalOpen(false);
@@ -402,9 +337,20 @@ export default function MealNotepad() {
   // Remove Extra Item
   const handleRemoveExtraItem = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    isLocalUpdating.current = true;
     const itemToRemove = items.find(i => i.id === id);
     const updated = items.filter(i => i.id !== id);
     setItems(updated);
+
+    const stateMap: Record<string, { completed: boolean; completedAt?: string }> = {};
+    updated.forEach(it => {
+      stateMap[it.id] = { completed: it.completed, completedAt: it.completedAt };
+    });
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(stateMap));
+      localStorage.setItem(`nutrisnap_checklist_states_${profile?.uid}_${todayStr}`, JSON.stringify(stateMap));
+    } catch {}
+
     if (profile) {
       await savePatientChecklist(profile.uid, todayStr, updated);
       if (itemToRemove?.logMealId) {

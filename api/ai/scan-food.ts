@@ -41,7 +41,7 @@ Patient Clinical Profile:
       ? `\nPatient's Extra Preparation Notes & Context:\n"${userNotes.trim()}"\n(CRITICAL REQUIREMENT: Strictly incorporate any cooking oils, butter, extra ingredients, specific quantities, or protein powders described in these notes into your calculation.)`
       : '';
 
-    const prompt = `You are an expert clinical dietician and precision nutrition analyst.
+    const prompt = `You are an expert clinical dietician and precision nutrition analyst with over 96% accuracy standard.
 Carefully examine the uploaded image.
 
 CRITICAL INSTRUCTIONS:
@@ -82,20 +82,23 @@ CRITICAL INSTRUCTIONS:
       - insight: Concise 2-sentence clinical dietician evaluation of this packaged item's nutritional profile (e.g., protein density, sodium/sugar moderation).
       - healthScore: "Healthy" | "Balanced" | "Moderate" | "Indulgent".
 
-   C. EDIBLE MEAL / FOOD PLATE: If edible food or beverage items are present on a plate or in a dish:
+   C. EDIBLE MEAL / FOOD PLATE: If edible food or beverage items are present on a plate, bowl, or dish:
       - Set scanType: "plate".
    ${patientContext}${userNotesText}
-   - Identify all distinct food and beverage items.
-   - If user notes mention specific quantities or oils (e.g. "cooked in 1 tbsp olive oil", "2 rotis", "added 1 scoop whey"), calculate portions and macros accordingly.
+   - Precision Clinical Deconstruction (>96% Accuracy Rule):
+     * Deconstruct mixed dishes into distinct food items (e.g. Cooked pasta/grains, vegetables, protein sources, and cooking fats).
+     * Distinguish cooked weight vs raw weight (e.g. 1.5 cups cooked macaroni ≈ 210g).
+     * Account for cooking medium/oil: unless stated oil-free, add an estimated cooking fat item (e.g. "Cooking Oil / Seasoning", 1 tsp ~ 45 kcal, 5g fat).
+     * If user notes mention specific quantities, oils, or supplements, strictly apply those exact values.
    - For EACH detected food item, provide:
-     * name: Clear descriptive item name (e.g. "Fresh Red Apple", "Whole Wheat Roti", "Yellow Moong Dal", "Vegetable Pizza")
-     * portion: Estimated portion / quantity with weight or volume (e.g. "1 medium apple (180g)", "2 medium rotis (80g)", "1 slice (120g)")
-     * calories: Estimated calories in kcal FOR THIS ENTIRE PORTION (integer, not per 100g unless portion is 100g)
+     * name: Clear descriptive item name (e.g. "Cooked Macaroni Pasta", "Sweet Corn Kernels", "Diced Bell Peppers", "Cooking Fat / Seasoning")
+     * portion: Estimated portion / quantity with weight or volume (e.g. "1.5 cups (approx 210g)", "0.3 cup (approx 50g)", "1 tsp olive oil (5g)")
+     * calories: Estimated calories in kcal FOR THIS ENTIRE PORTION (integer, consistent with macros: 4*P + 4*C + 9*F)
      * protein: Estimated protein in grams for this portion (number)
      * carbs: Estimated carbs in grams for this portion (number)
      * fat: Estimated total fat in grams for this portion (number)
      * fiber: Estimated dietary fiber in grams for this portion (number)
-     * notes: Short dietary observation (e.g. "Rich in dietary fiber and vitamins")
+     * notes: Short clinical dietary observation
    - Accurately calculate the meal totals:
      * total calories = exact sum of all item calories
      * total protein = sum of all item protein
@@ -109,41 +112,53 @@ CRITICAL INSTRUCTIONS:
 Return strictly a valid JSON object matching either format B or C without markdown ticks.`;
 
     const aiClient = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    // Prioritize ultra-fast (1.5s - 3s) multimodal models to prevent Vercel 10s execution timeouts
     const modelsToTry = [
-      'gemini-2.5-flash',
-      'gemini-3.5-flash',
+      'gemini-flash-lite-latest',
       'gemini-3.5-flash-lite',
-      'gemini-3.8-flash',
+      'gemini-3.1-flash-lite',
+      'gemini-2.5-flash',
       process.env.GEMINI_MODEL
     ].filter(Boolean) as string[];
 
     let jsonText = '';
     let lastError: any = null;
 
+    // Helper to race API call with a strict timeout so no single model hangs the serverless request
+    const generateWithTimeout = async (modelName: string, timeoutMs = 8000) => {
+      const callPromise = aiClient.models.generateContent({
+        model: modelName,
+        contents: [
+          {
+            inlineData: {
+              mimeType: validation.mimeType || mimeType || 'image/jpeg',
+              data: validation.cleanBase64!
+            }
+          },
+          prompt
+        ],
+        config: {
+          systemInstruction: 'You are NutriSnap AI Clinical Nutritionist. Always return strictly valid JSON without markdown code block ticks. If the image is not food or a nutrition facts label, return isFood: false.',
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms on model ${modelName}`)), timeoutMs)
+      );
+
+      return Promise.race([callPromise, timeoutPromise]);
+    };
+
     for (const modelName of modelsToTry) {
       try {
-        const response = await aiClient.models.generateContent({
-          model: modelName,
-          contents: [
-            {
-              inlineData: {
-                mimeType: validation.mimeType || mimeType || 'image/jpeg',
-                data: validation.cleanBase64!
-              }
-            },
-            prompt
-          ],
-          config: {
-            systemInstruction: 'You are NutriSnap AI Clinical Nutritionist. Always return strictly valid JSON without markdown code block ticks. If the image is not food or a nutrition facts label, return isFood: false.',
-            responseMimeType: 'application/json'
-          }
-        });
+        const response: any = await generateWithTimeout(modelName, 7500);
         if (response && response.text) {
           jsonText = response.text;
           break;
         }
       } catch (err: any) {
-        console.warn(`Model ${modelName} failed in serverless function:`, err.message || err);
+        console.warn(`Model ${modelName} failed or timed out in serverless function:`, err.message || err);
         lastError = err;
       }
     }

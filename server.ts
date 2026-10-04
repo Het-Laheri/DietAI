@@ -210,10 +210,10 @@ async function generateMultimodalAIResponse(params: {
 
   const aiClient = new GoogleGenAI({ apiKey: geminiKey });
   const modelsToTry = [
-    'gemini-2.5-flash',
-    'gemini-3.5-flash',
+    'gemini-flash-lite-latest',
     'gemini-3.5-flash-lite',
-    'gemini-3.8-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-2.5-flash',
     process.env.GEMINI_MODEL
   ].filter(Boolean) as string[];
 
@@ -235,7 +235,7 @@ async function generateMultimodalAIResponse(params: {
   let lastError: any = null;
   for (const modelName of modelsToTry) {
     try {
-      const response = await aiClient.models.generateContent({
+      const callPromise = aiClient.models.generateContent({
         model: modelName,
         contents,
         config: {
@@ -243,11 +243,16 @@ async function generateMultimodalAIResponse(params: {
           responseMimeType: 'application/json'
         }
       });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout after 7500ms on model ${modelName}`)), 7500)
+      );
+
+      const response: any = await Promise.race([callPromise, timeoutPromise]);
       if (response && response.text) {
         return response.text;
       }
     } catch (err: any) {
-      console.warn(`Gemini multimodal attempt with model "${modelName}" failed:`, err.message || err);
+      console.warn(`Gemini multimodal attempt with model "${modelName}" failed or timed out:`, err.message || err);
       lastError = err;
     }
   }

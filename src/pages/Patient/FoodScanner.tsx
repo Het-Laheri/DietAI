@@ -168,7 +168,7 @@ export default function FoodScanner() {
     setResult(null);
     setLogged(false);
 
-    try {
+    const executeScanRequest = async () => {
       const res = await fetch('/api/ai/scan-food', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -190,15 +190,41 @@ export default function FoodScanner() {
       try {
         data = JSON.parse(resText);
       } catch {
+        if (res.status === 504 || resText.toLowerCase().includes('gateway timeout')) {
+          throw new Error('Analysis took longer than expected. Please try scanning again with a clear photo.');
+        }
+        if (res.status === 413) {
+          throw new Error('Image size is too large. Please take a photo with standard camera resolution.');
+        }
         throw new Error(
           resText.toLowerCase().includes('server error') || !res.ok
-            ? 'The scanner service is currently busy. Please try scanning again.'
+            ? 'The scanner service is momentarily busy. Please tap Analyze again.'
             : resText
         );
       }
 
       if (!res.ok || data.error) {
         throw new Error(data.error || data.details || 'Failed to analyze food photo');
+      }
+
+      return data;
+    };
+
+    try {
+      let data: any;
+      try {
+        data = await executeScanRequest();
+      } catch (firstErr: any) {
+        // Auto-retry once after 800ms on transient network, busy, or timeout errors
+        const errMsg = firstErr?.message || '';
+        const shouldRetry = errMsg.includes('busy') || errMsg.includes('timeout') || errMsg.includes('capacity') || errMsg.includes('Failed to fetch');
+        if (shouldRetry) {
+          console.warn('Initial scan attempt hit transient issue, retrying automatically...', firstErr);
+          await new Promise(r => setTimeout(r, 800));
+          data = await executeScanRequest();
+        } else {
+          throw firstErr;
+        }
       }
 
       setResult(data);

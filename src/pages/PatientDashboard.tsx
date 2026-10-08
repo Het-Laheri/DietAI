@@ -61,8 +61,9 @@ export default function PatientDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isSubscribed, setIsSubscribed] = useState(() => isPatientSubscribed(profile));
-  const { notifications, unreadCount, markRead, markAllRead } = useNotification();
+  const { notifications, unreadCount, markRead, markAllRead, dismiss, clearRead } = useNotification();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notifTab, setNotifTab] = useState<'unread' | 'all'>('unread');
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   useEffect(() => {
@@ -86,6 +87,15 @@ export default function PatientDashboard() {
 
   const handleMarkAllRead = async () => {
     await markAllRead();
+  };
+
+  const handleDismissNotification = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await dismiss(id);
+  };
+
+  const handleClearRead = async () => {
+    await clearRead();
   };
 
   const handleLogout = async () => {
@@ -425,7 +435,7 @@ export default function PatientDashboard() {
           />
           <div className="relative w-full md:max-w-md bg-white h-full md:h-[620px] rounded-none md:rounded-2xl shadow-2xl flex flex-col z-10 overflow-hidden border border-stone-200 animate-in slide-in-from-right duration-200">
             {/* Header */}
-            <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/70 shrink-0">
+            <div className="p-3.5 border-b border-stone-100 flex items-center justify-between bg-stone-50/80 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
                   <Bell className="w-4 h-4" />
@@ -441,35 +451,100 @@ export default function PatientDashboard() {
                 {unreadCount > 0 && (
                   <button
                     onClick={handleMarkAllRead}
-                    className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 transition-colors hover:underline mr-1"
+                    className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 transition-colors hover:underline"
                   >
                     <CheckCheck className="w-3.5 h-3.5" />
-                    Mark all read
+                    Mark read
+                  </button>
+                )}
+                {notifications.some(n => n.read) && (
+                  <button
+                    onClick={handleClearRead}
+                    className="text-xs font-medium text-stone-500 hover:text-stone-800 transition-colors hover:underline"
+                    title="Remove already read notifications"
+                  >
+                    Clear read
                   </button>
                 )}
                 <button
                   onClick={() => setShowNotifications(false)}
-                  className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-lg transition-colors"
+                  className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-lg transition-colors ml-1"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
+            {/* Tabs: Unread vs All */}
+            <div className="flex border-b border-stone-100 bg-stone-50/40 px-3 pt-2 gap-2 text-xs font-semibold shrink-0">
+              <button
+                onClick={() => setNotifTab('unread')}
+                className={`pb-2 px-2.5 border-b-2 transition-all flex items-center gap-1.5 ${
+                  notifTab === 'unread'
+                    ? 'border-orange-500 text-orange-600 font-bold'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
+                }`}
+              >
+                <span>Unread</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  notifTab === 'unread' ? 'bg-orange-100 text-orange-700' : 'bg-stone-200/70 text-stone-600'
+                }`}>
+                  {unreadCount}
+                </span>
+              </button>
+              <button
+                onClick={() => setNotifTab('all')}
+                className={`pb-2 px-2.5 border-b-2 transition-all flex items-center gap-1.5 ${
+                  notifTab === 'all'
+                    ? 'border-orange-500 text-orange-600 font-bold'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
+                }`}
+              >
+                <span>All</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  notifTab === 'all' ? 'bg-orange-100 text-orange-700' : 'bg-stone-200/70 text-stone-600'
+                }`}>
+                  {notifications.length}
+                </span>
+              </button>
+            </div>
+
             {/* List */}
             <div className="flex-1 overflow-y-auto divide-y divide-stone-100">
-              {notifications.length === 0 ? (
-                <div className="p-12 text-center flex flex-col items-center justify-center h-full">
-                  <div className="w-14 h-14 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center mb-3 text-orange-500">
-                    <Bell className="w-6 h-6" />
-                  </div>
-                  <h4 className="font-bold text-stone-800 text-sm">No notifications yet</h4>
-                  <p className="text-xs text-stone-500 mt-1 max-w-xs">
-                    When your dietician publishes your weekly meal plans or answers your consultations, you'll see them right here.
-                  </p>
-                </div>
-              ) : (
-                notifications.map(n => {
+              {(() => {
+                const displayed = notifTab === 'unread'
+                  ? notifications.filter(n => !n.read)
+                  : notifications;
+
+                if (notifications.length === 0) {
+                  return (
+                    <div className="p-12 text-center flex flex-col items-center justify-center h-full">
+                      <div className="w-14 h-14 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center mb-3 text-orange-500">
+                        <Bell className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-bold text-stone-800 text-sm">No notifications yet</h4>
+                      <p className="text-xs text-stone-500 mt-1 max-w-xs">
+                        When your dietician publishes your weekly meal plans or answers your consultations, you'll see them right here.
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (displayed.length === 0 && notifTab === 'unread') {
+                  return (
+                    <div className="p-12 text-center flex flex-col items-center justify-center h-full">
+                      <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-3 text-emerald-600">
+                        <CheckCheck className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-bold text-stone-800 text-sm">All caught up!</h4>
+                      <p className="text-xs text-stone-500 mt-1 max-w-xs">
+                        Switch to the "All" tab to view read notifications and guidance history.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return displayed.map(n => {
                   let IconComp = Bell;
                   let iconColor = 'text-stone-600 bg-stone-100';
 
@@ -488,17 +563,19 @@ export default function PatientDashboard() {
                   }
 
                   return (
-                    <button
+                    <div
                       key={n.id}
                       onClick={() => handleNotificationClick(n)}
-                      className={`w-full text-left p-4 flex items-start gap-3.5 hover:bg-stone-50/80 transition-colors ${!n.read ? 'bg-orange-50/30' : ''}`}
+                      className={`group relative w-full text-left p-4 flex items-start gap-3.5 hover:bg-stone-50/80 transition-colors cursor-pointer ${
+                        !n.read ? 'bg-orange-50/30' : ''
+                      }`}
                     >
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${iconColor} mt-0.5`}>
                         <IconComp className="w-4.5 h-4.5" />
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 pr-4">
                         <div className="flex items-center justify-between gap-1 mb-0.5">
-                          <p className={`text-xs truncate ${!n.read ? 'font-bold text-stone-900' : 'font-semibold text-stone-700'}`}>
+                          <p className={`text-xs truncate ${!n.read ? 'font-bold text-stone-900' : 'font-semibold text-stone-600'}`}>
                             {n.title || 'Dietician Update'}
                           </p>
                           <span className="text-[10px] text-stone-400 shrink-0 flex items-center gap-1">
@@ -506,7 +583,7 @@ export default function PatientDashboard() {
                             {formatRelativeTime(n.createdAt)}
                           </span>
                         </div>
-                        <p className={`text-xs leading-relaxed ${!n.read ? 'text-stone-800' : 'text-stone-500'}`}>
+                        <p className={`text-xs leading-relaxed ${!n.read ? 'text-stone-800 font-medium' : 'text-stone-500'}`}>
                           {n.message}
                         </p>
                         {n.link && (
@@ -516,13 +593,26 @@ export default function PatientDashboard() {
                           </div>
                         )}
                       </div>
-                      {!n.read && (
-                        <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0 mt-2" />
-                      )}
-                    </button>
+                      
+                      {/* Action column on right */}
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        {!n.read && (
+                          <span className="w-2 h-2 rounded-full bg-orange-500 mt-1" />
+                        )}
+                        {n.id && (
+                          <button
+                            onClick={(e) => handleDismissNotification(e, n.id!)}
+                            className="opacity-0 group-hover:opacity-100 text-stone-400 hover:text-rose-600 p-1 rounded-md transition-all hover:bg-stone-200/60"
+                            title="Dismiss notification"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   );
-                })
-              )}
+                });
+              })()}
             </div>
           </div>
         </div>

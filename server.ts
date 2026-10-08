@@ -6,6 +6,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import * as XLSX from 'xlsx';
 import { GoogleGenAI } from '@google/genai';
+import webpush from 'web-push';
 import { Redis } from '@upstash/redis';
 import { Ratelimit } from '@upstash/ratelimit';
 import { 
@@ -273,6 +274,152 @@ const aiRateLimitMiddleware = async (req: express.Request, res: express.Response
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// ─── WEB PUSH NOTIFICATIONS ENGINE ──────────────────────────────────────────
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BF0eHsETu6MTVR7eiyVk65qAqC8WEww3yH1wn5dh-836PtGxUk368pDq3udFCDZxxTyF1Hk9HE7dOkOz8q1zBTI';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'aXvLP0ckWhlyJrxfPHqjz6djC6OeYiDs_RJMNHfdjCs';
+const VAPID_SUBJECT = 'mailto:support@nutrisnap.app';
+
+try {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+  console.log('[Server] Web Push VAPID credentials configured');
+} catch (vapidErr) {
+  console.warn('[Server] Web Push VAPID setup note:', vapidErr);
+}
+
+interface StoredSubscription {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  role: 'dietician' | 'patient';
+  userId?: string;
+  createdAt: number;
+}
+
+const pushSubscriptionsMap = new Map<string, StoredSubscription>();
+
+// 1. Get VAPID Public Key
+app.get('/api/notifications/vapid-key', (req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+// 2. Subscribe device to Push Notifications
+app.post('/api/notifications/subscribe', async (req: express.Request, res: express.Response): Promise<any> => {
+  try {
+    const { subscription, role, userId } = req.body;
+    if (!subscription || !subscription.endpoint || !subscription.keys) {
+      return res.status(400).json({ error: 'Invalid push subscription payload' });
+    }
+
+    const subId = crypto.createHash('md5').update(subscription.endpoint).digest('hex');
+    const storedItem: StoredSubscription = {
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+      role: role || 'patient',
+      userId: userId || undefined,
+      createdAt: Date.now()
+    };
+
+    pushSubscriptionsMap.set(subId, storedItem);
+
+    // Persist to Firestore collection 'push_subscriptions' for cross-instance and persistent delivery
+    try {
+      await ensureAdminAuth();
+      await setDoc(doc(db, 'push_subscriptions', subId), {
+        ...storedItem,
+        updatedAt: serverTimestamp()
+      });
+    } catch (fsErr) {
+      console.warn('[Server] Firestore push_subscriptions write note:', fsErr);
+    }
+
+    console.log(`[Server] Device subscribed to Push Notifications (${role}, user: ${userId || 'all'})`);
+    return res.json({ success: true, subId });
+  } catch (err: any) {
+    console.error('[Server] Push subscription error:', err);
+    return res.status(500).json({ error: 'Failed to save push subscription', details: err.message });
+  }
+});
+
+// 3. Dispatch Web Push Notification (called when query submitted, query answered, meal plan published, or custom alert)
+app.post('/api/notifications/send-push', async (req: express.Request, res: express.Response): Promise<any> => {
+  try {
+    const { role, recipientId, title, message, link, tag, type } = req.body;
+
+    const payload = JSON.stringify({
+      title: title || 'NutriSnap Health Alert',
+      message: message || 'You have a new clinical update on NutriSnap.',
+      link: link || (role === 'dietician' ? '/dietician/inbox' : '/patient/meals'),
+      tag: tag || `push_${Date.now()}`,
+      type: type || 'ALERT',
+      timestamp: Date.now()
+    });
+
+    // Gather subscriptions from in-memory map and Firestore
+    const candidateSubs: StoredSubscription[] = Array.from(pushSubscriptionsMap.values());
+
+    try {
+      await ensureAdminAuth();
+      const snap = await getDocs(collection(db, 'push_subscriptions'));
+      snap.docs.forEach(d => {
+        const data = d.data() as StoredSubscription;
+        if (data && data.endpoint && !candidateSubs.some(s => s.endpoint === data.endpoint)) {
+          candidateSubs.push(data);
+        }
+      });
+    } catch (e) {
+      console.warn('[Server] Push subs fetch from Firestore note:', e);
+    }
+
+    // Filter matching recipients
+    const targetSubs = candidateSubs.filter(sub => {
+      if (role && sub.role !== role) return false;
+      if (recipientId && sub.userId && sub.userId !== recipientId) return false;
+      return true;
+    });
+
+    console.log(`[Server] Dispatching push notification to ${targetSubs.length} device(s)`);
+
+    let sentCount = 0;
+    const sendPromises = targetSubs.map(async (sub) => {
+      try {
+        await webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: sub.keys
+        }, payload, {
+          TTL: 60 * 60 * 24 // 24 hours delivery window
+        });
+        sentCount++;
+      } catch (pushErr: any) {
+        console.warn(`[Server] Push dispatch to endpoint failed: ${pushErr.statusCode || pushErr.message}`);
+        // If 410 Gone or 404 Not Found, delete the dead subscription
+        if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
+          const subId = crypto.createHash('md5').update(sub.endpoint).digest('hex');
+          pushSubscriptionsMap.delete(subId);
+          deleteDoc(doc(db, 'push_subscriptions', subId)).catch(() => {});
+        }
+      }
+    });
+
+    await Promise.all(sendPromises);
+
+    return res.json({ success: true, sentCount, totalTargets: targetSubs.length });
+  } catch (err: any) {
+    console.error('[Server] send-push error:', err);
+    return res.status(500).json({ error: 'Failed to send push notification', details: err.message });
+  }
+});
+
+// 4. Background Query Poll Endpoint (Prevents 404 in perpetual background checks)
+app.get('/api/queries/poll', async (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: Date.now(),
+    serverTime: new Date().toISOString()
+  });
+});
 
 // ─── RAZORPAY PAYMENT GATEWAY ────────────────────────────────────────────────
 const getRazorpayCredentials = () => {

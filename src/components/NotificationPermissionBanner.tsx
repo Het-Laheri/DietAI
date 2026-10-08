@@ -31,6 +31,8 @@ export default function NotificationPermissionBanner({
       setPermission(res);
       if (res === 'granted') {
         setJustGranted(true);
+        // Subscribe browser PushManager to Web Push notifications
+        await mobileNotificationService.subscribeToPushNotifications(userRole).catch(() => {});
         // Show test greeting popup
         await mobileNotificationService.showMobilePopup({
           title: userRole === 'dietician' ? 'Clinical Alerts Enabled' : 'Health Alerts Enabled',

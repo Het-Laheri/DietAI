@@ -8,6 +8,8 @@ import {
   subscribeToNotifications, 
   markNotificationRead, 
   markAllNotificationsRead, 
+  dismissNotification,
+  clearAllReadNotifications,
   Notification 
 } from './db';
 import { mobileNotificationService } from './mobileNotificationService';
@@ -181,17 +183,14 @@ class PerpetualNotificationEngine {
     const unread = notifs.filter(n => !n.read);
 
     if (!this.hasBootstrapped) {
-      // First boot: mark old unread notifications as seen so we don't spam 20 alerts
-      // Only alert if created very recently (within 5 minutes)
-      const fiveMinAgo = Date.now() - (5 * 60 * 1000);
-      unread.forEach(n => {
-        if (!n.id) return;
-        const time = this.parseTimestamp(n.createdAt);
-        if (time < fiveMinAgo) {
-          mobileNotificationService.markSeen(n.id);
-        } else if (!mobileNotificationService.isSeen(n.id)) {
-          this.triggerAlert(n);
-        }
+      // First boot: alert for any unseen unread notifications (up to 3 most recent to avoid chime flood)
+      const unseenUnread = unread.filter(n => n.id && !mobileNotificationService.isSeen(n.id));
+      unseenUnread.slice(0, 3).forEach(n => {
+        this.triggerAlert(n);
+      });
+      // Mark older ones as seen so they don't repeatedly chime on subsequent polls
+      unseenUnread.slice(3).forEach(n => {
+        if (n.id) mobileNotificationService.markSeen(n.id);
       });
       this.hasBootstrapped = true;
     } else {
@@ -238,6 +237,18 @@ class PerpetualNotificationEngine {
     this.currentNotifications.forEach(n => {
       if (n.id) mobileNotificationService.markSeen(n.id);
     });
+    this.pollNow();
+  }
+
+  public async dismiss(id: string) {
+    await dismissNotification(id);
+    mobileNotificationService.markSeen(id);
+    this.pollNow();
+  }
+
+  public async clearRead() {
+    if (!this.role) return;
+    await clearAllReadNotifications(this.role, this.userId);
     this.pollNow();
   }
 

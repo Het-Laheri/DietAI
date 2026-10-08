@@ -1615,6 +1615,29 @@ export function saveReadNotificationId(id: string) {
   }
 }
 
+const DISMISSED_NOTIFS_KEY = 'nutrisnap_dismissed_notification_ids';
+
+export function getDismissedNotificationIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DISMISSED_NOTIFS_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+export function saveDismissedNotificationId(id: string) {
+  try {
+    const current = getDismissedNotificationIds();
+    current.add(id);
+    const list = Array.from(current).slice(-400);
+    localStorage.setItem(DISMISSED_NOTIFS_KEY, JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('nutrisnap:notification_change'));
+  } catch (err) {
+    console.warn('saveDismissedNotificationId note:', err);
+  }
+}
+
 export const parseNotificationTime = (n: Notification): number => {
   const val = n.createdAt;
   if (!val) return Date.now();
@@ -1659,10 +1682,30 @@ export async function createNotification(data: Notification) {
     };
     await setDoc(doc(db, 'notifications', notifId), cleanDoc);
   } catch {}
+
+  // 4. Dispatch Web Push notification to devices via backend (works even when tab/browser is closed!)
+  try {
+    if (typeof window !== 'undefined') {
+      fetch('/api/notifications/send-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: notifObj.recipientRole,
+          recipientId: notifObj.recipientId || notifObj.patientId,
+          title: notifObj.title || 'NutriSnap Health Alert',
+          message: notifObj.message,
+          link: notifObj.link,
+          tag: notifObj.id,
+          type: notifObj.type
+        })
+      }).catch(() => {});
+    }
+  } catch {}
 }
 
 export async function getNotifications(role?: 'dietician' | 'patient', userId?: string): Promise<Notification[]> {
   const readIds = getReadNotificationIds();
+  const dismissedIds = getDismissedNotificationIds();
   const synthesized: Notification[] = [];
 
   // 1. Fetch live queries
@@ -1674,7 +1717,7 @@ export async function getNotifications(role?: 'dietician' | 'patient', userId?: 
       queries.forEach(q => {
         if (!q.id) return;
         const notifId = `query_${q.id}`;
-        const isRead = q.status !== 'pending' || readIds.has(notifId);
+        const isRead = q.status !== 'pending' || (q as any).dieticianRead === true || readIds.has(notifId);
         synthesized.push({
           id: notifId,
           recipientRole: 'dietician',
@@ -1763,6 +1806,7 @@ export async function getNotifications(role?: 'dietician' | 'patient', userId?: 
   const allCandidates = [...synthesized, ...local];
 
   const filtered = allCandidates.filter(n => {
+    if (n.id && dismissedIds.has(n.id)) return false;
     if (role === 'dietician') {
       return n.recipientRole === 'dietician' || n.recipientRole === 'all' || !n.recipientRole;
     }
@@ -1805,6 +1849,7 @@ export function subscribeToNotifications(
   const computeAndPublish = () => {
     if (!isMounted) return;
     const currentReadIds = getReadNotificationIds();
+    const currentDismissedIds = getDismissedNotificationIds();
     const synthesized: Notification[] = [];
 
     // 1. Synthesize from Live Queries (Firestore 'queries' collection is 100% cloud-allowed!)
@@ -1812,7 +1857,7 @@ export function subscribeToNotifications(
       remoteQueries.forEach(q => {
         if (!q.id) return;
         const notifId = `query_${q.id}`;
-        const isRead = q.status !== 'pending' || currentReadIds.has(notifId);
+        const isRead = q.status !== 'pending' || (q as any).dieticianRead === true || currentReadIds.has(notifId);
         synthesized.push({
           id: notifId,
           recipientRole: 'dietician',
@@ -1894,6 +1939,7 @@ export function subscribeToNotifications(
     const candidateList = [...synthesized, ...local];
 
     const filtered = candidateList.filter(n => {
+      if (n.id && currentDismissedIds.has(n.id)) return false;
       if (role === 'dietician') {
         return n.recipientRole === 'dietician' || n.recipientRole === 'all' || !n.recipientRole;
       }
@@ -1996,7 +2042,8 @@ export async function markNotificationRead(id: string) {
   // Firestore update if it represents a query or meal plan or note
   if (id.startsWith('query_')) {
     const qId = id.replace('query_', '');
-    updateDoc(doc(db, 'queries', qId), { status: 'viewed' }).catch(() => {});
+    // PRESERVE pending status so queries remain in the dietician inbox until answered!
+    updateDoc(doc(db, 'queries', qId), { dieticianRead: true }).catch(() => {});
   } else if (id.startsWith('reply_')) {
     const qId = id.replace('reply_', '');
     updateDoc(doc(db, 'queries', qId), { patientRead: true }).catch(() => {});
@@ -2018,7 +2065,7 @@ export async function markAllNotificationsRead(role: 'dietician' | 'patient', us
       saveReadNotificationId(n.id);
       if (n.id.startsWith('query_')) {
         const qId = n.id.replace('query_', '');
-        updateDoc(doc(db, 'queries', qId), { status: 'viewed' }).catch(() => {});
+        updateDoc(doc(db, 'queries', qId), { dieticianRead: true }).catch(() => {});
       } else if (n.id.startsWith('reply_')) {
         const qId = n.id.replace('reply_', '');
         updateDoc(doc(db, 'queries', qId), { patientRead: true }).catch(() => {});
@@ -2036,7 +2083,8 @@ export async function markAllNotificationsRead(role: 'dietician' | 'patient', us
   window.dispatchEvent(new CustomEvent('nutrisnap:notification_change'));
 }
 
-export async function clearNotification(id: string) {
+export async function dismissNotification(id: string) {
+  saveDismissedNotificationId(id);
   saveReadNotificationId(id);
   const local = getLocalNotifications();
   saveLocalNotifications(local.filter(n => n.id !== id));
@@ -2046,6 +2094,24 @@ export async function clearNotification(id: string) {
   try {
     await deleteDoc(doc(db, 'notifications', id));
   } catch {}
+  window.dispatchEvent(new CustomEvent('nutrisnap:notification_change'));
+}
+
+export async function clearAllReadNotifications(role: 'dietician' | 'patient', userId?: string) {
+  const notifs = await getNotifications(role, userId);
+  const readItems = notifs.filter(n => n.read);
+  for (const item of readItems) {
+    if (item.id) {
+      saveDismissedNotificationId(item.id);
+    }
+  }
+  const local = getLocalNotifications();
+  saveLocalNotifications(local.filter(n => !n.read));
+  window.dispatchEvent(new CustomEvent('nutrisnap:notification_change'));
+}
+
+export async function clearNotification(id: string) {
+  await dismissNotification(id);
 }
 
 // ─── CLINICAL CONSULTATION NOTES ─────────────────────────────────────────────

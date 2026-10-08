@@ -299,7 +299,11 @@ export default function MessageInbox() {
   const answeredCount = queries.filter(q => q.status === 'answered').length;
 
   const filtered = queries.filter(q => {
-    const matchesFilter = filter === 'all' || q.status === filter;
+    const matchesFilter = filter === 'all' 
+      ? true 
+      : filter === 'pending' 
+        ? (q.status === 'pending' || q.status === 'viewed') 
+        : q.status === filter;
     const qLower = searchQuery.toLowerCase();
     const matchesSearch = !searchQuery ||
       (q.patientName && q.patientName.toLowerCase().includes(qLower)) ||

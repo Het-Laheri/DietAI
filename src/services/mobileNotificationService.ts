@@ -299,6 +299,81 @@ class MobileNotificationService {
     }
     return this.alertNewNotification(payload as MobileNotificationPayload);
   }
+
+  /**
+   * Subscribe browser / device to real Web Push notifications via Service Worker PushManager
+   * so OS push notifications arrive even when app / browser tab is completely closed.
+   */
+  public async subscribeToPushNotifications(role: 'dietician' | 'patient', userId?: string): Promise<boolean> {
+    if (typeof window === 'undefined') return false;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      return false;
+    }
+
+    try {
+      // 1. Ensure Service Worker is registered
+      await this.initServiceWorker();
+      const readyReg = await navigator.serviceWorker.ready;
+
+      // 2. Fetch VAPID Public Key from backend or fallback
+      let vapidPublicKey = '';
+      try {
+        const res = await fetch('/api/notifications/vapid-key');
+        if (res.ok) {
+          const data = await res.json();
+          vapidPublicKey = data.publicKey;
+        }
+      } catch {}
+
+      if (!vapidPublicKey) {
+        vapidPublicKey = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY || 'BF0eHsETu6MTVR7eiyVk65qAqC8WEww3yH1wn5dh-836PtGxUk368pDq3udFCDZxxTyF1Hk9HE7dOkOz8q1zBTI';
+      }
+
+      // 3. Check existing subscription or subscribe
+      let subscription = await readyReg.pushManager.getSubscription();
+      if (!subscription) {
+        const appServerKey = urlBase64ToUint8Array(vapidPublicKey);
+        subscription = await readyReg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: appServerKey
+        });
+      }
+
+      // 4. Send subscription to server
+      if (subscription) {
+        const subJson = subscription.toJSON();
+        await fetch('/api/notifications/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subscription: subJson,
+            role,
+            userId
+          })
+        });
+        console.log('[WebPush] Device subscribed to Push API:', role, userId || 'all');
+        return true;
+      }
+    } catch (err) {
+      console.warn('Push subscription note:', err);
+    }
+    return false;
+  }
+}
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
 }
 
 export const mobileNotificationService = new MobileNotificationService();

@@ -553,19 +553,19 @@ export default function PatientOverview() {
         <div className="flex items-center gap-3 shrink-0 relative z-10 w-full sm:w-auto">
           {subscribed ? (
             <Link
-              to="/patient/meals"
+              to="/patient/plate"
               className="w-full sm:w-auto justify-center px-5 py-3 bg-white hover:bg-orange-50 text-orange-600 font-extrabold rounded-xl text-xs md:text-sm shadow-lg shadow-black/10 hover:scale-102 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer"
             >
-              <ClipboardList className="w-4 h-4 text-orange-500" />
-              Today's Meal Checklist
+              <Utensils className="w-4 h-4 text-orange-500" />
+              Build Plate & Swaps
             </Link>
           ) : (
             <Link
-              to="/patient/meals"
+              to="/patient/plate"
               className="w-full sm:w-auto justify-center px-5 py-3 bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-amber-200 text-amber-950 font-extrabold rounded-xl text-xs md:text-sm shadow-lg shadow-black/10 hover:scale-102 transition-all flex items-center gap-2 whitespace-nowrap"
             >
               <Lock className="w-4 h-4 text-amber-800" />
-              Unlock Today's Meals
+              Unlock Plate Builder
             </Link>
           )}
         </div>

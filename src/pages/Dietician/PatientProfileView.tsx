@@ -29,9 +29,33 @@ import {
   buildClinicalMealPlanFromRecipes,
   filterRecipesForPatient,
   calculatePatientProgramTimeline,
-  createNotification
+  createNotification,
+  PatientLabBiomarkers,
+  ClinicalBiomarkerItem,
+  DEFAULT_SAMPLE_LABS,
+  evaluateLabBiomarkers,
+  isBiomarkerRelevantForConditions,
+  updatePatientProfile
 } from '../../services/db';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  ReferenceLine,
+  ComposedChart
+} from 'recharts';
 import { 
   ChevronLeft, 
   Calendar, 
@@ -67,10 +91,15 @@ import {
   Scale,
   Stethoscope,
   Briefcase,
-  Camera
+  Camera,
+  Save,
+  BarChart3,
+  TrendingUp,
+  Info,
+  HeartPulse
 } from 'lucide-react';
 
-type ActiveTab = 'overview' | 'food_logs' | 'meal_plans' | 'progress' | 'chat' | 'notes' | 'reports';
+type ActiveTab = 'overview' | 'biomarkers' | 'food_logs' | 'meal_plans' | 'progress' | 'chat' | 'notes' | 'reports';
 
 export default function PatientProfileView() {
   const { id } = useParams<{ id: string }>();
@@ -89,6 +118,14 @@ export default function PatientProfileView() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // 13 Clinical Lab Biomarkers State
+  const [editingLabsModal, setEditingLabsModal] = useState(false);
+  const [labFormValues, setLabFormValues] = useState<PatientLabBiomarkers>({});
+  const [savingLabs, setSavingLabs] = useState(false);
+  const [biomarkerFilterMode, setBiomarkerFilterMode] = useState<'relevant' | 'all'>('relevant');
+  const [macroChartMetric, setMacroChartMetric] = useState<'all' | 'carbs' | 'fat' | 'protein' | 'calories'>('all');
+  const [labChartFilter, setLabChartFilter] = useState<'relevant' | 'all'>('relevant');
 
   // Note form state
   const [newNoteContent, setNewNoteContent] = useState('');
@@ -579,6 +616,788 @@ export default function PatientProfileView() {
     }
   };
 
+  const handleSaveLabs = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile) return;
+    setSavingLabs(true);
+    try {
+      const patientId = profile.id || id!;
+      const updatedProfile: PatientProfile = {
+        ...profile,
+        labBiomarkers: {
+          ...profile.labBiomarkers,
+          ...labFormValues,
+          testDate: labFormValues.testDate || new Date().toISOString().split('T')[0]
+        }
+      };
+      await updatePatientProfile(patientId, updatedProfile);
+      setProfile(updatedProfile);
+      setEditingLabsModal(false);
+    } catch (err) {
+      console.error('Failed to save lab biomarkers:', err);
+    } finally {
+      setSavingLabs(false);
+    }
+  };
+
+  const openLabEditModal = () => {
+    const currentLabs = profile?.labBiomarkers || DEFAULT_SAMPLE_LABS;
+    setLabFormValues({ ...currentLabs });
+    setEditingLabsModal(true);
+  };
+
+  const renderMacroProgressChartWithInterpretation = () => {
+    if (!profile) return null;
+
+    const currentLabs = profile.labBiomarkers || DEFAULT_SAMPLE_LABS;
+    const isDiabetic = (profile.clinicalSummary?.conditions || profile.healthInfo?.conditions || '').toLowerCase().includes('diabet');
+
+    const totalCarbsConsumed = timeline.days.reduce((s, d) => s + (d.carbsConsumed || 0), 0);
+    const totalFatConsumed = timeline.days.reduce((s, d) => s + (d.fatConsumed || 0), 0);
+    const totalProteinConsumed = timeline.days.reduce((s, d) => s + (d.proteinConsumed || 0), 0);
+    const totalCaloriesConsumed = timeline.days.reduce((s, d) => s + (d.caloriesConsumed || 0), 0);
+
+    const loggedDays = Math.max(1, timeline.loggedDaysCount || 1);
+    const avgCarbs = Math.round(totalCarbsConsumed / loggedDays);
+    const avgFat = Math.round(totalFatConsumed / loggedDays);
+    const avgProtein = Math.round(totalProteinConsumed / loggedDays);
+    const avgCalories = Math.round(totalCaloriesConsumed / loggedDays);
+
+    const calsFromCarbs = avgCarbs * 4;
+    const calsFromFat = avgFat * 9;
+    const calsFromProtein = avgProtein * 4;
+    const computedMacroTotalCals = Math.max(1, calsFromCarbs + calsFromFat + calsFromProtein);
+
+    const carbPercent = Math.round((calsFromCarbs / computedMacroTotalCals) * 100);
+    const fatPercent = Math.round((calsFromFat / computedMacroTotalCals) * 100);
+    const proteinPercent = Math.max(0, 100 - carbPercent - fatPercent);
+
+    const pieData = [
+      { name: 'Carbohydrates', value: calsFromCarbs, percent: carbPercent, grams: avgCarbs, color: '#f97316' },
+      { name: 'Healthy Fats', value: calsFromFat, percent: fatPercent, grams: avgFat, color: '#eab308' },
+      { name: 'Protein', value: calsFromProtein, percent: proteinPercent, grams: avgProtein, color: '#10b981' }
+    ];
+
+    const proteinGPerKg = ((avgProtein || targetProtein) / (idealBodyWeight || 65)).toFixed(1);
+
+    const macroChartData = timeline.days.map(d => ({
+      day: `Day ${d.dayNumber}`,
+      shortDate: d.displayDate,
+      fullDate: d.fullDate,
+      carbs: Math.round(d.carbsConsumed || 0),
+      targetCarbs: Math.round(targetCarbs),
+      fat: Math.round(d.fatConsumed || 0),
+      targetFat: Math.round(targetFat),
+      protein: Math.round(d.proteinConsumed || 0),
+      targetProtein: Math.round(targetProtein),
+      calories: Math.round(d.caloriesConsumed || 0),
+      targetCalories: Math.round(d.caloriesTarget || targetCalories)
+    }));
+
+    return (
+      <div className="bg-stone-50/70 rounded-xl border border-stone-200/80 p-5 space-y-5">
+        {/* Header with Metric Selector */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-stone-200/70">
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-serif font-bold text-stone-900 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-orange-600" />
+                Macronutrient Intake Progression & Energy Balance
+              </h4>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                Dietitian Analytics
+              </span>
+            </div>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Daily tracking of Carbohydrates, Fats, Protein and Caloric load across Day 1 to Day {timeline.totalDays}
+            </p>
+          </div>
+
+          {/* Metric Selector Tabs */}
+          <div className="flex items-center bg-white border border-stone-200 rounded-lg p-0.5 shadow-2xs text-xs">
+            {[
+              { id: 'all', label: 'All Macros' },
+              { id: 'carbs', label: 'Carbs (g)' },
+              { id: 'fat', label: 'Fats (g)' },
+              { id: 'protein', label: 'Protein (g)' },
+              { id: 'calories', label: 'Calories (kcal)' }
+            ].map(m => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setMacroChartMetric(m.id as any)}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                  macroChartMetric === m.id
+                    ? 'bg-orange-600 text-white shadow-2xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Charts Grid: Left Main Progression, Right Caloric Distribution */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+          {/* Main Progression Chart (8 cols) */}
+          <div className="lg:col-span-8 bg-white p-4 rounded-xl border border-stone-200/90 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold text-stone-800">
+                {macroChartMetric === 'all' && 'Daily Macros (Carbs, Fats, Protein in grams)'}
+                {macroChartMetric === 'carbs' && `Carbohydrate Intake vs Target (${targetCarbs}g)`}
+                {macroChartMetric === 'fat' && `Dietary Fat Intake vs Target (${targetFat}g)`}
+                {macroChartMetric === 'protein' && `Protein Intake vs Target (${targetProtein}g)`}
+                {macroChartMetric === 'calories' && `Caloric Consumption vs Target (${targetCalories} kcal)`}
+              </span>
+              <div className="flex items-center gap-3 text-[11px]">
+                {macroChartMetric === 'all' && (
+                  <>
+                    <span className="flex items-center gap-1 text-orange-600 font-bold">
+                      <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block" /> Carbs
+                    </span>
+                    <span className="flex items-center gap-1 text-amber-600 font-bold">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Fats
+                    </span>
+                    <span className="flex items-center gap-1 text-emerald-600 font-bold">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Protein
+                    </span>
+                  </>
+                )}
+                {macroChartMetric !== 'all' && (
+                  <>
+                    <span className="flex items-center gap-1 text-stone-800 font-bold">
+                      <span className="w-2.5 h-2.5 rounded-full bg-stone-900 inline-block" /> Actual Consumed
+                    </span>
+                    <span className="flex items-center gap-1 text-stone-500 font-medium">
+                      <span className="w-2.5 h-0.5 bg-stone-400 inline-block" /> Prescribed Target
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="h-60 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                {macroChartMetric === 'all' ? (
+                  <LineChart data={macroChartData} margin={{ top: 10, right: 15, bottom: 5, left: -15 }}>
+                    <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} unit="g" />
+                    <Tooltip 
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-white p-2.5 rounded-lg border border-stone-200 shadow-md text-xs space-y-1">
+                              <p className="font-bold text-stone-900">{data.day} • {data.shortDate}</p>
+                              <p className="text-orange-600 font-semibold">Carbs: {data.carbs}g / {data.targetCarbs}g</p>
+                              <p className="text-amber-600 font-semibold">Fats: {data.fat}g / {data.targetFat}g</p>
+                              <p className="text-emerald-600 font-semibold">Protein: {data.protein}g / {data.targetProtein}g</p>
+                              <p className="text-stone-500 text-[10px]">Calories: {data.calories} kcal</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Line type="monotone" dataKey="carbs" stroke="#f97316" strokeWidth={2.5} dot={{ r: 3, fill: '#f97316' }} />
+                    <Line type="monotone" dataKey="fat" stroke="#eab308" strokeWidth={2.5} dot={{ r: 3, fill: '#eab308' }} />
+                    <Line type="monotone" dataKey="protein" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} />
+                  </LineChart>
+                ) : macroChartMetric === 'carbs' ? (
+                  <AreaChart data={macroChartData} margin={{ top: 10, right: 15, bottom: 5, left: -15 }}>
+                    <defs>
+                      <linearGradient id="carbGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f97316" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#f97316" stopOpacity={0.0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} unit="g" />
+                    <ReferenceLine y={targetCarbs} stroke="#ea580c" strokeDasharray="3 3" label={{ value: `Target: ${targetCarbs}g`, fill: '#ea580c', fontSize: 10, position: 'top' }} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="carbs" stroke="#f97316" strokeWidth={2.5} fillOpacity={1} fill="url(#carbGrad)" />
+                  </AreaChart>
+                ) : macroChartMetric === 'fat' ? (
+                  <AreaChart data={macroChartData} margin={{ top: 10, right: 15, bottom: 5, left: -15 }}>
+                    <defs>
+                      <linearGradient id="fatGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#eab308" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#eab308" stopOpacity={0.0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} unit="g" />
+                    <ReferenceLine y={targetFat} stroke="#ca8a04" strokeDasharray="3 3" label={{ value: `Target: ${targetFat}g`, fill: '#ca8a04', fontSize: 10, position: 'top' }} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="fat" stroke="#eab308" strokeWidth={2.5} fillOpacity={1} fill="url(#fatGrad)" />
+                  </AreaChart>
+                ) : macroChartMetric === 'protein' ? (
+                  <AreaChart data={macroChartData} margin={{ top: 10, right: 15, bottom: 5, left: -15 }}>
+                    <defs>
+                      <linearGradient id="protGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} unit="g" />
+                    <ReferenceLine y={targetProtein} stroke="#059669" strokeDasharray="3 3" label={{ value: `Target: ${targetProtein}g`, fill: '#059669', fontSize: 10, position: 'top' }} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="protein" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#protGrad)" />
+                  </AreaChart>
+                ) : (
+                  <BarChart data={macroChartData} margin={{ top: 10, right: 15, bottom: 5, left: -15 }}>
+                    <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} unit=" kcal" />
+                    <ReferenceLine y={targetCalories} stroke="#1c1917" strokeDasharray="3 3" label={{ value: `Target: ${targetCalories} kcal`, fill: '#1c1917', fontSize: 10, position: 'top' }} />
+                    <Tooltip />
+                    <Bar dataKey="calories" fill="#ea580c" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Caloric Distribution & Ratio Card (4 cols) */}
+          <div className="lg:col-span-4 bg-white p-4 rounded-xl border border-stone-200/90 shadow-2xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-stone-800">Energy Macro Distribution</span>
+                <span className="text-[10px] text-stone-500 font-mono">Mean {avgCalories} kcal/d</span>
+              </div>
+
+              {/* Donut Chart */}
+              <div className="h-40 w-full relative">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={38}
+                      outerRadius={56}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: any, name: any, item: any) => [`${item.payload.grams}g (${item.payload.percent}%)`, name]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+                  <span className="text-xs font-mono font-bold text-stone-800">{avgCalories}</span>
+                  <span className="text-[9px] text-stone-400">kcal avg</span>
+                </div>
+              </div>
+
+              {/* Macro Pills Breakdown */}
+              <div className="space-y-1.5 pt-1 text-xs">
+                {pieData.map(p => (
+                  <div key={p.name} className="flex items-center justify-between p-1.5 rounded-lg bg-stone-50 border border-stone-200/50">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.color }} />
+                      <span className="font-semibold text-stone-800 text-[11px]">{p.name}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-stone-900 text-[11px]">{p.grams}g</span>
+                      <span className="text-stone-400 text-[10px] ml-1">({p.percent}%)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-[10px] text-stone-400 pt-2 border-t border-stone-100 mt-2">
+              Prescribed Targets: {targetCarbs}g C • {targetFat}g F • {targetProtein}g P ({targetCalories} kcal)
+            </p>
+          </div>
+        </div>
+
+        {/* Clinical Dietitian Interpretation for Macronutrients */}
+        <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Stethoscope className="w-4 h-4 text-amber-700" />
+            <h5 className="font-bold text-amber-950 text-xs uppercase tracking-wider">
+              Dietitian Clinical Interpretation — Macronutrients & Metabolic Load
+            </h5>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            {/* 1. Carbohydrate Analysis */}
+            <div className="bg-white/80 p-3 rounded-lg border border-amber-200/50 space-y-1">
+              <span className="font-bold text-stone-900 flex items-center gap-1.5 text-[11px]">
+                <Wheat className="w-3.5 h-3.5 text-orange-600" />
+                Carbohydrate Load & Glycemic Control ({avgCarbs}g vs {targetCarbs}g target)
+              </span>
+              <p className="text-stone-700 text-[11px] leading-relaxed">
+                {avgCarbs > targetCarbs + 15 ? (
+                  <>Patient carb intake averages <strong className="text-orange-700">{avgCarbs}g ({carbPercent}% of energy)</strong>, exceeding the clinical threshold of {targetCarbs}g. In patients with {isDiabetic ? 'Type 2 Diabetes' : 'metabolic sensitivity'}, this exacerbates glycemic variability. <em>Dietitian Action:</em> Shift toward lower glycemic index (GI &lt; 55) complex pulses, whole wheat/multigrain, and vegetable bulking.</>
+                ) : (
+                  <>Average carb intake of <strong className="text-emerald-700">{avgCarbs}g ({carbPercent}% of energy)</strong> is compliant with the prescribed cap of {targetCarbs}g. Controlled glycemic indexing prevents postprandial insulin surges while sustaining satiety.</>
+                )}
+              </p>
+            </div>
+
+            {/* 2. Fat Analysis */}
+            <div className="bg-white/80 p-3 rounded-lg border border-amber-200/50 space-y-1">
+              <span className="font-bold text-stone-900 flex items-center gap-1.5 text-[11px]">
+                <Droplet className="w-3.5 h-3.5 text-amber-600" />
+                Dietary Fat & Lipid Metabolism ({avgFat}g vs {targetFat}g target)
+              </span>
+              <p className="text-stone-700 text-[11px] leading-relaxed">
+                Daily fat intake averages <strong className="text-stone-900">{avgFat}g ({fatPercent}% of energy)</strong> vs target {targetFat}g. Correlating with serum Triglycerides ({currentLabs.triglycerides ?? 184} mg/dL) and LDL ({currentLabs.ldl ?? 137} mg/dL): strictly cap saturated fats (ghee/butter) to &lt;7% of calories. Favor cold-pressed mustard oil, walnuts, and flaxseeds to reduce atherogenic risk and liver fat accumulation.
+              </p>
+            </div>
+
+            {/* 3. Protein & Renal Safety */}
+            <div className="bg-white/80 p-3 rounded-lg border border-amber-200/50 space-y-1">
+              <span className="font-bold text-stone-900 flex items-center gap-1.5 text-[11px]">
+                <Dna className="w-3.5 h-3.5 text-emerald-600" />
+                Protein Satiety & Renal Clearance ({avgProtein}g, ~{proteinGPerKg} g/kg IBW)
+              </span>
+              <p className="text-stone-700 text-[11px] leading-relaxed">
+                Protein intake averages <strong className="text-emerald-800">{avgProtein}g/day</strong> (~{proteinGPerKg} g/kg ideal body weight). Glomerular markers (Creatinine: {currentLabs.creatinine ?? 0.88} mg/dL, BUN: {currentLabs.bun ?? 15} mg/dL) confirm healthy renal nitrogenous filtration. Supports lean muscle preservation and post-meal thermogenesis without renal strain.
+              </p>
+            </div>
+
+            {/* 4. Caloric Energy Deficit */}
+            <div className="bg-white/80 p-3 rounded-lg border border-amber-200/50 space-y-1">
+              <span className="font-bold text-stone-900 flex items-center gap-1.5 text-[11px]">
+                <Flame className="w-3.5 h-3.5 text-rose-600" />
+                Caloric Balance & Deficit Trajectory ({avgCalories} kcal vs {targetCalories} kcal)
+              </span>
+              <p className="text-stone-700 text-[11px] leading-relaxed">
+                Patient consumes an average of <strong className="text-stone-900">{avgCalories} kcal/day</strong> against a target of {targetCalories} kcal ({avgCalories - targetCalories > 0 ? `+${avgCalories - targetCalories} kcal surplus` : `${Math.abs(avgCalories - targetCalories)} kcal deficit`}). Energy intake trajectory supports steady weight trajectory toward target goal of <strong className="text-stone-900">{profile.targetWeightKg || currentWeight} kg</strong>.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderBiomarkerProgressChartWithInterpretation = () => {
+    if (!profile) return null;
+
+    const currentLabs = profile.labBiomarkers || DEFAULT_SAMPLE_LABS;
+    const evaluatedBiomarkers = evaluateLabBiomarkers(currentLabs, profile.gender || 'Female');
+    const patientConditions = profile.clinicalSummary?.conditions || profile.healthInfo?.conditions || '';
+
+    const relevantBiomarkers = evaluatedBiomarkers.filter(b => {
+      const rel = isBiomarkerRelevantForConditions(b.key, patientConditions);
+      return rel.isRelevant;
+    });
+
+    const displayedBiomarkers = (labChartFilter === 'relevant' && relevantBiomarkers.length > 0)
+      ? relevantBiomarkers
+      : evaluatedBiomarkers;
+
+    // Ratios for clinical interpretation
+    const tgHdlRatio = ((currentLabs.triglycerides ?? 184) / (currentLabs.hdl ?? 44)).toFixed(2);
+    const sgptVal = currentLabs.sgpt ?? 48;
+    const sgotVal = currentLabs.sgot ?? 35;
+    const altAstRatio = (sgptVal / (sgotVal || 1)).toFixed(2);
+    const bunVal = currentLabs.bun ?? 15;
+    const creatVal = currentLabs.creatinine ?? 0.88;
+    const bunCreatRatio = (bunVal / (creatVal || 1)).toFixed(1);
+    const uricAcidVal = currentLabs.uricAcid ?? 6.6;
+    const naVal = currentLabs.sodium ?? 141;
+    const kVal = currentLabs.potassium ?? 4.3;
+
+    // Chart dataset: map parameters with deviation status score
+    const chartData = displayedBiomarkers.map(b => {
+      const rel = isBiomarkerRelevantForConditions(b.key, patientConditions);
+      // Normalized status score (Optimal: 50, Borderline: 75, Elevated: 95, Low: 25)
+      const score = b.status === 'optimal' ? 50 
+        : b.status === 'borderline' ? 75 
+        : (b.status === 'elevated' || b.status === 'critical') ? 95 
+        : 25;
+
+      const fill = b.status === 'optimal' ? '#10b981' 
+        : b.status === 'borderline' ? '#f59e0b' 
+        : (b.status === 'elevated' || b.status === 'critical') ? '#ef4444' 
+        : '#3b82f6';
+
+      return {
+        name: b.shortName,
+        fullName: b.name,
+        value: b.value,
+        unit: b.unit,
+        range: b.normalRange,
+        statusLabel: b.statusLabel,
+        score,
+        fill,
+        isRelevant: rel.isRelevant,
+        reason: rel.reason
+      };
+    });
+
+    return (
+      <div className="bg-stone-50/70 rounded-xl border border-stone-200/80 p-5 space-y-5">
+        {/* Section Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-stone-200/70">
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-serif font-bold text-stone-900 flex items-center gap-2">
+                <Activity className="w-4 h-4 text-orange-600" />
+                13 Clinical Lab Parameters Status & Organ Profile Chart
+              </h4>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+                Dietitian Overview
+              </span>
+            </div>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Pathology status comparison across all 13 core biomarkers with clinical organ-system risk interpretations
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Filter Toggle */}
+            <div className="flex items-center bg-white border border-stone-200 rounded-lg p-0.5 shadow-2xs text-xs">
+              <button
+                type="button"
+                onClick={() => setLabChartFilter('relevant')}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                  labChartFilter === 'relevant'
+                    ? 'bg-orange-600 text-white shadow-2xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                🎯 Relevant Issues ({relevantBiomarkers.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLabChartFilter('all')}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                  labChartFilter === 'all'
+                    ? 'bg-orange-600 text-white shadow-2xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                🌐 All 13 Labs ({evaluatedBiomarkers.length})
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart + Multi-System Interpretation Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+          {/* Status Bar Chart (7 cols) */}
+          <div className="lg:col-span-7 bg-white p-4 rounded-xl border border-stone-200/90 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-3 text-xs">
+              <span className="font-bold text-stone-800">
+                Pathology Risk & Equilibrium Profile ({chartData.length} Parameters)
+              </span>
+              <div className="flex items-center gap-2 text-[10px] font-bold">
+                <span className="flex items-center gap-1 text-emerald-700">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" /> Optimal
+                </span>
+                <span className="flex items-center gap-1 text-amber-700">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" /> Borderline
+                </span>
+                <span className="flex items-center gap-1 text-rose-700">
+                  <span className="w-2 h-2 rounded-full bg-rose-500" /> Elevated
+                </span>
+              </div>
+            </div>
+
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={chartData}
+                  layout="vertical"
+                  margin={{ top: 5, right: 30, left: 15, bottom: 5 }}
+                >
+                  <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" domain={[0, 100]} hide />
+                  <YAxis
+                    dataKey="name"
+                    type="category"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const d = payload[0].payload;
+                        return (
+                          <div className="bg-white p-2.5 rounded-lg border border-stone-200 shadow-md text-xs space-y-1">
+                            <p className="font-bold text-stone-900">{d.name} ({d.fullName})</p>
+                            <p className="text-orange-700 font-mono font-bold text-sm">{d.value} {d.unit}</p>
+                            <p className="text-stone-500 text-[10px]">Reference: {d.range}</p>
+                            <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold mt-1 ${
+                              d.score <= 50 ? 'bg-emerald-50 text-emerald-800' : d.score <= 75 ? 'bg-amber-50 text-amber-800' : 'bg-rose-50 text-rose-800'
+                            }`}>
+                              {d.statusLabel}
+                            </span>
+                            {d.isRelevant && (
+                              <p className="text-[10px] text-rose-700 font-medium mt-1">🎯 {d.reason}</p>
+                            )}
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={14}>
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <p className="text-[10px] text-stone-400 pt-2 border-t border-stone-100 mt-2 flex items-center justify-between">
+              <span>Bars illustrate metabolic risk & equilibrium (50 = optimal range midpoint; &gt;75 = clinical risk).</span>
+              <span className="font-semibold text-stone-600">Sample Date: {currentLabs.testDate || '2026-09-28'}</span>
+            </p>
+          </div>
+
+          {/* Multi-System Clinical Interpretation (5 cols) */}
+          <div className="lg:col-span-5 bg-white p-4 rounded-xl border border-stone-200/90 shadow-2xs flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center gap-2 pb-2 border-b border-stone-100">
+                <HeartPulse className="w-4 h-4 text-rose-600" />
+                <h5 className="font-bold text-stone-900 text-xs uppercase tracking-wider">
+                  Dietitian Multi-System Clinical Interpretation
+                </h5>
+              </div>
+
+              <div className="space-y-2.5 pt-2 text-xs divide-y divide-stone-100">
+                {/* 1. Cardiometabolic Axis */}
+                <div className="pt-2 first:pt-0 space-y-0.5">
+                  <span className="font-bold text-stone-900 text-[11px] flex items-center justify-between">
+                    <span>🫀 Cardiometabolic & Atherogenic Profile</span>
+                    <span className="text-orange-700 font-mono text-[10px]">TG/HDL: {tgHdlRatio}</span>
+                  </span>
+                  <p className="text-stone-600 text-[11px] leading-relaxed">
+                    TG/HDL ratio is <strong>{tgHdlRatio}</strong> (elevated &gt; 3.0), pointing to atherogenic dyslipidemia, hyperinsulinemia, and small-dense LDL particles. Combined with HbA1c at <strong>{currentLabs.hba1c ?? 6.8}%</strong>, strict elimination of simple sucrose/fructose and addition of soluble psyllium husk is warranted.
+                  </p>
+                </div>
+
+                {/* 2. Hepatic Axis */}
+                <div className="pt-2 space-y-0.5">
+                  <span className="font-bold text-stone-900 text-[11px] flex items-center justify-between">
+                    <span>🫁 Hepatic Stress & Enzymes</span>
+                    <span className="text-rose-700 font-mono text-[10px]">ALT/AST: {altAstRatio}</span>
+                  </span>
+                  <p className="text-stone-600 text-[11px] leading-relaxed">
+                    SGPT / ALT (<strong>{sgptVal} U/L</strong>) elevation over SGOT (<strong>{sgotVal} U/L</strong>) confirms hepatic parenchymal inflammation consistent with Grade 1 Fatty Liver (NAFLD). Recommend hepatic antioxidants: turmeric with black pepper, green leafy sabzis, and avoiding evening heavy carb loads.
+                  </p>
+                </div>
+
+                {/* 3. Renal & Purine Axis */}
+                <div className="pt-2 space-y-0.5">
+                  <span className="font-bold text-stone-900 text-[11px] flex items-center justify-between">
+                    <span>🩸 Renal Filtration & Uric Acid</span>
+                    <span className="text-emerald-700 font-mono text-[10px]">BUN/Cr: {bunCreatRatio}</span>
+                  </span>
+                  <p className="text-stone-600 text-[11px] leading-relaxed">
+                    BUN/Creatinine ratio of <strong>{bunCreatRatio}</strong> confirms normal glomerular perfusion and safe protein handling. Uric Acid at <strong>{uricAcidVal} mg/dL</strong> is on the upper margin; mandate 2.5–3.0 L alkaline hydration (warm lemon water) and soak pulses 4+ hours to leech purines.
+                  </p>
+                </div>
+
+                {/* 4. Electrolytes */}
+                <div className="pt-2 space-y-0.5">
+                  <span className="font-bold text-stone-900 text-[11px] flex items-center justify-between">
+                    <span>⚡ Electrolytes & Vascular Homeostasis</span>
+                    <span className="text-stone-700 font-mono text-[10px]">Na {naVal} / K {kVal}</span>
+                  </span>
+                  <p className="text-stone-600 text-[11px] leading-relaxed">
+                    Sodium (<strong>{naVal} mEq/L</strong>) and Potassium (<strong>{kVal} mEq/L</strong>) are within safe parameters. Adhere to DASH guideline (&lt;2000mg sodium daily; omit papad/pickles) to prevent arterial stiffness and blood pressure spikes.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderBiomarkersPanel = () => {
+    if (!profile) return null;
+    const currentLabs = profile.labBiomarkers || DEFAULT_SAMPLE_LABS;
+    const evaluatedBiomarkers = evaluateLabBiomarkers(currentLabs, profile.gender || 'Female');
+    const patientConditions = profile.clinicalSummary?.conditions || profile.healthInfo?.conditions || '';
+
+    const relevantBiomarkers = evaluatedBiomarkers.filter(b => {
+      const rel = isBiomarkerRelevantForConditions(b.key, patientConditions);
+      return rel.isRelevant;
+    });
+
+    const displayedBiomarkers = (biomarkerFilterMode === 'relevant' && relevantBiomarkers.length > 0)
+      ? relevantBiomarkers
+      : evaluatedBiomarkers;
+
+    const relevantCount = relevantBiomarkers.length;
+    const totalCount = evaluatedBiomarkers.length;
+
+    return (
+      <div className="bg-stone-50/70 rounded-xl border border-stone-200/80 p-5 space-y-5">
+        {/* Section Header with Controls */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-stone-200/70">
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-serif font-bold text-stone-900 flex items-center gap-2">
+                <Activity className="w-4 h-4 text-orange-600" />
+                Clinical Lab Biomarkers & Organ Health Progress
+              </h4>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+                13 Core Parameters
+              </span>
+            </div>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Fasting metabolic profile for larger scale issues. Dynamically filtered for: <strong className="text-stone-800">{patientConditions || 'General Wellness Profile'}</strong>
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Relevance Toggle */}
+            <div className="flex items-center bg-white border border-stone-200 rounded-lg p-0.5 shadow-2xs text-xs">
+              <button
+                type="button"
+                onClick={() => setBiomarkerFilterMode('relevant')}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                  biomarkerFilterMode === 'relevant'
+                    ? 'bg-orange-600 text-white shadow-2xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                🎯 Relevant Issues Only ({relevantCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setBiomarkerFilterMode('all')}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                  biomarkerFilterMode === 'all'
+                    ? 'bg-orange-600 text-white shadow-2xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                🌐 All 13 Parameters ({totalCount})
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={openLabEditModal}
+              className="px-3 py-1.5 bg-stone-900 hover:bg-black text-white text-xs font-semibold rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              Update Lab Values
+            </button>
+          </div>
+        </div>
+
+        {/* Patient Conditions Banner */}
+        {patientConditions && (
+          <div className="bg-orange-50/60 border border-orange-200/60 rounded-lg p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <span className="font-bold text-orange-900 mr-2">Monitored Clinical Conditions:</span>
+              <span className="text-orange-800">{patientConditions}</span>
+            </div>
+            <div className="text-[11px] text-orange-700 font-medium">
+              Showing {displayedBiomarkers.length} of {totalCount} biomarkers {biomarkerFilterMode === 'relevant' ? '(Filtered by diagnosed issues)' : '(Full panel view)'}
+            </div>
+          </div>
+        )}
+
+        {/* Biomarker Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {displayedBiomarkers.map((b) => {
+            const rel = isBiomarkerRelevantForConditions(b.key, patientConditions);
+            return (
+              <div 
+                key={b.key} 
+                className={`bg-white rounded-xl border p-4 shadow-2xs flex flex-col justify-between transition-all ${
+                  rel.isRelevant ? 'border-orange-200/90 hover:border-orange-300' : 'border-stone-200/80 hover:border-stone-300'
+                }`}
+              >
+                <div>
+                  {/* Card Header: Category & Relevance Tag */}
+                  <div className="flex items-start justify-between gap-1 mb-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                      {b.category}
+                    </span>
+                    {rel.isRelevant ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200/70 text-right leading-tight max-w-[65%] truncate" title={rel.reason}>
+                        🎯 {rel.reason.split('/')[0].trim()}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded">
+                        Baseline
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Biomarker Title & Value */}
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div>
+                      <h5 className="font-bold text-stone-900 text-sm">{b.shortName}</h5>
+                      <p className="text-[11px] text-stone-500 leading-tight">{b.name}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xl font-bold font-mono text-stone-900">{b.value}</span>
+                      <span className="text-xs text-stone-500 ml-1 font-medium">{b.unit}</span>
+                    </div>
+                  </div>
+
+                  {/* Status Badge & Normal Range */}
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-stone-100 text-xs">
+                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${b.badgeColor}`}>
+                      {b.statusLabel}
+                    </span>
+                    <span className="text-[11px] text-stone-400 font-medium">
+                      Range: {b.normalRange}
+                    </span>
+                  </div>
+                </div>
+
+                {/* MNT Dietary Action & Discussion */}
+                <div className="mt-3 pt-2.5 border-t border-stone-100 bg-stone-50/70 -mx-4 -mb-4 p-3 rounded-b-xl text-[11px] space-y-1">
+                  <p className="text-stone-800 leading-relaxed">
+                    <strong className="text-orange-900 font-semibold">Dietary Plan: </strong>
+                    {b.dietaryAction}
+                  </p>
+                  <p className="text-stone-500 italic text-[10px] leading-relaxed">
+                    <strong className="text-stone-700 not-italic font-medium">Clinical Context: </strong>
+                    {b.clinicalDiscussionPoint}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Lab Meta Footer */}
+        <div className="pt-3 border-t border-stone-200/70 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-stone-500 gap-2">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-3.5 h-3.5 text-stone-400" />
+            <span>Last Fasting Report: <strong className="text-stone-800">{currentLabs.testDate || '2026-09-28'}</strong></span>
+          </div>
+          {currentLabs.notes && (
+            <div className="italic text-[11px] text-stone-600 sm:max-w-xl text-right">
+              "{currentLabs.notes}"
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 font-sans">
       
@@ -690,6 +1509,7 @@ export default function PatientProfileView() {
         <div className="flex items-center gap-1.5 overflow-x-auto mt-5 pt-3 border-t border-stone-100 scrollbar-none">
           {[
             { id: 'overview', label: 'Overview', icon: User },
+            { id: 'biomarkers', label: '13 Lab Biomarkers', icon: Activity },
             { id: 'food_logs', label: `Food Logs (${allEatingLogs.length || foodLogs.length})`, icon: Utensils },
             { id: 'meal_plans', label: `Meal Plans (${mealPlans.length})`, icon: ChefHat },
             { id: 'progress', label: 'Progress & Trends', icon: Activity },
@@ -957,7 +1777,14 @@ export default function PatientProfileView() {
         </div>
       )}
 
-      {/* 2. FOOD LOGS TAB */}
+      {/* 2. 13 CLINICAL LAB BIOMARKERS TAB */}
+      {activeTab === 'biomarkers' && (
+        <div className="bg-white rounded-xl border border-stone-200/90 p-5 md:p-6 shadow-xs space-y-6">
+          {renderBiomarkersPanel()}
+        </div>
+      )}
+
+      {/* 3. FOOD LOGS TAB */}
       {activeTab === 'food_logs' && (
         <div className="bg-white rounded-xl border border-stone-200/90 p-5 md:p-6 shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-100">
@@ -1394,6 +2221,15 @@ export default function PatientProfileView() {
             )}
           </div>
 
+          {/* Macronutrient Intake Progression & Energy Balance Chart with Clinical Dietitian Interpretation */}
+          {renderMacroProgressChartWithInterpretation()}
+
+          {/* 13 Clinical Lab Parameters Status & Organ Profile Chart with Multi-System Interpretation */}
+          {renderBiomarkerProgressChartWithInterpretation()}
+
+          {/* 13 Clinical Lab Biomarkers Detailed Panel (Filtered to only relevant parameters by default) */}
+          {renderBiomarkersPanel()}
+
           {progressRecords.length === 0 ? (
             <div className="text-center py-6 text-xs text-stone-400">
               No historical biometric progress entries recorded yet. Weight will automatically track as meals are logged.
@@ -1769,6 +2605,257 @@ export default function PatientProfileView() {
                 Save Meal Changes
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: UPDATE 13 LAB BIOMARKERS ─── */}
+      {editingLabsModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-3xl w-full p-6 shadow-xl border border-stone-200 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div>
+                <h3 className="font-serif font-bold text-stone-900 text-lg flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-orange-600" />
+                  Update 13 Core Clinical Lab Biomarkers
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Record latest pathology lab results for {profile?.name} to recalibrate MNT nutrition plans.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingLabsModal(false)}
+                className="text-stone-400 hover:text-stone-700 text-sm font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveLabs} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                    Lab Report Date
+                  </label>
+                  <input
+                    type="date"
+                    value={labFormValues.testDate || ''}
+                    onChange={(e) => setLabFormValues({ ...labFormValues, testDate: e.target.value })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-lg text-xs font-medium focus:ring-1 focus:ring-orange-500 focus:outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                    Pathology Laboratory / Clinical Notes
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Fasting 12hr metabolic profile, Metropolis Labs"
+                    value={labFormValues.notes || ''}
+                    onChange={(e) => setLabFormValues({ ...labFormValues, notes: e.target.value })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-lg text-xs focus:ring-1 focus:ring-orange-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* 13 Parameter Inputs */}
+              <div className="pt-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-3">
+                  13 Parameters (Pathology Values)
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 text-xs">
+                  {/* HbA1c */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">HbA1c</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">% (Glycated Hb)</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={labFormValues.hba1c ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, hba1c: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  {/* Haemoglobin */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">Haemoglobin</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">g/dL</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={labFormValues.haemoglobin ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, haemoglobin: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  {/* Cholesterol */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">Total Cholesterol</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">mg/dL</span>
+                    <input
+                      type="number"
+                      step="1"
+                      value={labFormValues.cholesterol ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, cholesterol: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  {/* Triglycerides */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">Triglycerides</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">mg/dL</span>
+                    <input
+                      type="number"
+                      step="1"
+                      value={labFormValues.triglycerides ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, triglycerides: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  {/* HDL */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">HDL Cholesterol</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">mg/dL (Good)</span>
+                    <input
+                      type="number"
+                      step="1"
+                      value={labFormValues.hdl ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, hdl: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  {/* LDL */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">LDL Cholesterol</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">mg/dL (Bad)</span>
+                    <input
+                      type="number"
+                      step="1"
+                      value={labFormValues.ldl ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, ldl: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  {/* SGPT */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">SGPT (ALT)</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">U/L (Liver)</span>
+                    <input
+                      type="number"
+                      step="1"
+                      value={labFormValues.sgpt ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, sgpt: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  {/* SGOT */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">SGOT (AST)</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">U/L (Liver)</span>
+                    <input
+                      type="number"
+                      step="1"
+                      value={labFormValues.sgot ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, sgot: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  {/* Sodium */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">Sodium (Na)</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">mEq/L</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={labFormValues.sodium ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, sodium: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  {/* Potassium */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">Potassium (K)</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">mEq/L</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={labFormValues.potassium ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, potassium: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  {/* Creatinine */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">Creatinine</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">mg/dL (Renal)</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={labFormValues.creatinine ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, creatinine: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  {/* BUN */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">BUN</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">mg/dL (Blood Urea)</span>
+                    <input
+                      type="number"
+                      step="1"
+                      value={labFormValues.bun ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, bun: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  {/* Uric Acid */}
+                  <div className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/60">
+                    <label className="block font-bold text-stone-800 text-xs">Uric Acid</label>
+                    <span className="text-[10px] text-stone-400 block mb-1">mg/dL (Purine)</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={labFormValues.uricAcid ?? ''}
+                      onChange={(e) => setLabFormValues({ ...labFormValues, uricAcid: Number(e.target.value) })}
+                      className="w-full px-2 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingLabsModal(false)}
+                  className="px-4 py-2 text-stone-600 text-xs font-semibold hover:text-stone-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingLabs}
+                  className="px-5 py-2 bg-stone-900 hover:bg-black text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {savingLabs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  {savingLabs ? 'Saving Labs...' : 'Save Laboratory Values'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

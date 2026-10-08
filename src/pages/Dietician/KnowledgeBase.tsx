@@ -231,6 +231,75 @@ export default function KnowledgeBase() {
   const [assignSaving, setAssignSaving] = useState(false);
   const [assignSuccess, setAssignSuccess] = useState(false);
 
+  // Manual Recipe / Template Input Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newRecipeName, setNewRecipeName] = useState('');
+  const [newDietaryType, setNewDietaryType] = useState('Vegetarian');
+  const [newMealCategory, setNewMealCategory] = useState<MealSlot>('Lunch');
+  const [newServingSize, setNewServingSize] = useState('1 serving');
+  const [newCalories, setNewCalories] = useState<number | ''>(150);
+  const [newProtein, setNewProtein] = useState<number | ''>(6);
+  const [newCarbs, setNewCarbs] = useState<number | ''>(25);
+  const [newFat, setNewFat] = useState<number | ''>(2);
+  const [newFiber, setNewFiber] = useState<number | ''>(4);
+  const [newSodium, setNewSodium] = useState<number | ''>(30);
+  const [newPotassium, setNewPotassium] = useState<number | ''>(250);
+  const [newIngredients, setNewIngredients] = useState('');
+  const [newMethod, setNewMethod] = useState('');
+  const [newClinicalFocus, setNewClinicalFocus] = useState('Exchange List Verified');
+  const [addingRecipe, setAddingRecipe] = useState(false);
+
+  const handleSaveManualRecipe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRecipeName.trim()) {
+      alert('Please enter a recipe name.');
+      return;
+    }
+    setAddingRecipe(true);
+    try {
+      const ingList = newIngredients.split(/,|\n/).map(i => i.trim()).filter(Boolean);
+      const methodSteps = newMethod.split(/;|\n|\. /).map(s => s.trim() + (s.trim().endsWith('.') ? '' : '.')).filter(Boolean);
+      
+      const newRecipe: RecipeDBItem = {
+        id: `rec_manual_${Date.now()}`,
+        name: newRecipeName.trim(),
+        dietaryType: newDietaryType,
+        mealTypes: [newMealCategory],
+        calories: Number(newCalories) || 0,
+        protein: Number(newProtein) || 0,
+        carbs: Number(newCarbs) || 0,
+        fat: Number(newFat) || 0,
+        fiber: Number(newFiber) || 0,
+        sodium: Number(newSodium) || 0,
+        potassium: Number(newPotassium) || 0,
+        ingredients: ingList.length > 0 ? ingList : [`Portion of ${newRecipeName.trim()}`],
+        recipe: methodSteps.length > 0 ? methodSteps : [`Prepare ${newRecipeName.trim()} according to measured clinical portions.`],
+        prepTime: '10 mins',
+        cookTime: '15 mins',
+        portionSize: newServingSize || '1 serving',
+        clinicalFocus: newClinicalFocus || 'Clinical Exchange Recipe',
+        source: 'Manual Input (Dietician Portal)',
+        sourceFileName: 'Manual_Input',
+        sheetName: newMealCategory,
+        tags: [],
+        restrictedConditions: []
+      };
+
+      await saveRecipesToDB([newRecipe]);
+      await fetchRecipes();
+      setShowAddModal(false);
+      setNewRecipeName('');
+      setNewIngredients('');
+      setNewMethod('');
+      alert(`Recipe "${newRecipe.name}" added successfully!`);
+    } catch (err: any) {
+      console.error('Failed to add manual recipe:', err);
+      alert('Error saving recipe: ' + (err.message || 'Unknown error'));
+    } finally {
+      setAddingRecipe(false);
+    }
+  };
+
   const fetchRecipes = async () => {
     try {
       setLoading(true);
@@ -523,28 +592,25 @@ export default function KnowledgeBase() {
 
       {/* Top Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-        {/* Upload */}
+        {/* Manual Template / Recipe Entry */}
         <div className="bg-white rounded-xl border border-stone-200/90 p-5 md:p-6 flex flex-col items-center justify-center text-center shadow-xs">
           <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center mb-3 text-emerald-700 border border-emerald-100">
-            <Archive className="w-6 h-6" />
+            <Plus className="w-6 h-6" />
           </div>
           <div className="flex items-center gap-1.5 mb-1">
-            <h3 className="font-serif font-bold text-stone-900 text-sm">Upload Recipes (.ZIP / Excel)</h3>
-            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200/60 rounded-md">Batch ZIP</span>
+            <h3 className="font-serif font-bold text-stone-900 text-sm">Manual Recipe / Template Entry</h3>
+            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200/60 rounded-md">200 Presets Active</span>
           </div>
           <p className="text-xs text-stone-500 mb-4 max-w-md">
-            Upload a <strong>.ZIP archive</strong> containing your practice recipes, or individual <strong>.xlsx / .xls</strong> files. ICMR/IFCT format auto-detected.
+            Input template values and custom clinical recipes manually using dedicated input fields instead of spreadsheet uploads.
           </p>
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".zip,.xlsx,.xls,.csv,.pdf,.doc,.docx" className="hidden" />
           <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="px-5 py-2.5 bg-stone-900 text-white font-semibold hover:bg-black transition-colors disabled:opacity-50 flex items-center gap-2 text-xs uppercase tracking-wider rounded-lg shadow-xs"
+            onClick={() => setShowAddModal(true)}
+            className="px-5 py-2.5 bg-stone-900 text-white font-semibold hover:bg-black transition-colors flex items-center gap-2 text-xs uppercase tracking-wider rounded-lg shadow-xs"
           >
-            {uploading ? <Loader2 className="w-4 h-4 animate-spin text-emerald-400" /> : <FileSpreadsheet className="w-4 h-4 text-emerald-400" />}
-            {uploading ? (uploadStatus || 'Processing...') : 'Upload .ZIP / Excel Files'}
+            <Plus className="w-4 h-4 text-emerald-400" />
+            + Add Recipe / Template Manually
           </button>
-          {uploading && uploadStatus && <p className="mt-2.5 text-xs text-emerald-700 font-mono animate-pulse">{uploadStatus}</p>}
         </div>
 
         {/* Stats */}
@@ -945,6 +1011,205 @@ export default function KnowledgeBase() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* Manual Recipe / Template Input Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-stone-200 my-8">
+            <div className="flex justify-between items-center pb-4 border-b border-stone-100 mb-4">
+              <div>
+                <h3 className="font-serif font-bold text-lg text-stone-900">Add Clinical Recipe / Template</h3>
+                <p className="text-xs text-stone-500">Input recipe macro and preparation template values manually.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveManualRecipe} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block uppercase font-bold text-stone-500 mb-1">Recipe / Dish Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newRecipeName}
+                    onChange={e => setNewRecipeName(e.target.value)}
+                    placeholder="e.g. Sprouted Moong Cutlet"
+                    className="w-full border border-stone-300 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block uppercase font-bold text-stone-500 mb-1">Dietary Type</label>
+                  <select
+                    value={newDietaryType}
+                    onChange={e => setNewDietaryType(e.target.value)}
+                    className="w-full border border-stone-300 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
+                  >
+                    <option value="Vegetarian">Vegetarian</option>
+                    <option value="Eggetarian">Eggetarian</option>
+                    <option value="Non-Vegetarian">Non-Vegetarian</option>
+                    <option value="Vegan">Vegan</option>
+                    <option value="Jain">Jain</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block uppercase font-bold text-stone-500 mb-1">Meal Slot / Category</label>
+                  <select
+                    value={newMealCategory}
+                    onChange={e => setNewMealCategory(e.target.value as MealSlot)}
+                    className="w-full border border-stone-300 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
+                  >
+                    {MEAL_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block uppercase font-bold text-stone-500 mb-1">Serving Portion</label>
+                  <input
+                    type="text"
+                    value={newServingSize}
+                    onChange={e => setNewServingSize(e.target.value)}
+                    placeholder="e.g. 1 serving (150g)"
+                    className="w-full border border-stone-300 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Nutritional Template Values */}
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
+                <span className="text-[10px] uppercase font-bold text-stone-600 block mb-2 tracking-wider">
+                  Nutritional Template Values (Per Serving)
+                </span>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-0.5">Calories (kcal)</label>
+                    <input
+                      type="number"
+                      value={newCalories}
+                      onChange={e => setNewCalories(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full border border-stone-300 rounded px-2 py-1.5 bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-0.5">Protein (g)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={newProtein}
+                      onChange={e => setNewProtein(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full border border-stone-300 rounded px-2 py-1.5 bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-0.5">Carbs (g)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={newCarbs}
+                      onChange={e => setNewCarbs(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full border border-stone-300 rounded px-2 py-1.5 bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-0.5">Fat (g)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={newFat}
+                      onChange={e => setNewFat(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full border border-stone-300 rounded px-2 py-1.5 bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-0.5">Fiber (g)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={newFiber}
+                      onChange={e => setNewFiber(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full border border-stone-300 rounded px-2 py-1.5 bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-0.5">Sodium (mg)</label>
+                    <input
+                      type="number"
+                      value={newSodium}
+                      onChange={e => setNewSodium(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full border border-stone-300 rounded px-2 py-1.5 bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-0.5">Potassium (mg)</label>
+                    <input
+                      type="number"
+                      value={newPotassium}
+                      onChange={e => setNewPotassium(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full border border-stone-300 rounded px-2 py-1.5 bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-0.5">Clinical Focus</label>
+                    <input
+                      type="text"
+                      value={newClinicalFocus}
+                      onChange={e => setNewClinicalFocus(e.target.value)}
+                      placeholder="e.g. Low-GI Care"
+                      className="w-full border border-stone-300 rounded px-2 py-1.5 bg-white text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block uppercase font-bold text-stone-500 mb-1">Ingredients (comma-separated)</label>
+                <input
+                  type="text"
+                  value={newIngredients}
+                  onChange={e => setNewIngredients(e.target.value)}
+                  placeholder="e.g. Sprouted Moong (40g), Grated Carrot (50g), Cumin powder"
+                  className="w-full border border-stone-300 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block uppercase font-bold text-stone-500 mb-1">Preparation Method / Steps</label>
+                <textarea
+                  rows={3}
+                  value={newMethod}
+                  onChange={e => setNewMethod(e.target.value)}
+                  placeholder="e.g. Mix ingredients with warm water, shape into cutlets, roast on non-stick pan with drops of cold-pressed oil until golden brown."
+                  className="w-full border border-stone-300 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-emerald-500 resize-y"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 border border-stone-300 rounded-lg font-semibold text-stone-700 hover:bg-stone-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addingRecipe}
+                  className="px-5 py-2 bg-stone-900 hover:bg-black text-white rounded-lg font-semibold uppercase tracking-wider flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {addingRecipe ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 text-emerald-400" />}
+                  Save Recipe to DB
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

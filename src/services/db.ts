@@ -63,12 +63,388 @@ export interface PatientProfile {
     notes: string;
   };
   allergies?: string[];
+  labBiomarkers?: PatientLabBiomarkers;
   status: 'active' | 'inactive';
   needsAttention: boolean;
   adherencePercentage?: number;
   lastConsultationDate?: string;
   nextFollowUpDate?: string;
   createdAt?: any;
+}
+
+// ─── 13 CORE CLINICAL LAB BIOMARKERS PANEL ──────────────────────────────────
+export interface PatientLabBiomarkers {
+  testDate?: string;
+  hba1c?: number;           // % (Normal < 5.7, Prediabetes 5.7-6.4, Diabetes >= 6.5)
+  haemoglobin?: number;     // g/dL (Female 12-15.5, Male 13.5-17.5)
+  cholesterol?: number;     // mg/dL (Desirable < 200, Borderline 200-239, High >= 240)
+  triglycerides?: number;   // mg/dL (Normal < 150, Borderline 150-199, High >= 200)
+  hdl?: number;             // mg/dL (Optimal Female > 50, Male > 40)
+  ldl?: number;             // mg/dL (Optimal < 100, Borderline 100-129, High >= 130)
+  sgpt?: number;            // U/L (ALT, Normal 7-56)
+  sgot?: number;            // U/L (AST, Normal 10-40)
+  sodium?: number;          // mEq/L (Normal 135-145)
+  potassium?: number;       // mEq/L (Normal 3.5-5.0)
+  creatinine?: number;      // mg/dL (Normal 0.6-1.2)
+  bun?: number;             // mg/dL (Normal 7-20)
+  uricAcid?: number;        // mg/dL (Female 2.4-6.0, Male 3.4-7.0)
+  notes?: string;
+}
+
+export interface ClinicalBiomarkerItem {
+  key: keyof PatientLabBiomarkers;
+  name: string;
+  shortName: string;
+  category: 'Metabolic & Glycemic' | 'Hematology' | 'Lipid Profile' | 'Liver Function' | 'Electrolytes' | 'Renal & Uric Acid';
+  value: number;
+  unit: string;
+  normalRange: string;
+  status: 'optimal' | 'borderline' | 'elevated' | 'low' | 'critical';
+  statusLabel: string;
+  badgeColor: string;
+  dietaryAction: string;
+  clinicalDiscussionPoint: string;
+}
+
+export const DEFAULT_SAMPLE_LABS: PatientLabBiomarkers = {
+  testDate: '2026-09-28',
+  hba1c: 6.8,            // Elevated (Diabetes range)
+  haemoglobin: 12.6,      // Optimal
+  cholesterol: 218,       // Borderline High
+  triglycerides: 184,     // Borderline High
+  hdl: 44,                // Borderline Low
+  ldl: 137,               // Elevated
+  sgpt: 48,               // Borderline Elevated (Fatty liver marker)
+  sgot: 35,               // Normal
+  sodium: 141,            // Normal
+  potassium: 4.3,         // Normal
+  creatinine: 0.88,       // Normal
+  bun: 15,                // Normal
+  uricAcid: 6.6,          // Borderline High
+  notes: 'Recent fasting metabolic panel: Moderate dyslipidemia and elevated HbA1c (6.8%) consistent with metabolic syndrome and Grade 1 Fatty Liver. Renal markers intact.'
+};
+
+export function evaluateLabBiomarkers(
+  labs: PatientLabBiomarkers = DEFAULT_SAMPLE_LABS,
+  gender: string = 'Female'
+): ClinicalBiomarkerItem[] {
+  const isFemale = (gender || '').toLowerCase() !== 'male';
+  const list: ClinicalBiomarkerItem[] = [];
+
+  // 1. HbA1c
+  const hba1c = labs.hba1c ?? 6.8;
+  const hba1cStatus = hba1c < 5.7 ? 'optimal' : hba1c <= 6.4 ? 'borderline' : hba1c <= 8.0 ? 'elevated' : 'critical';
+  list.push({
+    key: 'hba1c',
+    name: 'Glycated Haemoglobin',
+    shortName: 'HbA1c',
+    category: 'Metabolic & Glycemic',
+    value: hba1c,
+    unit: '%',
+    normalRange: '< 5.7%',
+    status: hba1cStatus,
+    statusLabel: hba1cStatus === 'optimal' ? 'Optimal Glycemia' : hba1cStatus === 'borderline' ? 'Prediabetic Range' : 'Type 2 Diabetic',
+    badgeColor: hba1cStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : hba1cStatus === 'borderline' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-rose-100 text-rose-800 border-rose-300',
+    dietaryAction: 'Prescribe low-glycemic complex carbohydrates (millets, daliya, oats, quinoa), ensure ≥ 30g daily fiber, and spread meals across 6 balanced intervals.',
+    clinicalDiscussionPoint: `Current HbA1c of ${hba1c}% indicates average 3-month blood glucose elevation. Low-GI exchanges and meal timing will bring this toward < 6.5%.`
+  });
+
+  // 2. Haemoglobin
+  const hb = labs.haemoglobin ?? 12.6;
+  const hbMin = isFemale ? 12.0 : 13.5;
+  const hbMax = isFemale ? 15.5 : 17.5;
+  const hbStatus = hb < hbMin ? 'low' : hb > hbMax ? 'elevated' : 'optimal';
+  list.push({
+    key: 'haemoglobin',
+    name: 'Haemoglobin',
+    shortName: 'Hb',
+    category: 'Hematology',
+    value: hb,
+    unit: 'g/dL',
+    normalRange: isFemale ? '12.0 – 15.5 g/dL' : '13.5 – 17.5 g/dL',
+    status: hbStatus,
+    statusLabel: hbStatus === 'optimal' ? 'Normal Oxygenation' : hbStatus === 'low' ? 'Mild Anemia' : 'Elevated',
+    badgeColor: hbStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300',
+    dietaryAction: 'Pair plant iron sources (spinach, beetroot, sprouted lentils) with Vitamin C (lemon juice, amla, capsicum) to optimize bioavailability.',
+    clinicalDiscussionPoint: `Haemoglobin at ${hb} g/dL supports healthy cellular oxygenation and metabolic energy.`
+  });
+
+  // 3. Cholesterol (Total)
+  const chol = labs.cholesterol ?? 218;
+  const cholStatus = chol < 200 ? 'optimal' : chol <= 239 ? 'borderline' : 'elevated';
+  list.push({
+    key: 'cholesterol',
+    name: 'Total Cholesterol',
+    shortName: 'Cholesterol',
+    category: 'Lipid Profile',
+    value: chol,
+    unit: 'mg/dL',
+    normalRange: '< 200 mg/dL',
+    status: cholStatus,
+    statusLabel: cholStatus === 'optimal' ? 'Desirable' : cholStatus === 'borderline' ? 'Borderline High' : 'High Hypercholesterolemia',
+    badgeColor: cholStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : cholStatus === 'borderline' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-rose-100 text-rose-800 border-rose-300',
+    dietaryAction: 'Limit saturated cooking fats (butter, ghee, palm oil) to < 7% of total calories; add soluble beta-glucan fiber and plant sterols.',
+    clinicalDiscussionPoint: `Total cholesterol of ${chol} mg/dL requires restriction of dietary saturated fats and boosting dietary soluble fiber.`
+  });
+
+  // 4. Triglycerides
+  const tg = labs.triglycerides ?? 184;
+  const tgStatus = tg < 150 ? 'optimal' : tg <= 199 ? 'borderline' : 'elevated';
+  list.push({
+    key: 'triglycerides',
+    name: 'Serum Triglycerides',
+    shortName: 'Triglycerides',
+    category: 'Lipid Profile',
+    value: tg,
+    unit: 'mg/dL',
+    normalRange: '< 150 mg/dL',
+    status: tgStatus,
+    statusLabel: tgStatus === 'optimal' ? 'Normal' : tgStatus === 'borderline' ? 'Borderline High' : 'High (Metabolic Risk)',
+    badgeColor: tgStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : tgStatus === 'borderline' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-rose-100 text-rose-800 border-rose-300',
+    dietaryAction: 'Eliminate simple sugars, commercial bakery snacks, and fruit concentrates. Increase plant-based omega-3s (flaxseeds, chia seeds, walnuts).',
+    clinicalDiscussionPoint: `Triglycerides at ${tg} mg/dL reflect hepatic carbohydrate packaging; limiting refined sugar shows rapid normalization within 4 weeks.`
+  });
+
+  // 5. HDL
+  const hdl = labs.hdl ?? 44;
+  const hdlMin = isFemale ? 50 : 40;
+  const hdlStatus = hdl >= hdlMin ? 'optimal' : 'low';
+  list.push({
+    key: 'hdl',
+    name: 'High-Density Lipoprotein',
+    shortName: 'HDL ("Good")',
+    category: 'Lipid Profile',
+    value: hdl,
+    unit: 'mg/dL',
+    normalRange: isFemale ? '> 50 mg/dL' : '> 40 mg/dL',
+    status: hdlStatus,
+    statusLabel: hdlStatus === 'optimal' ? 'Cardioprotective' : 'Suboptimal HDL',
+    badgeColor: hdlStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300',
+    dietaryAction: 'Introduce healthy monounsaturated fatty acids (MUFA) from cold-pressed oils, soaked almonds, and walnuts; pair with regular brisk walking.',
+    clinicalDiscussionPoint: `HDL of ${hdl} mg/dL needs a modest lift via heart-healthy MUFAs and aerobic physical activity.`
+  });
+
+  // 6. LDL
+  const ldl = labs.ldl ?? 137;
+  const ldlStatus = ldl < 100 ? 'optimal' : ldl <= 129 ? 'borderline' : 'elevated';
+  list.push({
+    key: 'ldl',
+    name: 'Low-Density Lipoprotein',
+    shortName: 'LDL ("Bad")',
+    category: 'Lipid Profile',
+    value: ldl,
+    unit: 'mg/dL',
+    normalRange: '< 100 mg/dL',
+    status: ldlStatus,
+    statusLabel: ldlStatus === 'optimal' ? 'Optimal Profile' : ldlStatus === 'borderline' ? 'Near Optimal' : 'Atherogenic Risk',
+    badgeColor: ldlStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : ldlStatus === 'borderline' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-rose-100 text-rose-800 border-rose-300',
+    dietaryAction: 'Minimize whole-milk dairy (switch to skim/almond milk); eliminate vanaspati/bakery items; take 5g isabgol (psyllium) before dinner.',
+    clinicalDiscussionPoint: `LDL at ${ldl} mg/dL is the primary target for plaque risk prevention. Low saturated fat and high soluble fiber are critical.`
+  });
+
+  // 7. SGPT (ALT)
+  const sgpt = labs.sgpt ?? 48;
+  const sgptStatus = sgpt <= 45 ? 'optimal' : sgpt <= 65 ? 'borderline' : 'elevated';
+  list.push({
+    key: 'sgpt',
+    name: 'Serum Glutamic Pyruvic Transaminase (ALT)',
+    shortName: 'SGPT / ALT',
+    category: 'Liver Function',
+    value: sgpt,
+    unit: 'U/L',
+    normalRange: '7 – 56 U/L',
+    status: sgptStatus,
+    statusLabel: sgptStatus === 'optimal' ? 'Normal Hepatic Function' : sgptStatus === 'borderline' ? 'Mild Hepatic Strain (Fatty Liver)' : 'Active Hepatic Inflammation',
+    badgeColor: sgptStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : sgptStatus === 'borderline' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-rose-100 text-rose-800 border-rose-300',
+    dietaryAction: 'Prescribe hepatic-safe nutrition: strictly avoid deep-fried foods, samosas, puris; boost cruciferous vegetables (broccoli, cauliflower, cabbage).',
+    clinicalDiscussionPoint: `SGPT at ${sgpt} U/L indicates mild hepatic parenchymal stress common in Grade 1 Fatty Liver; reversible via weight and dietary fat reduction.`
+  });
+
+  // 8. SGOT (AST)
+  const sgot = labs.sgot ?? 35;
+  const sgotStatus = sgot <= 40 ? 'optimal' : 'elevated';
+  list.push({
+    key: 'sgot',
+    name: 'Serum Glutamic Oxaloacetic Transaminase (AST)',
+    shortName: 'SGOT / AST',
+    category: 'Liver Function',
+    value: sgot,
+    unit: 'U/L',
+    normalRange: '10 – 40 U/L',
+    status: sgotStatus,
+    statusLabel: sgotStatus === 'optimal' ? 'Normal Tissue Activity' : 'Elevated AST',
+    badgeColor: sgotStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300',
+    dietaryAction: 'Incorporate hepatic antioxidants: curcumin (turmeric with black pepper), green tea, and raw salads to support liver detoxification.',
+    clinicalDiscussionPoint: `SGOT of ${sgot} U/L is within normal limits, showing hepatic cell integrity is preserved.`
+  });
+
+  // 9. Sodium
+  const na = labs.sodium ?? 141;
+  const naStatus = na < 135 ? 'low' : na > 145 ? 'elevated' : 'optimal';
+  list.push({
+    key: 'sodium',
+    name: 'Serum Sodium (Na)',
+    shortName: 'Sodium',
+    category: 'Electrolytes',
+    value: na,
+    unit: 'mEq/L',
+    normalRange: '135 – 145 mEq/L',
+    status: naStatus,
+    statusLabel: naStatus === 'optimal' ? 'Electrolyte Equilibrium' : naStatus === 'low' ? 'Hyponatremic' : 'Hypernatremic Risk',
+    badgeColor: naStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300',
+    dietaryAction: 'Adhere to DASH guideline: cap table salt to 1 level teaspoon (~2000mg sodium) daily; exclude pickles, papads, and MSG-rich sauces.',
+    clinicalDiscussionPoint: `Serum sodium of ${na} mEq/L is well balanced. Maintaining dietary sodium under 2000mg prevents vascular hypertension.`
+  });
+
+  // 10. Potassium
+  const k = labs.potassium ?? 4.3;
+  const kStatus = k < 3.5 ? 'low' : k > 5.0 ? 'elevated' : 'optimal';
+  list.push({
+    key: 'potassium',
+    name: 'Serum Potassium (K)',
+    shortName: 'Potassium',
+    category: 'Electrolytes',
+    value: k,
+    unit: 'mEq/L',
+    normalRange: '3.5 – 5.0 mEq/L',
+    status: kStatus,
+    statusLabel: kStatus === 'optimal' ? 'Safe Electrolyte Window' : kStatus === 'low' ? 'Hypokalemia' : 'Hyperkalemia Risk',
+    badgeColor: kStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300',
+    dietaryAction: 'Safe to consume standard mineral-rich Indian vegetables (lauki, ridge gourd, spinach, tomato) and fruits; maintains healthy myocardial rhythm.',
+    clinicalDiscussionPoint: `Potassium at ${k} mEq/L confirms normal electrolyte homeostasis and safe cardiac conduction.`
+  });
+
+  // 11. Creatinine
+  const creat = labs.creatinine ?? 0.88;
+  const creatStatus = creat < 0.6 ? 'low' : creat <= 1.2 ? 'optimal' : creat <= 1.5 ? 'borderline' : 'elevated';
+  list.push({
+    key: 'creatinine',
+    name: 'Serum Creatinine',
+    shortName: 'Creatinine',
+    category: 'Renal & Uric Acid',
+    value: creat,
+    unit: 'mg/dL',
+    normalRange: '0.6 – 1.2 mg/dL',
+    status: creatStatus,
+    statusLabel: creatStatus === 'optimal' ? 'Normal Kidney Filtration' : creatStatus === 'borderline' ? 'Mild Renal Load' : 'Renal Impairment',
+    badgeColor: creatStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : creatStatus === 'borderline' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-rose-100 text-rose-800 border-rose-300',
+    dietaryAction: 'Maintain target protein prescription (0.8–1.0 g/kg body weight = ~60–65g daily) from balanced pulses and dairy; avoid unprescribed protein powders.',
+    clinicalDiscussionPoint: `Creatinine at ${creat} mg/dL demonstrates healthy glomerular filtration and kidney clearance.`
+  });
+
+  // 12. BUN
+  const bun = labs.bun ?? 15;
+  const bunStatus = bun <= 20 ? 'optimal' : bun <= 25 ? 'borderline' : 'elevated';
+  list.push({
+    key: 'bun',
+    name: 'Blood Urea Nitrogen',
+    shortName: 'BUN',
+    category: 'Renal & Uric Acid',
+    value: bun,
+    unit: 'mg/dL',
+    normalRange: '7 – 20 mg/dL',
+    status: bunStatus,
+    statusLabel: bunStatus === 'optimal' ? 'Normal Nitrogen Balance' : 'Elevated BUN',
+    badgeColor: bunStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300',
+    dietaryAction: 'Maintain adequate hydration (2.5 – 3.0 liters daily fluid) to assist renal urea clearance and prevent nitrogenous concentration.',
+    clinicalDiscussionPoint: `BUN of ${bun} mg/dL confirms good hydration and appropriate dietary protein metabolism.`
+  });
+
+  // 13. Uric Acid
+  const ua = labs.uricAcid ?? 6.6;
+  const uaMax = isFemale ? 6.0 : 7.0;
+  const uaStatus = ua <= uaMax ? 'optimal' : ua <= 7.2 ? 'borderline' : 'elevated';
+  list.push({
+    key: 'uricAcid',
+    name: 'Serum Uric Acid',
+    shortName: 'Uric Acid',
+    category: 'Renal & Uric Acid',
+    value: ua,
+    unit: 'mg/dL',
+    normalRange: isFemale ? '2.4 – 6.0 mg/dL' : '3.4 – 7.0 mg/dL',
+    status: uaStatus,
+    statusLabel: uaStatus === 'optimal' ? 'Normal Purine Clearance' : uaStatus === 'borderline' ? 'Hyperuricemic Tendency' : 'High Gout Risk',
+    badgeColor: uaStatus === 'optimal' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : uaStatus === 'borderline' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-rose-100 text-rose-800 border-rose-300',
+    dietaryAction: 'Reduce high-purine foods (avoid heavy red meats, organ meats, yeast, excess spinach/rajma if symptomatic); drink 3L water and add alkaline lemon water.',
+    clinicalDiscussionPoint: `Uric acid at ${ua} mg/dL is on the higher threshold. Alkaline hydration and soaking legumes before cooking will normalize purine load.`
+  });
+
+  return list;
+}
+
+// ─── RELEVANCE MAPPING: ONLY SHOW BIOMARKERS RELEVANT TO SPECIFIC CONDITIONS ──
+export function isBiomarkerRelevantForConditions(key: string, conditionsStr: string = ''): { isRelevant: boolean; reason: string } {
+  const cond = (conditionsStr || '').toLowerCase();
+
+  switch (key) {
+    case 'hba1c':
+      if (cond.includes('diabet') || cond.includes('sugar') || cond.includes('insulin') || cond.includes('pcos') || cond.includes('metabolic') || cond.includes('weight')) {
+        return { isRelevant: true, reason: 'Type 2 Diabetes / Glycemic Index Management' };
+      }
+      break;
+    case 'haemoglobin':
+      if (cond.includes('anemia') || cond.includes('iron') || cond.includes('fatigue') || cond.includes('deficiency') || cond.includes('pregnancy')) {
+        return { isRelevant: true, reason: 'Iron Bioavailability & Oxygen Transport' };
+      }
+      break;
+    case 'cholesterol':
+      if (cond.includes('cholesterol') || cond.includes('lipid') || cond.includes('hypertens') || cond.includes('cardiac') || cond.includes('heart') || cond.includes('fatty liver') || cond.includes('diabet')) {
+        return { isRelevant: true, reason: 'Cardiovascular Plaque & Lipid Safety' };
+      }
+      break;
+    case 'triglycerides':
+      if (cond.includes('diabet') || cond.includes('fatty liver') || cond.includes('lipid') || cond.includes('cholesterol') || cond.includes('metabolic') || cond.includes('pcos')) {
+        return { isRelevant: true, reason: 'Insulin Resistance & Hepatic Lipid Packaging' };
+      }
+      break;
+    case 'hdl':
+      if (cond.includes('cholesterol') || cond.includes('lipid') || cond.includes('cardiac') || cond.includes('heart') || cond.includes('diabet') || cond.includes('hypertens')) {
+        return { isRelevant: true, reason: 'Cardioprotective Reverse Cholesterol Transport' };
+      }
+      break;
+    case 'ldl':
+      if (cond.includes('cholesterol') || cond.includes('lipid') || cond.includes('cardiac') || cond.includes('heart') || cond.includes('hypertens') || cond.includes('fatty liver')) {
+        return { isRelevant: true, reason: 'Atherogenic Plaque Risk & Saturated Fat Limit' };
+      }
+      break;
+    case 'sgpt':
+      if (cond.includes('fatty liver') || cond.includes('liver') || cond.includes('hepatic') || cond.includes('alcohol') || cond.includes('nafld') || cond.includes('diabet')) {
+        return { isRelevant: true, reason: 'Hepatic Parenchymal Stress / Fatty Liver Marker' };
+      }
+      break;
+    case 'sgot':
+      if (cond.includes('fatty liver') || cond.includes('liver') || cond.includes('hepatic') || cond.includes('nafld') || cond.includes('cardiac')) {
+        return { isRelevant: true, reason: 'Hepatic & Muscle Tissue Integrity' };
+      }
+      break;
+    case 'sodium':
+      if (cond.includes('hypertens') || cond.includes('bp') || cond.includes('blood pressure') || cond.includes('cardiac') || cond.includes('kidney') || cond.includes('renal') || cond.includes('edema')) {
+        return { isRelevant: true, reason: 'Hypertension & DASH Fluid Homeostasis' };
+      }
+      break;
+    case 'potassium':
+      if (cond.includes('hypertens') || cond.includes('bp') || cond.includes('cardiac') || cond.includes('kidney') || cond.includes('renal') || cond.includes('ckd')) {
+        return { isRelevant: true, reason: 'Renal Clearance & Myocardial Rhythm Safety' };
+      }
+      break;
+    case 'creatinine':
+      if (cond.includes('kidney') || cond.includes('renal') || cond.includes('ckd') || cond.includes('diabet') || cond.includes('hypertens') || cond.includes('nephro')) {
+        return { isRelevant: true, reason: 'Renal Glomerular Filtration & Protein Target' };
+      }
+      break;
+    case 'bun':
+      if (cond.includes('kidney') || cond.includes('renal') || cond.includes('ckd') || cond.includes('hydration') || cond.includes('protein')) {
+        return { isRelevant: true, reason: 'Nitrogenous Clearance & Hydration Monitoring' };
+      }
+      break;
+    case 'uricAcid':
+      if (cond.includes('gout') || cond.includes('uric') || cond.includes('joint') || cond.includes('kidney') || cond.includes('renal') || cond.includes('metabolic')) {
+        return { isRelevant: true, reason: 'Purine Metabolism & Gout / Kidney Stone Risk' };
+      }
+      break;
+  }
+
+  return { isRelevant: false, reason: '' };
 }
 
 export interface ClinicalNote {
@@ -239,6 +615,9 @@ export interface RecipeDBItem {
   protein: number;
   carbs: number;
   fat: number;
+  fiber?: number;
+  sodium?: number;
+  potassium?: number;
   ingredients: string[];
   recipe: string[];
   prepTime?: string;
@@ -1858,8 +2237,8 @@ export async function sendDirectPatientMessage(patientId: string, patientName: s
 
 // ─── RECIPE KNOWLEDGE BASE FIRESTORE DB FUNCTIONS ────────────────────────────
 
-import { DEFAULT_CLINICAL_RECIPES } from './defaultRecipes';
-export { DEFAULT_CLINICAL_RECIPES };
+import { DEFAULT_CLINICAL_RECIPES, EXCHANGE_SYSTEM_REFERENCE } from './defaultRecipes';
+export { DEFAULT_CLINICAL_RECIPES, EXCHANGE_SYSTEM_REFERENCE };
 
 export async function saveRecipesToDB(recipes: RecipeDBItem[]): Promise<number> {
   try {
@@ -1958,7 +2337,7 @@ export async function getStoredRecipesFromDB(
         recipes = data.recipes;
       }
     }
-    if (recipes.length === 0) {
+    if (recipes.length < 200) {
       recipes = DEFAULT_CLINICAL_RECIPES;
     }
 

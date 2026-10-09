@@ -2389,6 +2389,80 @@ export function isRecipeDietaryCompatible(recipeDiet?: string, patientDiet?: str
   return rd === pd;
 }
 
+import { PLATE_FOODS } from '../data/plateFoods';
+
+// Convert PLATE_FOODS (457 items) to RecipeDBItem structure
+const PLATE_FOODS_AS_RECIPES: RecipeDBItem[] = PLATE_FOODS.map(pf => {
+  let diet = pf.dietaryType;
+  if (!diet) {
+    const lower = (pf.dish + ' ' + (pf.notes || '')).toLowerCase();
+    if (lower.includes('egg') && !lower.includes('chicken') && !lower.includes('fish') && !lower.includes('mutton')) {
+      diet = 'Eggetarian';
+    } else if (lower.includes('chicken') || lower.includes('fish') || lower.includes('prawn') || lower.includes('mutton') || lower.includes('meat') || lower.includes('keema')) {
+      diet = 'Non-Vegetarian';
+    } else {
+      diet = 'Vegetarian';
+    }
+  }
+
+  // Infer meal types
+  const lowerName = pf.dish.toLowerCase();
+  const mealTypes: string[] = [];
+  if (/poha|upma|idli|dosa|cheela|chilla|paratha|toast|egg|oats|smoothie|thepla/i.test(lowerName)) {
+    mealTypes.push('Breakfast');
+  }
+  if (/dal|curry|sabzi|sabji|roti|rice|khichdi|paneer|chicken|fish|mutton|thali|biryani|pulao/i.test(lowerName)) {
+    mealTypes.push('Lunch', 'Dinner');
+  }
+  if (/chaat|snack|makhana|tea|salad|soup|sprout|bhel|sundal|tikki/i.test(lowerName)) {
+    mealTypes.push('Morning Snack', 'Evening Snack');
+  }
+  if (mealTypes.length === 0) {
+    mealTypes.push('Lunch', 'Dinner');
+  }
+
+  return {
+    id: `pf_${pf.id}`,
+    name: pf.dish,
+    dietaryType: diet,
+    calories: Math.round(pf.cal || 0),
+    carbs: Math.round(pf.carb || 0),
+    protein: Math.round(pf.protein || 0),
+    fat: Math.round(pf.fat || 0),
+    fiber: Math.round(pf.fibre || 0),
+    sodium: Math.round(pf.sodium || 0),
+    potassium: Math.round(pf.potassium || 0),
+    ingredients: [pf.dish, pf.region ? `${pf.region} traditional preparation` : 'Indian preparation'],
+    recipe: [
+      `Standard portion: ${pf.serving || '1 serving'}`,
+      pf.notes || 'Nutrient values standardized according to traditional home-style preparation.'
+    ],
+    prepTime: '10 mins',
+    cookTime: '15 mins',
+    portionSize: pf.serving || '1 serving',
+    clinicalFocus: `${pf.region || 'Indian'} Cuisine • ${pf.diab || 'Balanced Nutrition'}`,
+    source: 'Indian Regional Food Database',
+    sourceFileName: 'plateFoods.ts',
+    sheetName: pf.region || 'Regional',
+    tags: [
+      pf.diab === 'Portion Controlled' ? 'portion_controlled' : 'diabetes_safe',
+      pf.sodium < 200 ? 'low_sodium' : '',
+      pf.fibre >= 3 ? 'high_fiber' : ''
+    ].filter(Boolean),
+    restrictedConditions: pf.diab === 'Limit / No' ? ['diabetes'] : [],
+    mealTypes,
+    notes: pf.notes || `Traditional ${pf.region} preparation estimate.`
+  };
+});
+
+// Master baseline combining 200 Exchange recipes and 457 Plate foods
+const ALL_BASELINE_RECIPES: RecipeDBItem[] = [
+  ...DEFAULT_CLINICAL_RECIPES,
+  ...PLATE_FOODS_AS_RECIPES.filter(pf => 
+    !DEFAULT_CLINICAL_RECIPES.some(dr => dr.name.toLowerCase() === pf.name.toLowerCase())
+  )
+];
+
 export async function getStoredRecipesFromDB(
   dietaryType?: string,
   clinicalFocus?: string,
@@ -2404,7 +2478,13 @@ export async function getStoredRecipesFromDB(
       }
     }
     if (recipes.length < 200) {
-      recipes = DEFAULT_CLINICAL_RECIPES;
+      recipes = ALL_BASELINE_RECIPES;
+    } else {
+      // Ensure baseline plate foods and clinical recipes are included if custom DB is smaller
+      recipes = [
+        ...recipes,
+        ...ALL_BASELINE_RECIPES.filter(b => !recipes.some(r => r.name.toLowerCase() === b.name.toLowerCase()))
+      ];
     }
 
     if (dietaryType && dietaryType !== 'All') {
@@ -2420,7 +2500,7 @@ export async function getStoredRecipesFromDB(
     return recipes;
   } catch (e) {
     console.error('Error fetching recipes from DB:', e);
-    return DEFAULT_CLINICAL_RECIPES;
+    return ALL_BASELINE_RECIPES;
   }
 }
 

@@ -571,7 +571,161 @@ export default function PatientOverview() {
         </div>
       </div>
 
-      {/* 2. Interactive Circular Progress Meter Carousel - Pastel & Vibrant */}
+      {/* 1. Clinical Weight Management Plan */}
+      {patientData && (
+        <div className="bg-gradient-to-r from-emerald-50/70 via-white to-amber-50/60 rounded-2xl border border-emerald-200/80 p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
+              <Scale className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wider font-extrabold text-stone-500">
+                  Clinical Weight Management Plan
+                </span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-2xs">
+                  {patientData.weightManagement?.primaryGoal || patientData.goals?.[0] || 'Active Program'}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-stone-700 mt-1 font-medium">
+                <span>Current: <strong className="text-stone-900 font-bold">{patientData.currentWeightKg || 68} kg</strong> (BMI {patientData.bmi || ((patientData.currentWeightKg || 68) / Math.pow((patientData.heightCm || 165)/100, 2)).toFixed(1)})</span>
+                <span>•</span>
+                <span>Target: <strong className="text-orange-600 font-bold">{patientData.targetWeightKg || 60} kg</strong></span>
+                <span>•</span>
+                <span>Broca IBW: <strong className="text-emerald-700 font-bold">~{patientData.idealBodyWeightKg || (patientData.gender === 'Male' ? (patientData.heightCm || 170) - 100 : (patientData.heightCm || 165) - 105)} kg</strong></span>
+                {patientData.weightManagement?.targetPace && (
+                  <>
+                    <span>•</span>
+                    <span className="text-stone-600 font-semibold bg-white/80 border border-stone-200 px-2 py-0.5 rounded-md text-[11px]">Pace: {patientData.weightManagement.targetPace}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {patientData.weightManagement?.specificFocus && patientData.weightManagement.specificFocus.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 self-center">
+              {patientData.weightManagement.specificFocus.slice(0, 3).map((f, i) => (
+                <span key={i} className="px-2.5 py-1 rounded-full bg-white text-emerald-800 text-[10px] font-bold border border-emerald-200 shadow-2xs">
+                  ✓ {f}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2. Daily Meal (Today's Prescribed Meals Quick Checklist) */}
+      <div className="bg-white rounded-3xl border border-stone-200/80 p-3.5 sm:p-5 md:p-7 shadow-sm flex flex-col justify-between">
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-2.5 mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shadow-xs shrink-0">
+                <Utensils className="w-4 h-4 sm:w-5 sm:h-5" />
+              </div>
+              <div>
+                <h3 className="font-serif font-black text-stone-900 text-sm sm:text-base md:text-lg">Daily Meals Checklist</h3>
+                <p className="text-[10px] sm:text-[11px] md:text-xs text-stone-500 font-medium">One-tap completion for today's prescribed nutrition schedule</p>
+              </div>
+            </div>
+            <span className="text-[11px] sm:text-xs font-black text-orange-700 bg-orange-50 border border-orange-200/80 px-2.5 sm:px-3 py-1 rounded-full shrink-0">
+              {assignedCompleted.length} of {totalAssignedMeals} Eaten{extraCompleted.length > 0 ? ` (+${extraCompleted.length} extra)` : ''}
+            </span>
+          </div>
+
+          {/* Checklist Meal Rows */}
+          <div className="space-y-2 sm:space-y-2.5 mt-3">
+            {checklistItems.length > 0 ? (
+              checklistItems.map(item => {
+                const isExtraItem = item.isExtra || item.mealType?.toLowerCase().includes('extra');
+                return (
+                <div
+                  key={item.id}
+                  onClick={() => handleToggleMeal(item.id)}
+                  className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all flex items-center justify-between gap-2.5 sm:gap-3 cursor-pointer group ${
+                    item.completed
+                      ? 'bg-emerald-50/70 border-emerald-200/80'
+                      : isExtraItem
+                        ? 'bg-purple-50/50 hover:bg-purple-50 border-purple-200/70 hover:border-purple-300'
+                        : 'bg-stone-50/70 hover:bg-white hover:border-orange-300 border-stone-200/70'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleMeal(item.id);
+                      }}
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all shrink-0 cursor-pointer ${
+                        item.completed
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : isExtraItem
+                            ? 'border-2 border-purple-300 group-hover:border-purple-500 bg-white'
+                            : 'border-2 border-stone-300 group-hover:border-orange-400 bg-white'
+                      }`}
+                    >
+                      {item.completed ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : null}
+                    </button>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <span className={`text-[9px] sm:text-[10px] font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md shrink-0 ${
+                          item.completed 
+                            ? 'bg-emerald-200/70 text-emerald-800' 
+                            : isExtraItem
+                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                              : 'bg-stone-200 text-stone-700'
+                        }`}>
+                          {item.mealType}
+                        </span>
+                        <span className={`text-xs sm:text-sm font-bold truncate ${
+                          item.completed ? 'text-stone-500 line-through' : 'text-stone-900'
+                        }`}>
+                          {item.name}
+                        </span>
+                      </div>
+                      <p className="text-[10px] sm:text-[11px] text-stone-500 mt-0.5 truncate sm:overflow-visible">
+                        {item.calories} kcal • {item.protein}g P • {item.carbs}g C • {item.portion || '1 serving'}
+                        {item.completedAt && (
+                          <span className="ml-1 text-emerald-700 font-semibold">• Done at {item.completedAt}</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-[11px] text-stone-400 shrink-0 font-medium hidden sm:inline">
+                    {item.completed ? '✓ Logged' : 'Tap to complete'}
+                  </span>
+                  <span className="text-xs text-emerald-600 shrink-0 font-black sm:hidden">
+                    {item.completed ? '✓' : ''}
+                  </span>
+                </div>
+              );
+            })
+            ) : (
+              <div className="p-8 text-center bg-stone-50 rounded-2xl border border-dashed border-stone-200 text-stone-500 text-xs md:text-sm">
+                Your personalized clinical meal schedule will appear here once published by your dietician.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="pt-4 mt-5 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <span className="text-[11px] text-stone-500 font-medium">
+            Real-time synchronization with your lead dietician's clinical station
+          </span>
+          <Link
+            to="/patient/meals"
+            className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 group self-start sm:self-auto"
+          >
+            <span>View full meal notepad & clinical recipes</span>
+            <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
+      </div>
+
+      {/* 3. Daily Protein Carb Carousel */}
       <div 
         className={`relative overflow-hidden rounded-3xl p-5 sm:p-6 md:p-8 shadow-md transition-all duration-700 bg-gradient-to-br select-none touch-pan-y ${currentSlide.gradient}`}
         onMouseEnter={() => setIsPaused(true)}
@@ -721,7 +875,7 @@ export default function PatientOverview() {
         </div>
       </div>
 
-      {/* 2.2 7-Day Adherence & Consistency Sparkline */}
+      {/* 4. Daily Streak (7-Day Consistency & Adherence) */}
       <div className="bg-white rounded-3xl border border-stone-200/80 p-3.5 sm:p-5 md:p-7 shadow-sm">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-3.5 sm:pb-4 border-b border-stone-100">
@@ -732,7 +886,7 @@ export default function PatientOverview() {
             <div>
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <h3 className="font-serif font-black text-stone-900 text-sm sm:text-base md:text-lg">
-                  7-Day Consistency & Streak
+                  Daily Streak & Consistency
                 </h3>
                 <span className="text-[9px] sm:text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200/80 flex items-center gap-1">
                   <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-orange-600 fill-orange-500" />
@@ -845,246 +999,21 @@ export default function PatientOverview() {
           })}
         </div>
 
-        {/* Clinical Consistency Note from Jyoti Ma'am */}
+        {/* Clinical Consistency Note */}
         <div className="p-3 sm:p-3.5 bg-gradient-to-r from-emerald-50/80 via-teal-50/50 to-orange-50/50 rounded-2xl border border-emerald-200/70 flex items-center gap-2.5 sm:gap-3">
           <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
             <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700" />
           </div>
           <p className="text-[10px] sm:text-[11px] md:text-xs text-stone-700 font-medium leading-relaxed">
-            <strong className="text-emerald-950 font-bold">Clinical Insight from Jyoti Ma'am:</strong> Consistent meal intervals stimulate digestive enzymatic harmony and optimize metabolic rate. Complete your daily checklist to preserve your streak!
+            <strong className="text-emerald-950 font-bold">Clinical Insight:</strong> Consistent meal intervals stimulate digestive enzymatic harmony and optimize metabolic rate. Complete your daily checklist to preserve your streak!
           </p>
         </div>
       </div>
 
-      {/* 2.5 Today's Prescribed Meals Quick Checklist (Full Width) */}
-      <div className="bg-white rounded-3xl border border-stone-200/80 p-3.5 sm:p-5 md:p-7 shadow-sm flex flex-col justify-between">
-        <div>
-          <div className="flex flex-wrap items-center justify-between gap-2.5 mb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shadow-xs shrink-0">
-                <Utensils className="w-4 h-4 sm:w-5 sm:h-5" />
-              </div>
-              <div>
-                <h3 className="font-serif font-black text-stone-900 text-sm sm:text-base md:text-lg">Today's Meals Checklist</h3>
-                <p className="text-[10px] sm:text-[11px] md:text-xs text-stone-500 font-medium">One-tap completion for today's prescribed nutrition schedule</p>
-              </div>
-            </div>
-            <span className="text-[11px] sm:text-xs font-black text-orange-700 bg-orange-50 border border-orange-200/80 px-2.5 sm:px-3 py-1 rounded-full shrink-0">
-              {assignedCompleted.length} of {totalAssignedMeals} Eaten{extraCompleted.length > 0 ? ` (+${extraCompleted.length} extra)` : ''}
-            </span>
-          </div>
-
-          {/* Checklist Meal Rows */}
-          <div className="space-y-2 sm:space-y-2.5 mt-3">
-            {checklistItems.length > 0 ? (
-              checklistItems.map(item => {
-                const isExtraItem = item.isExtra || item.mealType?.toLowerCase().includes('extra');
-                return (
-                <div
-                  key={item.id}
-                  onClick={() => handleToggleMeal(item.id)}
-                  className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all flex items-center justify-between gap-2.5 sm:gap-3 cursor-pointer group ${
-                    item.completed
-                      ? 'bg-emerald-50/70 border-emerald-200/80'
-                      : isExtraItem
-                        ? 'bg-purple-50/50 hover:bg-purple-50 border-purple-200/70 hover:border-purple-300'
-                        : 'bg-stone-50/70 hover:bg-white hover:border-orange-300 border-stone-200/70'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleMeal(item.id);
-                      }}
-                      className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all shrink-0 cursor-pointer ${
-                        item.completed
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : isExtraItem
-                            ? 'border-2 border-purple-300 group-hover:border-purple-500 bg-white'
-                            : 'border-2 border-stone-300 group-hover:border-orange-400 bg-white'
-                      }`}
-                    >
-                      {item.completed ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : null}
-                    </button>
-
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        <span className={`text-[9px] sm:text-[10px] font-extrabold uppercase px-1.5 sm:px-2 py-0.5 rounded-md shrink-0 ${
-                          item.completed 
-                            ? 'bg-emerald-200/70 text-emerald-800' 
-                            : isExtraItem
-                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                              : 'bg-stone-200 text-stone-700'
-                        }`}>
-                          {item.mealType}
-                        </span>
-                        <span className={`text-xs sm:text-sm font-bold truncate ${
-                          item.completed ? 'text-stone-500 line-through' : 'text-stone-900'
-                        }`}>
-                          {item.name}
-                        </span>
-                      </div>
-                      <p className="text-[10px] sm:text-[11px] text-stone-500 mt-0.5 truncate sm:overflow-visible">
-                        {item.calories} kcal • {item.protein}g P • {item.carbs}g C • {item.portion || '1 serving'}
-                        {item.completedAt && (
-                          <span className="ml-1 text-emerald-700 font-semibold">• Done at {item.completedAt}</span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-
-                  <span className="text-[11px] text-stone-400 shrink-0 font-medium hidden sm:inline">
-                    {item.completed ? '✓ Logged' : 'Tap to complete'}
-                  </span>
-                  <span className="text-xs text-emerald-600 shrink-0 font-black sm:hidden">
-                    {item.completed ? '✓' : ''}
-                  </span>
-                </div>
-              );
-            })
-            ) : (
-              <div className="p-8 text-center bg-stone-50 rounded-2xl border border-dashed border-stone-200 text-stone-500 text-xs md:text-sm">
-                Your personalized clinical meal schedule will appear here once published by your dietician.
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="pt-4 mt-5 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <span className="text-[11px] text-stone-500 font-medium">
-            Real-time synchronization with your lead dietician's clinical station
-          </span>
-          <Link
-            to="/patient/meals"
-            className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 group self-start sm:self-auto"
-          >
-            <span>View full meal notepad & clinical recipes</span>
-            <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-          </Link>
-        </div>
-      </div>
-
-      {/* 3. Clinical Assessment & Weight Management Bar */}
-      {patientData && (
-        <div className="bg-gradient-to-r from-emerald-50/70 via-white to-amber-50/60 rounded-2xl border border-emerald-200/80 p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
-              <Scale className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase tracking-wider font-extrabold text-stone-500">
-                  Clinical Weight Management Plan
-                </span>
-                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-2xs">
-                  {patientData.weightManagement?.primaryGoal || patientData.goals?.[0] || 'Active Program'}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 text-xs text-stone-700 mt-1 font-medium">
-                <span>Current: <strong className="text-stone-900 font-bold">{patientData.currentWeightKg || 68} kg</strong> (BMI {patientData.bmi || ((patientData.currentWeightKg || 68) / Math.pow((patientData.heightCm || 165)/100, 2)).toFixed(1)})</span>
-                <span>•</span>
-                <span>Target: <strong className="text-orange-600 font-bold">{patientData.targetWeightKg || 60} kg</strong></span>
-                <span>•</span>
-                <span>Broca IBW: <strong className="text-emerald-700 font-bold">~{patientData.idealBodyWeightKg || (patientData.gender === 'Male' ? (patientData.heightCm || 170) - 100 : (patientData.heightCm || 165) - 105)} kg</strong></span>
-                {patientData.weightManagement?.targetPace && (
-                  <>
-                    <span>•</span>
-                    <span className="text-stone-600 font-semibold bg-white/80 border border-stone-200 px-2 py-0.5 rounded-md text-[11px]">Pace: {patientData.weightManagement.targetPace}</span>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {patientData.weightManagement?.specificFocus && patientData.weightManagement.specificFocus.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 self-center">
-              {patientData.weightManagement.specificFocus.slice(0, 3).map((f, i) => (
-                <span key={i} className="px-2.5 py-1 rounded-full bg-white text-emerald-800 text-[10px] font-bold border border-emerald-200 shadow-2xs">
-                  ✓ {f}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 4. Grid of 3 Main Feature Action Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        
-        {/* Card 1: Today's Meals Notepad Checklist Card */}
-        <div className="bg-gradient-to-br from-amber-50/60 via-white to-orange-50/40 rounded-2xl border border-amber-200/90 p-5 shadow-sm hover:shadow-md hover:border-amber-300 transition-all flex flex-col justify-between relative overflow-hidden group">
-          {!subscribed && (
-            <div className="absolute top-3 right-3 px-2.5 py-0.5 rounded-full bg-amber-400 text-amber-950 font-black text-[10px] flex items-center gap-1 shadow-xs">
-              <Lock className="w-2.5 h-2.5 text-amber-950" />
-              PRO
-            </div>
-          )}
-          <div>
-            <div className="flex items-center justify-between mb-3.5">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-400 to-orange-500 text-white flex items-center justify-center shadow-md shadow-orange-500/25 group-hover:scale-105 transition-transform">
-                <Utensils className="w-5 h-5" />
-              </div>
-              {subscribed ? (
-                totalAssignedMeals > 0 ? (
-                  <span className="text-xs font-bold text-orange-700 bg-orange-100/70 border border-orange-200 px-2.5 py-0.5 rounded-full">
-                    {checkedItemsCount} of {totalAssignedMeals} Eaten
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100/70 px-2.5 py-0.5 rounded-full border border-amber-300">
-                    Awaiting Plan
-                  </span>
-                )
-              ) : (
-                <span className="text-xs font-bold text-amber-700 flex items-center gap-1">
-                  <Lock className="w-3 h-3" /> Locked
-                </span>
-              )}
-            </div>
-
-            <h3 className="font-serif font-black text-stone-900 text-base mb-1">Dietician's Meal Checklist</h3>
-            <p className="text-xs text-stone-600 mb-4 leading-relaxed font-medium">
-              {subscribed 
-                ? (totalAssignedMeals > 0 
-                    ? "Interactive meal notepad. Check off each prescribed meal as you eat throughout the day."
-                    : "Your dietician is preparing your clinical meal plan strictly from approved practice recipes.")
-                : "Unlock your personalized dietician meal plan, meal checklists, and clinical recipes."}
-            </p>
-
-            {/* Vibrant Progress Bar */}
-            <div className="w-full bg-amber-100 h-2 rounded-full overflow-hidden mb-4">
-              <div 
-                className={`h-full rounded-full transition-all duration-500 ${subscribed ? (totalAssignedMeals > 0 ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-amber-300') : 'bg-stone-300'}`}
-                style={{ width: subscribed ? (totalAssignedMeals > 0 ? `${Math.min(100, (checkedItemsCount / totalAssignedMeals) * 100)}%` : '0%') : '20%' }}
-              />
-            </div>
-          </div>
-
-          {subscribed ? (
-            <Link
-              to={totalAssignedMeals > 0 ? "/patient/meals" : "/patient/inbox"}
-              className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-xs rounded-xl shadow-md shadow-orange-500/20 flex items-center justify-center gap-1.5 transition-all hover:scale-101"
-            >
-              {totalAssignedMeals > 0 ? "Open Meal Checklist" : "Ask Dietician for Plan"}
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          ) : (
-            <Link
-              to="/patient/meals"
-              className="w-full py-2.5 px-4 bg-gradient-to-r from-orange-600 to-rose-600 hover:from-orange-700 hover:to-rose-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-orange-600/25 transition-all"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              Unlock Today's Meals
-            </Link>
-          )}
-        </div>
-
-        {/* Card 2: Yoga Pose of the Day */}
-        <YogaPoseCard date={todayStr} />
-
-        {/* Card 3: Lead Dietician Clinical Consultation */}
-        <div className="bg-gradient-to-br from-rose-50/60 via-white to-purple-50/40 rounded-2xl border border-rose-200/90 p-5 shadow-sm hover:shadow-md hover:border-rose-300 transition-all flex flex-col justify-between group">
+      {/* 5. Ask Dietician ("Can I eat this?") & Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Card: Ask Dietician ("Can I eat this?") */}
+        <div className="bg-gradient-to-br from-rose-50/60 via-white to-purple-50/40 rounded-3xl border border-rose-200/90 p-5 sm:p-6 shadow-sm hover:shadow-md hover:border-rose-300 transition-all flex flex-col justify-between group">
           <div>
             <div className="flex items-center justify-between mb-3.5">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-400 via-pink-500 to-purple-500 text-white flex items-center justify-center shadow-md shadow-rose-500/25 group-hover:scale-105 transition-transform">
@@ -1095,15 +1024,20 @@ export default function PatientOverview() {
               </span>
             </div>
 
-            <h3 className="font-serif font-black text-stone-900 text-base mb-1">Ask Dietician</h3>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-serif font-black text-stone-900 text-base sm:text-lg">Ask Dietician</h3>
+              <span className="text-[10px] font-black uppercase text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200">
+                Can I eat this?
+              </span>
+            </div>
             <p className="text-xs text-stone-600 mb-3 font-medium">
-              Need to swap ingredients or have a symptom? Consult your clinical dietician anytime.
+              Unsure about an item, outside food, or swap? Send a quick query or photo to your dietician.
             </p>
 
             {recentQuery ? (
               <div className="bg-white/90 rounded-xl p-3 border border-rose-200/70 mb-4 text-xs shadow-2xs">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-stone-800 truncate max-w-[150px]">
+                  <span className="font-bold text-stone-800 truncate max-w-[200px]">
                     "{recentQuery.question}"
                   </span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
@@ -1122,20 +1056,31 @@ export default function PatientOverview() {
               </div>
             ) : (
               <div className="bg-white/80 rounded-xl p-3 border border-rose-100 mb-4 text-xs text-stone-400 text-center font-medium">
-                No active questions. Feel free to message your dietitian!
+                No active questions. Ask "Can I eat this?" anytime!
               </div>
             )}
           </div>
 
-          <Link
-            to="/patient/inbox"
-            className="w-full py-2.5 px-4 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-bold text-xs rounded-xl shadow-md shadow-rose-500/20 flex items-center justify-center gap-1.5 transition-all hover:scale-101"
-          >
-            Open Consultation Inbox
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-2 pt-2">
+            <Link
+              to="/patient/inbox"
+              className="flex-1 py-2.5 px-4 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-bold text-xs rounded-xl shadow-md shadow-rose-500/20 flex items-center justify-center gap-1.5 transition-all hover:scale-101"
+            >
+              <span>Ask "Can I Eat This?"</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+            <Link
+              to="/patient/scanner"
+              className="py-2.5 px-4 bg-white hover:bg-stone-50 border border-rose-200 text-rose-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all"
+            >
+              <Camera className="w-3.5 h-3.5 text-rose-600" />
+              <span>Scan Food</span>
+            </Link>
+          </div>
         </div>
 
+        {/* Yoga Pose of the Day */}
+        <YogaPoseCard date={todayStr} />
       </div>
 
       {/* 5. AI Food Scanner Feature Highlight Banner */}

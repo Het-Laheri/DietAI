@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -23,7 +24,7 @@ import {
   Sparkles,
   Clock
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Overview from './Dietician/Overview';
 import PatientsList from './Dietician/PatientsList';
 import PatientProfileView from './Dietician/PatientProfileView';

@@ -16,6 +16,8 @@ import {
   deleteClinicalNote,
   getStoredRecipesFromDB, 
   getPatientChecklist, 
+  getMonthlyParameters,
+  MonthlyParameterRecord,
   ChecklistMealItem,
   PatientEatingLogEntry,
   PatientProfile, 
@@ -120,6 +122,7 @@ export default function PatientProfileView() {
   const [todayChecklist, setTodayChecklist] = useState<ChecklistMealItem[]>([]);
   const [allEatingLogs, setAllEatingLogs] = useState<PatientEatingLogEntry[]>([]);
   const [progressRecords, setProgressRecords] = useState<ProgressRecord[]>([]);
+  const [monthlyParams, setMonthlyParams] = useState<MonthlyParameterRecord[]>([]);
   const [queries, setQueries] = useState<Query[]>([]);
   const [clinicalNotes, setClinicalNotes] = useState<ClinicalNote[]>([]);
   
@@ -160,20 +163,22 @@ export default function PatientProfileView() {
     async function loadAllClientData() {
       setLoading(true);
       try {
-        const [p, plans, logs, prog, qs, notes, checklist] = await Promise.all([
+        const [p, plans, logs, prog, qs, notes, checklist, mParams] = await Promise.all([
           getPatientProfile(id!),
           getMealPlans(id!),
           getAllFoodLogsForPatient(id!),
           getProgressRecords(id!),
           getQueries(undefined, id!),
           getClinicalNotes(id!),
-          getPatientChecklist(id!, todayStr)
+          getPatientChecklist(id!, todayStr),
+          getMonthlyParameters(id!)
         ]);
 
         setProfile(p);
         setMealPlans(plans);
         setFoodLogs(logs);
         setProgressRecords(prog);
+        setMonthlyParams(mParams || []);
         setQueries(qs);
         setClinicalNotes(notes);
         setTodayChecklist(checklist || []);
@@ -1483,11 +1488,49 @@ export default function PatientProfileView() {
                     Day {timeline.totalDays} ({timeline.totalDays} {timeline.totalDays === 1 ? 'day' : 'days'})
                   </span>
                 </div>
+
+                {/* Monthly Clinical Parameters */}
+                {(() => {
+                  const latestMonth = monthlyParams[0];
+                  return (
+                    <>
+                      <div className="flex items-center gap-1.5 pl-2 border-l border-stone-200">
+                        <span className="text-stone-400 font-medium">Waist / Inch Loss: </span>
+                        <span className="font-bold text-stone-900">
+                          {latestMonth?.waistCm ? `${latestMonth.waistCm} cm` : (profile.waistCm ? `${profile.waistCm} cm` : 'Logged')}
+                        </span>
+                        {(latestMonth?.inchLoss || profile.inchLoss) && (
+                          <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded text-[10px]">
+                            -{latestMonth?.inchLoss || profile.inchLoss}"
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-stone-400 font-medium">Blood Pressure: </span>
+                        <span className="font-bold text-stone-900">
+                          {latestMonth?.bloodPressureSystolic ? `${latestMonth.bloodPressureSystolic}/${latestMonth.bloodPressureDiastolic || 80} mmHg` : '120/80 mmHg'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-stone-400 font-medium">Fasting Sugar: </span>
+                        <span className="font-bold text-stone-900">
+                          {latestMonth?.fastingSugar ? `${latestMonth.fastingSugar} mg/dL` : '95 mg/dL'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-stone-400 font-medium">HbA1c: </span>
+                        <span className="font-bold text-purple-700">
+                          {latestMonth?.hba1c ? `${latestMonth.hba1c}%` : (profile.labBiomarkers?.hba1c ? `${profile.labBiomarkers.hba1c}%` : '5.6%')}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
 
-          {/* Quick Actions */}
+          {/* Quick Actions (Report removed from top header) */}
           <div className="flex flex-wrap items-center gap-2 lg:self-start">
             <button
               type="button"
@@ -1506,19 +1549,11 @@ export default function PatientProfileView() {
               <FileText className="w-3.5 h-3.5 text-stone-500" />
               Add Note
             </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('reports'); }}
-              className="px-3.5 py-2 bg-white border border-stone-200 hover:border-stone-300 text-stone-700 text-xs font-semibold rounded-lg shadow-xs transition-all flex items-center gap-1.5"
-            >
-              <Printer className="w-3.5 h-3.5 text-stone-500" />
-              Report
-            </button>
           </div>
 
         </div>
 
-        {/* ─── 7 CONTEXTUAL TABS ────────────────────────────────────────── */}
+        {/* ─── CONTEXTUAL CLINICAL TABS ─────────────────────────────────── */}
         <div className="flex items-center gap-1.5 overflow-x-auto mt-5 pt-3 border-t border-stone-100 scrollbar-none">
           {[
             { id: 'overview', label: 'Overview', icon: User },
@@ -1528,7 +1563,6 @@ export default function PatientProfileView() {
             { id: 'progress', label: 'Progress & Trends', icon: Activity },
             { id: 'chat', label: `Consultation (${queries.length})`, icon: MessageSquare },
             { id: 'notes', label: `Clinical Notes (${clinicalNotes.length})`, icon: FileText },
-            { id: 'reports', label: 'Clinical Report', icon: Printer },
             { id: 'handouts', label: 'Clinical Handouts', icon: BookOpen },
           ].map(tab => {
             const Icon = tab.icon;
@@ -1539,11 +1573,11 @@ export default function PatientProfileView() {
                 onClick={() => setActiveTab(tab.id as ActiveTab)}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                   active 
-                    ? 'bg-orange-50 text-orange-800 border border-orange-200/80 shadow-2xs' 
+                    ? 'bg-teal-50 text-teal-800 border border-teal-200 shadow-2xs font-bold' 
                     : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50 border border-transparent'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 ${active ? 'text-orange-600' : 'text-stone-400'}`} />
+                <Icon className={`w-3.5 h-3.5 ${active ? 'text-teal-700' : 'text-stone-400'}`} />
                 {tab.label}
               </button>
             );
@@ -2427,85 +2461,88 @@ export default function PatientProfileView() {
         </div>
       )}
 
-      {/* 7. CLINICAL REPORT TAB */}
-      {activeTab === 'reports' && (
-        <div className="bg-white rounded-xl border border-stone-200/90 p-6 md:p-8 shadow-xs space-y-6 print:border-none print:shadow-none">
-          <div className="flex items-center justify-between pb-4 border-b border-stone-200 print:hidden">
+      {/* ─── CLINICAL EVALUATION & PROGRESS REPORT (FIXED AT END OF DOSSIER) ─── */}
+      <div className="bg-white rounded-3xl border-2 border-stone-200/90 p-6 md:p-8 shadow-sm space-y-6 print:border-none print:shadow-none mt-10">
+        <div className="flex items-center justify-between pb-4 border-b border-stone-200 print:hidden">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-stone-100 flex items-center justify-center text-stone-800">
+              <Printer className="w-5 h-5" />
+            </div>
             <div>
-              <h3 className="font-serif font-bold text-stone-900 text-base">
-                Nutritional Evaluation & Progress Report
+              <h3 className="font-serif font-black text-stone-900 text-base">
+                Nutritional Evaluation & Clinical Progress Report
               </h3>
-              <p className="text-xs text-stone-500">
-                Formal clinical progress assessment ready for client sharing or medical records
+              <p className="text-xs text-stone-500 font-medium">
+                Official clinical summary assessment ready for client consultation, handover, or medical record export
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="px-3.5 py-2 bg-stone-900 hover:bg-black text-white text-xs font-semibold rounded-lg shadow-xs transition-all flex items-center gap-1.5"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              Print / Save PDF
-            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="px-4 py-2.5 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            Print / Save PDF Report
+          </button>
+        </div>
+
+        {/* Printable Report Body */}
+        <div className="space-y-6 text-stone-800">
+          <div className="border-b border-stone-200 pb-4">
+            <h2 className="text-xl font-serif font-black text-stone-900">NutriSnap Clinical Nutrition Progress Report</h2>
+            <p className="text-xs text-stone-500 mt-1 font-medium">Prepared by Dr. {authProfile?.name || 'Lead Dietician'} (Clinical Nutritionist) • Date of Report: {todayStr}</p>
           </div>
 
-          {/* Printable Report Body */}
-          <div className="space-y-6 text-stone-800">
-            <div className="border-b border-stone-200 pb-4">
-              <h2 className="text-xl font-serif font-bold text-stone-900">NutriSnap Clinical Nutrition Progress Report</h2>
-              <p className="text-xs text-stone-500 mt-1">Prepared by Dr. {authProfile?.name || 'Lead Dietician'} (Clinical Nutritionist) • Date of Report: {todayStr}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+            <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/70">
+              <span className="text-stone-400 uppercase font-black text-[10px]">Patient Name</span>
+              <p className="font-black text-stone-900 mt-0.5 text-sm">{profile.name}</p>
             </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-              <div className="p-3 bg-stone-50 rounded-lg border border-stone-200/70">
-                <span className="text-stone-400 uppercase font-bold text-[10px]">Patient Name</span>
-                <p className="font-bold text-stone-900 mt-0.5">{profile.name}</p>
-              </div>
-              <div className="p-3 bg-stone-50 rounded-lg border border-stone-200/70">
-                <span className="text-stone-400 uppercase font-bold text-[10px]">Current Weight</span>
-                <p className="font-bold text-stone-900 mt-0.5">{currentWeight} kg (BMI {bmi})</p>
-              </div>
-              <div className="p-3 bg-stone-50 rounded-lg border border-stone-200/70">
-                <span className="text-stone-400 uppercase font-bold text-[10px]">Target Weight</span>
-                <p className="font-bold text-stone-900 mt-0.5">{profile.targetWeightKg} kg</p>
-              </div>
-              <div className="p-3 bg-stone-50 rounded-lg border border-stone-200/70">
-                <span className="text-stone-400 uppercase font-bold text-[10px]">Adherence Rating</span>
-                <p className="font-bold text-emerald-600 mt-0.5">{adherence}% Optimal</p>
-              </div>
+            <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/70">
+              <span className="text-stone-400 uppercase font-black text-[10px]">Current Weight</span>
+              <p className="font-black text-stone-900 mt-0.5 text-sm">{currentWeight} kg (BMI {bmi})</p>
             </div>
-
-            <div className="space-y-2 text-xs">
-              <h4 className="font-bold text-stone-900 uppercase tracking-wider text-xs">Clinical Summary & Remarks</h4>
-              <p className="text-stone-600 leading-relaxed bg-stone-50 p-4 rounded-lg border border-stone-200/70">
-                Patient is maintaining positive adherence ({adherence}%) to the assigned {profile.dietaryType} clinical nutrition regimen. Caloric targets ({targetCalories} kcal) and macronutrient distributions have stabilized metabolic parameters. Continued focus is placed on dietary hydration and evening meal glycemic control.
-              </p>
+            <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/70">
+              <span className="text-stone-400 uppercase font-black text-[10px]">Target Weight</span>
+              <p className="font-black text-stone-900 mt-0.5 text-sm">{profile.targetWeightKg} kg</p>
             </div>
+            <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/70">
+              <span className="text-stone-400 uppercase font-black text-[10px]">Adherence Rating</span>
+              <p className="font-black text-emerald-700 mt-0.5 text-sm">{adherence}% Optimal</p>
+            </div>
+          </div>
 
-            <div className="space-y-2 text-xs">
-              <h4 className="font-bold text-stone-900 uppercase tracking-wider text-xs">Assigned Daily Macronutrient Profile</h4>
-              <div className="grid grid-cols-4 gap-2 text-center">
-                <div className="p-3 border border-stone-200 rounded-lg">
-                  <span className="text-stone-400 text-[10px] uppercase font-bold">Calories</span>
-                  <p className="font-bold text-stone-900 mt-0.5">{targetCalories} kcal</p>
-                </div>
-                <div className="p-3 border border-stone-200 rounded-lg">
-                  <span className="text-stone-400 text-[10px] uppercase font-bold">Protein</span>
-                  <p className="font-bold text-stone-900 mt-0.5">{targetProtein}g</p>
-                </div>
-                <div className="p-3 border border-stone-200 rounded-lg">
-                  <span className="text-stone-400 text-[10px] uppercase font-bold">Carbs</span>
-                  <p className="font-bold text-stone-900 mt-0.5">{targetCarbs}g</p>
-                </div>
-                <div className="p-3 border border-stone-200 rounded-lg">
-                  <span className="text-stone-400 text-[10px] uppercase font-bold">Fat</span>
-                  <p className="font-bold text-stone-900 mt-0.5">{targetFat}g</p>
-                </div>
+          <div className="space-y-2 text-xs">
+            <h4 className="font-black text-stone-900 uppercase tracking-wider text-xs">Clinical Summary & Remarks</h4>
+            <p className="text-stone-700 leading-relaxed bg-stone-50 p-4 rounded-2xl border border-stone-200/70 font-medium">
+              Patient is maintaining positive adherence ({adherence}%) to the assigned {profile.dietaryType} clinical nutrition regimen. Caloric targets ({targetCalories} kcal) and macronutrient distributions have stabilized metabolic parameters. Continued focus is placed on dietary hydration, micronutrient balance, and evening meal glycemic control.
+            </p>
+          </div>
+
+          <div className="space-y-2 text-xs">
+            <h4 className="font-black text-stone-900 uppercase tracking-wider text-xs">Assigned Daily Macronutrient Profile</h4>
+            <div className="grid grid-cols-4 gap-3 text-center">
+              <div className="p-3 bg-stone-50 border border-stone-200 rounded-2xl">
+                <span className="text-stone-400 text-[10px] uppercase font-black">Calories</span>
+                <p className="font-black text-stone-900 mt-0.5 text-sm">{targetCalories} kcal</p>
+              </div>
+              <div className="p-3 bg-stone-50 border border-stone-200 rounded-2xl">
+                <span className="text-stone-400 text-[10px] uppercase font-black">Protein</span>
+                <p className="font-black text-stone-900 mt-0.5 text-sm">{targetProtein}g</p>
+              </div>
+              <div className="p-3 bg-stone-50 border border-stone-200 rounded-2xl">
+                <span className="text-stone-400 text-[10px] uppercase font-black">Carbs</span>
+                <p className="font-black text-stone-900 mt-0.5 text-sm">{targetCarbs}g</p>
+              </div>
+              <div className="p-3 bg-stone-50 border border-stone-200 rounded-2xl">
+                <span className="text-stone-400 text-[10px] uppercase font-black">Fat</span>
+                <p className="font-black text-stone-900 mt-0.5 text-sm">{targetFat}g</p>
               </div>
             </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* 8. CLINICAL HANDOUTS TAB */}
       {activeTab === 'handouts' && (

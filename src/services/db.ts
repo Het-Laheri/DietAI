@@ -18,11 +18,13 @@ export interface User {
   email: string;
   role: Role;
   name: string;
+  dietaryType?: string;
   createdAt: any;
 }
 
 export interface PatientProfile {
   id: string; // matches uid
+  uid?: string;
   dieticianId: string;
   email: string;
   name: string;
@@ -67,6 +69,8 @@ export interface PatientProfile {
     medications: string;
     notes: string;
   };
+  clinicalSummary?: string | ClinicalSummary;
+  onboardingCompleted?: boolean;
   allergies?: string[];
   labBiomarkers?: PatientLabBiomarkers;
   status: 'active' | 'inactive';
@@ -546,6 +550,7 @@ export interface FoodLog {
   };
   insight?: string;
   source?: 'scanner' | 'quick_log' | 'manual';
+  isExtra?: boolean;
   createdAt?: any;
 }
 
@@ -845,6 +850,12 @@ export async function createDietician(email: string, password: string, name: str
   return userCredential.user;
 }
 
+export interface ClinicalSummary {
+  conditions?: string;
+  notes?: string;
+  primaryDiagnosis?: string;
+}
+
 export interface PatientSurveyData {
   mobile?: string;
   dob?: string;
@@ -854,6 +865,9 @@ export interface PatientSurveyData {
   heightCm?: number;
   currentWeightKg?: number;
   targetWeightKg?: number;
+  waistCm?: number;
+  initialWaistCm?: number;
+  inchLoss?: number;
   idealBodyWeightKg?: number;
   bmi?: number;
   bmiClassification?: string;
@@ -862,6 +876,8 @@ export interface PatientSurveyData {
     targetPace?: string;
     specificFocus?: string[];
     targetDifferenceKg?: number;
+    initialWeightKg?: number;
+    inchLoss?: number;
   };
   medicalHistory?: string[];
   diagnosisOrProcedure?: string;
@@ -3064,7 +3080,7 @@ export interface PatientProgramTimeline {
 }
 
 export function calculatePatientProgramTimeline(
-  profile?: PatientProfile | null,
+  profile?: PatientProfile | User | null,
   mealPlan?: MealPlan | null,
   eatingLogs: PatientEatingLogEntry[] = [],
   todayChecklist: ChecklistMealItem[] = []

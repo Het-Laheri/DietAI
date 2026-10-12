@@ -650,7 +650,8 @@ export default function PatientProfileView() {
     if (!profile) return null;
 
     const currentLabs = profile.labBiomarkers || DEFAULT_SAMPLE_LABS;
-    const isDiabetic = (profile.clinicalSummary?.conditions || profile.healthInfo?.conditions || '').toLowerCase().includes('diabet');
+    const condStr = typeof profile.clinicalSummary === 'object' ? profile.clinicalSummary?.conditions : (profile.clinicalSummary || profile.healthInfo?.conditions || '');
+    const isDiabetic = (condStr || '').toLowerCase().includes('diabet');
 
     const totalCarbsConsumed = timeline.days.reduce((s, d) => s + (d.carbsConsumed || 0), 0);
     const totalFatConsumed = timeline.days.reduce((s, d) => s + (d.fatConsumed || 0), 0);
@@ -991,7 +992,9 @@ export default function PatientProfileView() {
 
     const currentLabs = profile.labBiomarkers || DEFAULT_SAMPLE_LABS;
     const evaluatedBiomarkers = evaluateLabBiomarkers(currentLabs, profile.gender || 'Female');
-    const patientConditions = profile.clinicalSummary?.conditions || profile.healthInfo?.conditions || '';
+    const patientConditions = typeof profile.clinicalSummary === 'object' 
+      ? (profile.clinicalSummary?.conditions || profile.healthInfo?.conditions || '') 
+      : (profile.clinicalSummary || profile.healthInfo?.conditions || '');
 
     const relevantBiomarkers = evaluatedBiomarkers.filter(b => {
       const rel = isBiomarkerRelevantForConditions(b.key, patientConditions);
@@ -1231,7 +1234,9 @@ export default function PatientProfileView() {
     if (!profile) return null;
     const currentLabs = profile.labBiomarkers || DEFAULT_SAMPLE_LABS;
     const evaluatedBiomarkers = evaluateLabBiomarkers(currentLabs, profile.gender || 'Female');
-    const patientConditions = profile.clinicalSummary?.conditions || profile.healthInfo?.conditions || '';
+    const patientConditions = typeof profile.clinicalSummary === 'object' 
+      ? (profile.clinicalSummary?.conditions || profile.healthInfo?.conditions || '') 
+      : (profile.clinicalSummary || profile.healthInfo?.conditions || '');
 
     const relevantBiomarkers = evaluatedBiomarkers.filter(b => {
       const rel = isBiomarkerRelevantForConditions(b.key, patientConditions);

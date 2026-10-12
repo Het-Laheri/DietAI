@@ -378,14 +378,17 @@ export default function BuildMyPlate() {
       } catch {}
 
       // Log the meal
-      await logMeal(profile.uid, {
+      await logMeal({
+        patientId: profile.uid,
         date: todayStr,
         mealType: selectedSlot as any,
-        name: plateName,
-        calories: Math.round(plateTotals.cal),
-        protein: Math.round(plateTotals.protein),
-        carbs: Math.round(plateTotals.carb),
-        fat: Math.round(plateTotals.fat),
+        description: plateName,
+        nutrition: {
+          calories: Math.round(plateTotals.cal),
+          protein: Math.round(plateTotals.protein),
+          carbs: Math.round(plateTotals.carb),
+          fat: Math.round(plateTotals.fat)
+        },
         isExtra: false
       });
 
@@ -448,7 +451,6 @@ export default function BuildMyPlate() {
       <div className="p-4 md:p-8 max-w-6xl mx-auto">
         <SubscriptionPaywall 
           featureName="Build My Plate & Meal Swap Studio" 
-          description="Design custom regional plates with instant macro calculations, portion control, and 1-click clinical meal swapping."
         />
       </div>
     );

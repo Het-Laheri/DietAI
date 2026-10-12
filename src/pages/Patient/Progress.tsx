@@ -8,6 +8,9 @@ import {
   getAllPatientEatingLogs,
   getProgressRecords,
   ProgressRecord,
+  getMonthlyParameters,
+  saveMonthlyParameter,
+  MonthlyParameterRecord,
   calculatePatientProgramTimeline,
   PatientProfile, 
   MealPlan,
@@ -26,9 +29,7 @@ import {
   Calendar, 
   Utensils, 
   Sparkles, 
-  Camera, 
   ChevronRight,
-  Dna,
   Wheat,
   Droplet,
   Clock,
@@ -38,10 +39,10 @@ import {
   TrendingDown,
   Dumbbell,
   Heart,
-  ChevronLeft,
-  Play,
-  Pause,
-  ArrowRight
+  Activity,
+  PlusCircle,
+  X,
+  FileText
 } from 'lucide-react';
 import React from 'react';
 import PatientProfileModal from '../../components/PatientProfileModal';
@@ -54,14 +55,22 @@ export default function Progress() {
   const [todayChecklist, setTodayChecklist] = useState<ChecklistMealItem[]>([]);
   const [eatingLogs, setEatingLogs] = useState<PatientEatingLogEntry[]>([]);
   const [progressRecords, setProgressRecords] = useState<ProgressRecord[]>([]);
+  const [monthlyParams, setMonthlyParams] = useState<MonthlyParameterRecord[]>([]);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isAddMonthlyModalOpen, setIsAddMonthlyModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Carousel state
-  const [activeSlide, setActiveSlide] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
-  const touchStartX = React.useRef<number | null>(null);
-  const touchEndX = React.useRef<number | null>(null);
+  // Monthly parameter form state
+  const [monthFormDate, setMonthFormDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [monthFormWeight, setMonthFormWeight] = useState('');
+  const [monthFormWaist, setMonthFormWaist] = useState('');
+  const [monthFormInchLoss, setMonthFormInchLoss] = useState('');
+  const [monthFormBpSys, setMonthFormBpSys] = useState('');
+  const [monthFormBpDia, setMonthFormBpDia] = useState('');
+  const [monthFormSugar, setMonthFormSugar] = useState('');
+  const [monthFormHba1c, setMonthFormHba1c] = useState('');
+  const [monthFormNotes, setMonthFormNotes] = useState('');
+  const [savingMonthly, setSavingMonthly] = useState(false);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -72,13 +81,14 @@ export default function Progress() {
 
     async function loadData() {
       try {
-        const [pData, plansData, wpData, checklistData, allLogs, progData] = await Promise.all([
+        const [pData, plansData, wpData, checklistData, allLogs, progData, mParams] = await Promise.all([
           getPatientProfile(profile!.uid),
           getMealPlans(profile!.uid),
           getPatientWeekPlan(profile!.uid),
           getPatientChecklist(profile!.uid, todayStr),
           getAllPatientEatingLogs(profile!.uid),
-          getProgressRecords(profile!.uid)
+          getProgressRecords(profile!.uid),
+          getMonthlyParameters(profile!.uid)
         ]);
 
         if (!isMounted) return;
@@ -90,6 +100,7 @@ export default function Progress() {
         setTodayChecklist(checklistData || []);
         setEatingLogs(allLogs || []);
         setProgressRecords(progData || []);
+        setMonthlyParams(mParams || []);
       } catch (err) {
         console.warn('Progress load data note:', err);
       } finally {
@@ -99,7 +110,7 @@ export default function Progress() {
 
     loadData();
 
-    // 1. Real-time Firestore listener for today's checklist doc (instant checkmark & extra food updates)
+    // 1. Real-time Firestore listener for today's checklist doc
     const checklistRef = doc(db, 'food_logs', `checklist_${profile.uid}_${todayStr}`);
     const unsubChecklist = onSnapshot(checklistRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -114,7 +125,7 @@ export default function Progress() {
       console.warn('Real-time checklist listener note:', err);
     });
 
-    // 2. Real-time patient profile listener (instant weight, goals, BMI updates)
+    // 2. Real-time patient profile listener
     const profileRef = doc(db, 'patient_profiles', profile.uid);
     const unsubProfile = onSnapshot(profileRef, (docSnap) => {
       if (docSnap.exists() && isMounted) {
@@ -124,7 +135,7 @@ export default function Progress() {
       console.warn('Real-time profile listener note:', err);
     });
 
-    // 3. Real-time progress records listener (instant weigh-in log sync)
+    // 3. Real-time progress records listener
     const progQuery = query(collection(db, 'progress_records'), where('patientId', '==', profile.uid));
     const unsubProg = onSnapshot(progQuery, (snap) => {
       if (isMounted) {
@@ -157,6 +168,9 @@ export default function Progress() {
       getProgressRecords(profile.uid).then(records => {
         if (isMounted) setProgressRecords(records);
       });
+      getMonthlyParameters(profile.uid).then(records => {
+        if (isMounted) setMonthlyParams(records);
+      });
     };
 
     window.addEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
@@ -173,15 +187,6 @@ export default function Progress() {
       window.removeEventListener('nutrisnap:progress_record_updated', handleProgUpdated);
     };
   }, [profile, todayStr]);
-
-  // Carousel auto-rotation timer (must be before any early returns to respect Rules of Hooks)
-  useEffect(() => {
-    if (isPaused) return;
-    const timer = setInterval(() => {
-      setActiveSlide(prev => (prev + 1) % 5);
-    }, 4500);
-    return () => clearInterval(timer);
-  }, [isPaused]);
 
   if (loading) {
     return <div className="p-8 max-w-4xl mx-auto text-stone-500 font-medium">Loading your nutrition progress profile...</div>;
@@ -296,167 +301,6 @@ export default function Progress() {
     mealsLogged: d.mealsLogged
   }));
 
-    // Carousel definition for Today's Intake
-  const totalAssignedMeals = assignedPrescribedItems.length;
-  const checkedItemsCount = assignedCompleted.length;
-  const nextMeal = todayChecklist.find(item => !item.completed && !item.isExtra);
-
-  const carouselSlides = [
-    {
-      id: 'meals',
-      label: 'Meals Protocol',
-      tabName: 'Meals',
-      icon: Utensils,
-      current: checkedItemsCount,
-      total: totalAssignedMeals,
-      unit: 'meals logged',
-      percent: Math.min(100, Math.round((assignedCompleted.length / Math.max(1, totalAssignedMeals)) * 100)),
-      gradient: 'from-emerald-50 via-teal-50/70 to-emerald-100/90 border border-emerald-200/90',
-      ringColor: '#10b981',
-      ringTrack: 'rgba(16, 185, 129, 0.16)',
-      titleColor: 'text-emerald-950',
-      subColor: 'text-emerald-800/90',
-      badgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      btnBg: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20',
-      activeTabBg: 'bg-emerald-600 text-white shadow-emerald-600/20',
-      title: extraCompleted.length > 0
-        ? `${assignedCompleted.length} of ${totalAssignedMeals} meals done (+${extraCompleted.length} extra)`
-        : `${checkedItemsCount} of ${totalAssignedMeals} meals done`,
-      subtitle: nextMeal 
-        ? `Next up: ${nextMeal.mealType} — ${nextMeal.name}${extraCompleted.length > 0 ? ` (+${extraCompleted.length} extra logged)` : ''}` 
-        : (assignedCompleted.length >= totalAssignedMeals && totalAssignedMeals > 0
-          ? `All scheduled meals completed!${extraCompleted.length > 0 ? ` Plus ${extraCompleted.length} extra meal logged (+${extraCalories} kcal).` : ' Exceptional clinical discipline today.'}`
-          : (extraCompleted.length > 0 ? `${extraCompleted.length} extra meal logged (+${extraCalories} kcal). All macros synced.` : 'Ready to stay consistent with your dietician meal plan today.')),
-      ctaText: 'Open Meal Checklist',
-      ctaLink: '/patient/meals'
-    },
-    {
-      id: 'calories',
-      label: 'Caloric Balance',
-      tabName: 'Calories',
-      icon: Flame,
-      current: todayCalories,
-      total: targetCalories,
-      unit: 'kcal eaten',
-      percent: Math.min(100, Math.round((todayCalories / targetCalories) * 100)),
-      gradient: 'from-orange-50 via-amber-50/70 to-rose-100/90 border border-orange-200/90',
-      ringColor: '#f97316',
-      ringTrack: 'rgba(249, 115, 22, 0.16)',
-      titleColor: 'text-stone-900',
-      subColor: 'text-stone-700',
-      badgeBg: 'bg-orange-100 text-orange-800 border-orange-200',
-      btnBg: 'bg-orange-600 hover:bg-orange-700 text-white shadow-orange-600/20',
-      activeTabBg: 'bg-orange-600 text-white shadow-orange-600/20',
-      title: `${todayCalories.toLocaleString()} of ${targetCalories.toLocaleString()} kcal`,
-      subtitle: targetCalories > todayCalories 
-        ? `${(targetCalories - todayCalories).toLocaleString()} kcal remaining for dinner & wholesome nourishment.` 
-        : 'Daily caloric target fulfilled! Great energy balance today.',
-      ctaText: 'View Food Logs',
-      ctaLink: '/patient/meals'
-    },
-    {
-      id: 'protein',
-      label: 'Daily Protein',
-      tabName: 'Protein',
-      icon: Dumbbell,
-      current: Math.round(todayProtein),
-      total: targetProtein,
-      unit: 'g Protein',
-      percent: Math.min(100, Math.round((todayProtein / targetProtein) * 100)),
-      gradient: 'from-purple-50 via-indigo-50/70 to-violet-100/90 border border-purple-200/90',
-      ringColor: '#8b5cf6',
-      ringTrack: 'rgba(139, 92, 246, 0.16)',
-      titleColor: 'text-purple-950',
-      subColor: 'text-purple-850',
-      badgeBg: 'bg-purple-100 text-purple-800 border-purple-200',
-      btnBg: 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-600/20',
-      activeTabBg: 'bg-purple-600 text-white shadow-purple-600/20',
-      title: `${Math.round(todayProtein)}g of ${targetProtein}g Protein`,
-      subtitle: targetProtein > todayProtein
-        ? `${Math.max(0, targetProtein - Math.round(todayProtein))}g needed • Essential for cellular repair, lean muscle & satiety.`
-        : 'Protein target hit! Optimal satiety and muscle maintenance.',
-      ctaText: 'High-Protein Recipes',
-      ctaLink: '/patient/meals'
-    },
-    {
-      id: 'carbs',
-      label: 'Daily Carbs',
-      tabName: 'Carbs',
-      icon: Wheat,
-      current: Math.round(todayCarbs),
-      total: targetCarbs,
-      unit: 'g Carbs',
-      percent: Math.min(100, Math.round((todayCarbs / targetCarbs) * 100)),
-      gradient: 'from-amber-50 via-yellow-50/70 to-orange-100/90 border border-amber-200/90',
-      ringColor: '#f59e0b',
-      ringTrack: 'rgba(245, 158, 11, 0.16)',
-      titleColor: 'text-amber-950',
-      subColor: 'text-amber-850',
-      badgeBg: 'bg-amber-100 text-amber-800 border-amber-200',
-      btnBg: 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20',
-      activeTabBg: 'bg-amber-600 text-white shadow-amber-600/20',
-      title: `${Math.round(todayCarbs)}g of ${targetCarbs}g Carbs`,
-      subtitle: targetCarbs > todayCarbs
-        ? `${Math.max(0, targetCarbs - Math.round(todayCarbs))}g remaining • Low-GI complex carbs fuel brain & sustained physical energy.`
-        : 'Carbohydrate daily target achieved smoothly.',
-      ctaText: 'View Complex Carbs',
-      ctaLink: '/patient/meals'
-    },
-    {
-      id: 'fats',
-      label: 'Healthy Fats',
-      tabName: 'Fats',
-      icon: Heart,
-      current: Math.round(todayFat),
-      total: targetFat,
-      unit: 'g Fats',
-      percent: Math.min(100, Math.round((todayFat / targetFat) * 100)),
-      gradient: 'from-rose-50 via-pink-50/70 to-fuchsia-100/90 border border-rose-200/90',
-      ringColor: '#ec4899',
-      ringTrack: 'rgba(236, 72, 153, 0.16)',
-      titleColor: 'text-rose-950',
-      subColor: 'text-rose-850',
-      badgeBg: 'bg-rose-100 text-rose-800 border-rose-200',
-      btnBg: 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20',
-      activeTabBg: 'bg-rose-600 text-white shadow-rose-600/20',
-      title: `${Math.round(todayFat)}g of ${targetFat}g Fats`,
-      subtitle: targetFat > todayFat
-        ? `${Math.max(0, targetFat - Math.round(todayFat))}g remaining • Essential fatty acids for hormones, joints & cellular health.`
-        : 'Healthy lipid target satisfied today.',
-      ctaText: 'Explore Healthy Fats',
-      ctaLink: '/patient/meals'
-    }
-  ];
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setIsPaused(true);
-    touchStartX.current = e.targetTouches[0].clientX;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.targetTouches[0].clientX;
-  };
-
-  const handleTouchEnd = () => {
-    if (touchStartX.current === null || touchEndX.current === null) return;
-    const distance = touchStartX.current - touchEndX.current;
-    const minSwipeDistance = 45;
-
-    if (distance > minSwipeDistance) {
-      setActiveSlide(prev => (prev + 1) % carouselSlides.length);
-    } else if (distance < -minSwipeDistance) {
-      setActiveSlide(prev => (prev - 1 + carouselSlides.length) % carouselSlides.length);
-    }
-
-    touchStartX.current = null;
-    touchEndX.current = null;
-  };
-
-  const currentSlide = carouselSlides[activeSlide];
-  const ringRadius = 42;
-  const ringCircumference = 2 * Math.PI * ringRadius;
-  const strokeOffset = ringCircumference - (ringCircumference * Math.min(100, Math.max(0, currentSlide.percent))) / 100;
-
   // Weight Change and Inch Loss Calculations
   const startingWeight = Number(patientProfile?.weightManagement?.initialWeightKg || patientProfile?.currentWeightKg || 68);
   const currentWeight = Number(patientProfile?.currentWeightKg || 68);
@@ -467,14 +311,105 @@ export default function Progress() {
       : 0
   );
 
+  // Build Monthly Progression Data for Charts
+  const monthlyChartData = React.useMemo(() => {
+    if (!monthlyParams || monthlyParams.length === 0) {
+      // Seed with current profile as Month 1 baseline if none recorded yet
+      const baselineMonth = patientProfile?.createdAt 
+        ? new Date(patientProfile.createdAt.toDate ? patientProfile.createdAt.toDate() : patientProfile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+        : 'Baseline';
+      return [
+        {
+          month: baselineMonth,
+          date: patientProfile?.startDate || todayStr,
+          weight: startingWeight,
+          inchLoss: 0,
+          waist: patientProfile?.initialWaistCm || patientProfile?.waistCm || 82,
+          systolic: 120,
+          diastolic: 80,
+          fastingSugar: 95,
+          hba1c: 5.6
+        },
+        {
+          month: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          date: todayStr,
+          weight: currentWeight,
+          inchLoss: displayedInchLoss,
+          waist: patientProfile?.waistCm || 80,
+          systolic: 118,
+          diastolic: 78,
+          fastingSugar: 92,
+          hba1c: 5.5
+        }
+      ];
+    }
+
+    // Sort ascending chronologically for charts
+    const sorted = [...monthlyParams].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    return sorted.map(m => ({
+      month: m.month || m.date,
+      date: m.date,
+      weight: m.weightKg,
+      inchLoss: m.inchLoss || 0,
+      waist: m.waistCm,
+      systolic: m.bloodPressureSystolic,
+      diastolic: m.bloodPressureDiastolic,
+      fastingSugar: m.fastingSugar,
+      hba1c: m.hba1c
+    }));
+  }, [monthlyParams, patientProfile, startingWeight, currentWeight, displayedInchLoss, todayStr]);
+
+  const handleSaveMonthly = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile?.uid || !monthFormWeight) return;
+
+    setSavingMonthly(true);
+    try {
+      const selectedDate = new Date(monthFormDate);
+      const monthLabel = selectedDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      
+      const newRec: Omit<MonthlyParameterRecord, 'id'> = {
+        patientId: profile.uid,
+        date: monthFormDate,
+        month: monthLabel,
+        weightKg: parseFloat(monthFormWeight),
+        waistCm: monthFormWaist ? parseFloat(monthFormWaist) : undefined,
+        inchLoss: monthFormInchLoss ? parseFloat(monthFormInchLoss) : undefined,
+        bloodPressureSystolic: monthFormBpSys ? parseInt(monthFormBpSys) : undefined,
+        bloodPressureDiastolic: monthFormBpDia ? parseInt(monthFormBpDia) : undefined,
+        fastingSugar: monthFormSugar ? parseFloat(monthFormSugar) : undefined,
+        hba1c: monthFormHba1c ? parseFloat(monthFormHba1c) : undefined,
+        notes: monthFormNotes || undefined
+      };
+
+      await saveMonthlyParameter(profile.uid, newRec);
+      const updated = await getMonthlyParameters(profile.uid);
+      setMonthlyParams(updated);
+      setIsAddMonthlyModalOpen(false);
+      // Reset form
+      setMonthFormWeight('');
+      setMonthFormWaist('');
+      setMonthFormInchLoss('');
+      setMonthFormBpSys('');
+      setMonthFormBpDia('');
+      setMonthFormSugar('');
+      setMonthFormHba1c('');
+      setMonthFormNotes('');
+    } catch (err) {
+      console.error('Failed to save monthly parameters:', err);
+    } finally {
+      setSavingMonthly(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto pb-24 md:pb-8">
-      {/* Page Title (Scan Meal Button Removed) */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+      {/* Page Title */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-serif font-black text-stone-900 tracking-tight">Your Nutrition & Goal Progress</h1>
           <div className="flex flex-wrap items-center gap-2 mt-1.5">
-            <span className="text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs shadow-orange-500/20">
+            <span className="text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-xs">
               Day {timeline.totalDays} of Care Plan
             </span>
             <span className="text-stone-600 text-xs font-medium">
@@ -482,146 +417,102 @@ export default function Progress() {
             </span>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsAddMonthlyModalOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white text-xs font-black rounded-xl transition-all flex items-center gap-1.5 shrink-0 shadow-md shadow-teal-600/20 cursor-pointer"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            Record Monthly Parameters
+          </button>
+        </div>
       </div>
 
-      {/* ─── TODAY'S INTAKE MEAL CAROUSEL (REPLACING STATIC CARD) ─────────── */}
-      <div 
-        className={`relative overflow-hidden rounded-3xl p-5 sm:p-6 md:p-8 shadow-md mb-8 transition-all duration-700 bg-gradient-to-br select-none touch-pan-y ${currentSlide.gradient}`}
-        onMouseEnter={() => setIsPaused(true)}
-        onMouseLeave={() => setIsPaused(false)}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        <div className="absolute -top-20 -right-20 w-72 h-72 bg-white/60 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-20 -left-20 w-72 h-72 bg-white/40 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="flex items-center justify-between gap-3 mb-5 sm:mb-6 relative z-10">
-          <div className="flex items-center gap-2">
-            <span className={`text-[10px] sm:text-[11px] font-black uppercase tracking-wider px-2.5 sm:px-3 py-1 rounded-full border backdrop-blur-md inline-flex items-center gap-1.5 shadow-2xs ${currentSlide.badgeBg}`}>
-              <currentSlide.icon className="w-3.5 h-3.5" />
-              {currentSlide.label}
-            </span>
-            <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-stone-600 bg-white/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-stone-200/60 shadow-2xs">
-              <button
-                onClick={() => setIsPaused(!isPaused)}
-                className="hover:text-stone-900 transition-colors flex items-center gap-1 cursor-pointer"
-                title={isPaused ? "Resume auto-rotation" : "Pause auto-rotation"}
-              >
-                {isPaused ? <Play className="w-3 h-3 text-amber-600" /> : <Pause className="w-3 h-3 text-emerald-600" />}
-                <span>{isPaused ? 'Paused' : 'Auto-rotating'}</span>
-              </button>
+      {/* ─── TODAY'S INTAKE & ENERGY BALANCE (STATIC CLEAN CARD) ─────────── */}
+      <div className="bg-white border-2 border-stone-200/80 rounded-3xl p-6 md:p-8 shadow-sm mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-stone-100 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600">
+              <Flame className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-serif font-black text-stone-900">Today's Intake & Energy Balance</h2>
+              <p className="text-xs text-stone-500 font-medium">Daily nutritional targets and recorded food checklist</p>
             </div>
           </div>
-
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <button
-              onClick={() => setActiveSlide(prev => (prev - 1 + carouselSlides.length) % carouselSlides.length)}
-              className="w-8 h-8 rounded-full bg-white/90 hover:bg-white active:scale-95 border border-stone-200/80 flex items-center justify-center text-stone-700 transition-all backdrop-blur-md shadow-xs cursor-pointer"
-              title="Previous metric"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-xs font-bold text-stone-600 min-w-[32px] sm:min-w-[36px] text-center">
-              {activeSlide + 1} / {carouselSlides.length}
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-bold px-3 py-1 rounded-full ${isOverTarget ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+              {caloriePct}% of Daily Target
             </span>
-            <button
-              onClick={() => setActiveSlide(prev => (prev + 1) % carouselSlides.length)}
-              className="w-8 h-8 rounded-full bg-white/90 hover:bg-white active:scale-95 border border-stone-200/80 flex items-center justify-center text-stone-700 transition-all backdrop-blur-md shadow-xs cursor-pointer"
-              title="Next metric"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
           </div>
         </div>
 
-        {/* Carousel Body: Left Circular Meter + Right Content */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 md:gap-6 items-center relative z-10">
-          <div className="md:col-span-4 flex items-center justify-center">
-            <div className="relative w-32 h-32 sm:w-36 sm:h-36 md:w-44 md:h-44 flex items-center justify-center">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                <circle
-                  cx="50"
-                  cy="50"
-                  r={ringRadius}
-                  stroke={currentSlide.ringTrack}
-                  strokeWidth="8.5"
-                  fill="transparent"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r={ringRadius}
-                  stroke={currentSlide.ringColor}
-                  strokeWidth="8.5"
-                  strokeDasharray={ringCircumference}
-                  strokeDashoffset={strokeOffset}
-                  strokeLinecap="round"
-                  fill="transparent"
-                  className="transition-all duration-700 ease-out"
-                />
-              </svg>
-
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none">
-                <span className={`text-2xl sm:text-3xl md:text-4xl font-serif font-black tracking-tight ${currentSlide.titleColor}`}>
-                  {currentSlide.percent}%
-                </span>
-                <span className="text-[10px] md:text-[11px] font-bold text-stone-500 uppercase tracking-wider mt-0.5">
-                  {currentSlide.current} / {currentSlide.total}
-                </span>
-              </div>
+        {/* Calorie Overview Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+          <div className="md:col-span-5 flex flex-col justify-center">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl md:text-4xl font-serif font-black text-stone-900">{todayCalories}</span>
+              <span className="text-stone-500 font-bold text-sm">/ {targetCalories} kcal</span>
             </div>
-          </div>
-
-          <div className="md:col-span-8 flex flex-col justify-center space-y-2.5 sm:space-y-3">
-            <h2 className={`text-xl sm:text-2xl md:text-3xl font-serif font-black tracking-tight ${currentSlide.titleColor} leading-tight`}>
-              {currentSlide.title}
-            </h2>
-            <p className={`text-xs md:text-sm ${currentSlide.subColor} font-medium leading-relaxed max-w-xl`}>
-              {currentSlide.subtitle}
+            <p className="text-xs text-stone-500 font-medium mt-1">
+              {targetCalories > todayCalories 
+                ? `${remainingCalories} kcal remaining for today` 
+                : 'Caloric target reached for today'}
             </p>
 
-            <div className="pt-1.5 sm:pt-2 flex flex-wrap items-center gap-3">
-              <a
-                href={currentSlide.ctaLink}
-                className={`w-full sm:w-auto justify-center px-5 py-2.5 ${currentSlide.btnBg} active:scale-95 font-extrabold rounded-xl text-xs md:text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer`}
-              >
-                <span>{currentSlide.ctaText}</span>
-                <ArrowRight className="w-4 h-4 text-white" />
-              </a>
+            {/* Calorie Bar */}
+            <div className="w-full bg-stone-100 rounded-full h-3 mt-4 overflow-hidden flex">
+              <div 
+                className="bg-emerald-500 h-full transition-all duration-500" 
+                style={{ width: `${assignedProgressPercent}%` }}
+                title={`Prescribed Meals: ${assignedCalories} kcal`}
+              />
+              <div 
+                className="bg-amber-500 h-full transition-all duration-500" 
+                style={{ width: `${extraProgressPercent}%` }}
+                title={`Extra / Scanned Food: ${extraCalories + scanCalories} kcal`}
+              />
+            </div>
+            <div className="flex items-center gap-4 mt-2 text-[11px] font-semibold text-stone-500">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+                Prescribed ({assignedCalories} kcal)
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
+                Extra ({extraCalories + scanCalories} kcal)
+              </span>
             </div>
           </div>
-        </div>
 
-        {/* Carousel Tabs */}
-        <div className="mt-6 sm:mt-8 pt-4 sm:pt-5 border-t border-stone-200/60 relative z-10">
-          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1.5 no-scrollbar scroll-smooth -mx-2 px-2">
-            {carouselSlides.map((slide, index) => {
-              const isActive = index === activeSlide;
-              const SlideIcon = slide.icon;
-              return (
-                <button
-                  key={slide.id}
-                  onClick={() => {
-                    setActiveSlide(index);
-                    setIsPaused(true);
-                  }}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer shrink-0 ${
-                    isActive
-                      ? `${slide.activeTabBg} shadow-md scale-102 font-black`
-                      : 'bg-white/80 hover:bg-white text-stone-700 border border-stone-200/80 shadow-2xs'
-                  }`}
-                >
-                  <SlideIcon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-stone-600'}`} />
-                  <span>{slide.tabName}</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                    isActive ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
-                  }`}>
-                    {slide.percent}%
-                  </span>
-                </button>
-              );
-            })}
+          {/* Macro Breakdown */}
+          <div className="md:col-span-7 grid grid-cols-3 gap-3">
+            <div className="p-3.5 bg-purple-50/60 border border-purple-100 rounded-2xl text-center">
+              <div className="flex items-center justify-center gap-1 text-purple-700 mb-1">
+                <Dumbbell className="w-3.5 h-3.5" />
+                <span className="text-[10px] uppercase font-black tracking-wider">Protein</span>
+              </div>
+              <span className="text-lg font-black font-serif text-stone-900 block">{Math.round(todayProtein)}g</span>
+              <span className="text-[10px] text-stone-500 font-medium">Target: {targetProtein}g</span>
+            </div>
+
+            <div className="p-3.5 bg-amber-50/60 border border-amber-100 rounded-2xl text-center">
+              <div className="flex items-center justify-center gap-1 text-amber-700 mb-1">
+                <Wheat className="w-3.5 h-3.5" />
+                <span className="text-[10px] uppercase font-black tracking-wider">Carbs</span>
+              </div>
+              <span className="text-lg font-black font-serif text-stone-900 block">{Math.round(todayCarbs)}g</span>
+              <span className="text-[10px] text-stone-500 font-medium">Target: {targetCarbs}g</span>
+            </div>
+
+            <div className="p-3.5 bg-rose-50/60 border border-rose-100 rounded-2xl text-center">
+              <div className="flex items-center justify-center gap-1 text-rose-700 mb-1">
+                <Heart className="w-3.5 h-3.5" />
+                <span className="text-[10px] uppercase font-black tracking-wider">Fats</span>
+              </div>
+              <span className="text-lg font-black font-serif text-stone-900 block">{Math.round(todayFat)}g</span>
+              <span className="text-[10px] text-stone-500 font-medium">Target: {targetFat}g</span>
+            </div>
           </div>
         </div>
       </div>
@@ -731,52 +622,73 @@ export default function Progress() {
 
       {/* (Health Overview 3-cards and Recorded Meals Scanned Food Logs have been removed per specifications) */}
 
-      {/* ─── CHRONOLOGICAL DAILY ADHERENCE TREND CHART ────────────────────── */}
-      <div className="bg-white p-6 md:p-8 border-2 border-orange-200/80 rounded-3xl shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+      {/* ─── MONTHLY CLINICAL PROGRESS CHARTS (WEIGHT, INCHES & VITALS) ─── */}
+      <div className="bg-white p-6 md:p-8 border-2 border-teal-200/80 rounded-3xl shadow-sm mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-stone-100 mb-6">
           <div>
-            <h2 className="text-lg font-serif font-bold text-stone-900 mb-0.5">
-              Daily Nutrition Adherence (Day 1 – Day {timeline.totalDays})
-            </h2>
-            <p className="text-xs text-stone-500">
-              Chronological daily adherence calculated across your {timeline.totalDays} {timeline.totalDays === 1 ? 'day' : 'days'} on the program (Started {timeline.startDateFormatted})
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-teal-600 inline-block" />
+              <h2 className="text-lg font-serif font-bold text-stone-900">
+                Monthly Parameters & Clinical Trajectory
+              </h2>
+            </div>
+            <p className="text-xs text-stone-500 mt-1">
+              Monthly tracking of body weight, waist circumference & clinical vitals (BP, Fasting Sugar, HbA1c)
             </p>
           </div>
-          <div className="flex items-center gap-3 text-xs font-semibold">
-            <span className="inline-flex items-center gap-1.5 text-stone-600">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#46655a]" /> Daily Adherence (%)
-            </span>
-            <span className="px-2.5 py-1 bg-stone-100 rounded-md font-mono text-stone-800">
-              Avg: {timeline.overallAdherence}%
-            </span>
-          </div>
+
+          <button
+            onClick={() => setIsAddMonthlyModalOpen(true)}
+            className="px-3.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <PlusCircle className="w-3.5 h-3.5 text-teal-700" />
+            + Record New Month
+          </button>
         </div>
-        
-        {timeline.loggedDaysCount > 0 ? (
-          <div className="h-64 w-full">
+
+        {/* Chart 1: Monthly Weight (kg) & Inch Loss */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs uppercase font-black tracking-wider text-teal-900 flex items-center gap-1.5">
+              <Scale className="w-3.5 h-3.5 text-teal-600" />
+              Monthly Weight (kg) & Waist Reduction Progression
+            </h3>
+            <div className="flex items-center gap-4 text-[11px] font-semibold text-stone-600">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-teal-600 inline-block" /> Weight (kg)
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Inch Loss (inches)
+              </span>
+            </div>
+          </div>
+
+          <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dailyChartData} margin={{ top: 10, right: 20, bottom: 5, left: -10 }}>
-                <Line 
-                  type="monotone" 
-                  dataKey="adherence" 
-                  stroke="#46655a" 
-                  strokeWidth={3} 
-                  dot={{ r: 4, fill: '#46655a' }}
-                  activeDot={{ r: 7, fill: '#f97316' }} 
-                />
+              <LineChart data={monthlyChartData} margin={{ top: 10, right: 20, bottom: 5, left: -10 }}>
                 <CartesianGrid stroke="#f1f5f9" strokeDasharray="5 5" vertical={false} />
                 <XAxis 
-                  dataKey="day" 
+                  dataKey="month" 
                   axisLine={false} 
                   tickLine={false} 
                   tick={{ fill: '#64748b', fontSize: 11 }} 
                 />
                 <YAxis 
-                  domain={[0, 100]} 
+                  yAxisId="weight"
+                  domain={['auto', 'auto']}
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: '#94a3b8', fontSize: 11 }} 
-                  unit="%"
+                  tick={{ fill: '#0d9488', fontSize: 11 }} 
+                  unit="kg"
+                />
+                <YAxis 
+                  yAxisId="inches"
+                  orientation="right"
+                  domain={[0, 'auto']}
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#10b981', fontSize: 11 }} 
+                  unit='"'
                 />
                 <Tooltip 
                   cursor={{ stroke: '#cbd5e1', strokeWidth: 1.5, strokeDasharray: '3 3' }} 
@@ -785,17 +697,18 @@ export default function Progress() {
                       const data = payload[0].payload;
                       return (
                         <div className="bg-white p-3 rounded-lg border border-stone-200 shadow-md text-xs">
-                          <p className="font-bold text-stone-900">{data.day} • {data.shortDate}</p>
-                          <p className="text-[11px] text-stone-400 mb-1.5">{data.fullDate}</p>
-                          <div className="space-y-1">
-                            <p className="text-brand-800 font-bold">
-                              Adherence: <span className="font-mono">{data.adherence}%</span>
+                          <p className="font-bold text-stone-900">{data.month} ({data.date})</p>
+                          <div className="mt-1.5 space-y-1">
+                            <p className="text-teal-700 font-bold">
+                              Weight: <span className="font-mono">{data.weight} kg</span>
                             </p>
-                            <p className="text-stone-600">
-                              Intake: <span className="font-mono font-bold text-stone-800">{data.calories}</span> / {data.targetCalories} kcal
-                            </p>
-                            <p className="text-stone-500">
-                              Meals Logged: <strong className="text-stone-700">{data.mealsLogged}</strong>
+                            {data.waist && (
+                              <p className="text-stone-600">
+                                Waist: <span className="font-mono">{data.waist} cm</span>
+                              </p>
+                            )}
+                            <p className="text-emerald-700 font-bold">
+                              Inch Loss: <span className="font-mono">{data.inchLoss}"</span>
                             </p>
                           </div>
                         </div>
@@ -804,15 +717,314 @@ export default function Progress() {
                     return null;
                   }}
                 />
+                <Line 
+                  yAxisId="weight"
+                  type="monotone" 
+                  dataKey="weight" 
+                  stroke="#0d9488" 
+                  strokeWidth={2.5} 
+                  dot={{ r: 4, fill: '#0d9488' }}
+                  activeDot={{ r: 6, fill: '#0f766e' }} 
+                />
+                <Line 
+                  yAxisId="inches"
+                  type="monotone" 
+                  dataKey="inchLoss" 
+                  stroke="#10b981" 
+                  strokeWidth={2} 
+                  strokeDasharray="4 4"
+                  dot={{ r: 3, fill: '#10b981' }}
+                  activeDot={{ r: 5, fill: '#047857' }} 
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
-        ) : (
-          <div className="py-12 text-center text-stone-400 text-xs">
-            Start checking off meals in your Notepad to see your daily adherence curve across your {timeline.totalDays} {timeline.totalDays === 1 ? 'day' : 'days'}.
+        </div>
+
+        {/* Chart 2: Monthly Vitals & Biomarkers */}
+        <div className="pt-6 border-t border-stone-100">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs uppercase font-black tracking-wider text-rose-900 flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-rose-600" />
+              Monthly Blood Pressure (Systolic) & Fasting Sugar Trajectory
+            </h3>
+            <div className="flex items-center gap-4 text-[11px] font-semibold text-stone-600">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" /> BP Systolic (mmHg)
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Fasting Sugar (mg/dL)
+              </span>
+            </div>
+          </div>
+
+          <div className="h-48 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={monthlyChartData} margin={{ top: 10, right: 20, bottom: 5, left: -10 }}>
+                <CartesianGrid stroke="#f1f5f9" strokeDasharray="5 5" vertical={false} />
+                <XAxis 
+                  dataKey="month" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#64748b', fontSize: 11 }} 
+                />
+                <YAxis 
+                  domain={[60, 160]} 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#e11d48', fontSize: 11 }} 
+                />
+                <Tooltip 
+                  cursor={{ stroke: '#cbd5e1', strokeWidth: 1.5, strokeDasharray: '3 3' }} 
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-white p-3 rounded-lg border border-stone-200 shadow-md text-xs">
+                          <p className="font-bold text-stone-900">{data.month} ({data.date})</p>
+                          <div className="mt-1.5 space-y-1">
+                            {data.systolic && (
+                              <p className="text-rose-700 font-bold">
+                                BP: <span className="font-mono">{data.systolic}/{data.diastolic || 80} mmHg</span>
+                              </p>
+                            )}
+                            {data.fastingSugar && (
+                              <p className="text-amber-700 font-bold">
+                                Fasting Sugar: <span className="font-mono">{data.fastingSugar} mg/dL</span>
+                              </p>
+                            )}
+                            {data.hba1c && (
+                              <p className="text-purple-700 font-bold">
+                                HbA1c: <span className="font-mono">{data.hba1c}%</span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="systolic" 
+                  stroke="#f43f5e" 
+                  strokeWidth={2.5} 
+                  dot={{ r: 4, fill: '#f43f5e' }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="fastingSugar" 
+                  stroke="#f59e0b" 
+                  strokeWidth={2} 
+                  dot={{ r: 3, fill: '#f59e0b' }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Monthly Parameter Records Table */}
+        {monthlyParams.length > 0 && (
+          <div className="mt-6 pt-5 border-t border-stone-100 overflow-x-auto">
+            <h4 className="text-xs font-black text-stone-800 mb-3 flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-teal-600" />
+              Recorded Monthly Parameter Logs
+            </h4>
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-stone-200 text-stone-400 font-bold">
+                  <th className="pb-2">Month</th>
+                  <th className="pb-2">Date</th>
+                  <th className="pb-2">Weight</th>
+                  <th className="pb-2">Waist / Inch Loss</th>
+                  <th className="pb-2">BP (mmHg)</th>
+                  <th className="pb-2">Sugar / HbA1c</th>
+                  <th className="pb-2">Notes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {monthlyParams.map((rec) => (
+                  <tr key={rec.id} className="hover:bg-stone-50/80">
+                    <td className="py-2.5 font-bold text-stone-900">{rec.month}</td>
+                    <td className="py-2.5 font-mono text-stone-500">{rec.date}</td>
+                    <td className="py-2.5 font-black text-teal-800">{rec.weightKg} kg</td>
+                    <td className="py-2.5 text-stone-700">
+                      {rec.waistCm ? `${rec.waistCm} cm` : '-'}{' '}
+                      {rec.inchLoss ? <span className="text-emerald-700 font-bold">(-{rec.inchLoss}")</span> : ''}
+                    </td>
+                    <td className="py-2.5 text-stone-700">
+                      {rec.bloodPressureSystolic ? `${rec.bloodPressureSystolic}/${rec.bloodPressureDiastolic || 80}` : '-'}
+                    </td>
+                    <td className="py-2.5 text-stone-700">
+                      {rec.fastingSugar ? `${rec.fastingSugar} mg/dL` : ''}{' '}
+                      {rec.hba1c ? <span className="text-purple-700 font-bold">({rec.hba1c}%)</span> : ''}
+                    </td>
+                    <td className="py-2.5 text-stone-500 max-w-xs truncate">{rec.notes || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
+
+      {/* ─── RECORD MONTHLY PARAMETERS MODAL ─── */}
+      {isAddMonthlyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-4 border-b border-stone-100 mb-5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center text-teal-700">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-serif font-black text-stone-900">Record Monthly Parameters</h3>
+                  <p className="text-xs text-stone-500">Track monthly weight, inch loss and clinical vitals</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAddMonthlyModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 flex items-center justify-center text-stone-600 transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMonthly} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={monthFormDate}
+                    onChange={(e) => setMonthFormDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-teal-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">Body Weight (kg) *</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    placeholder="e.g. 66.5"
+                    value={monthFormWeight}
+                    onChange={(e) => setMonthFormWeight(e.target.value)}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-teal-500 outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">Waist Circumference (cm)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="e.g. 78"
+                    value={monthFormWaist}
+                    onChange={(e) => setMonthFormWaist(e.target.value)}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-teal-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">Cumulative Inch Loss (")</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="e.g. 2.0"
+                    value={monthFormInchLoss}
+                    onChange={(e) => setMonthFormInchLoss(e.target.value)}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-teal-500 outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200/80 space-y-3">
+                <span className="block text-[11px] font-black uppercase text-stone-500 tracking-wider">
+                  Clinical Biomarkers & Vitals (Optional)
+                </span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-stone-600 mb-1">BP Systolic (mmHg)</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 120"
+                      value={monthFormBpSys}
+                      onChange={(e) => setMonthFormBpSys(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-stone-600 mb-1">BP Diastolic (mmHg)</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 80"
+                      value={monthFormBpDia}
+                      onChange={(e) => setMonthFormBpDia(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-stone-600 mb-1">Fasting Sugar (mg/dL)</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 95"
+                      value={monthFormSugar}
+                      onChange={(e) => setMonthFormSugar(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-stone-600 mb-1">HbA1c (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="e.g. 5.6"
+                      value={monthFormHba1c}
+                      onChange={(e) => setMonthFormHba1c(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">Monthly Notes / Observations</label>
+                <textarea
+                  rows={2}
+                  placeholder="Energy levels, adherence highlights, or doctor remarks..."
+                  value={monthFormNotes}
+                  onChange={(e) => setMonthFormNotes(e.target.value)}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-teal-500 outline-hidden"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddMonthlyModalOpen(false)}
+                  className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingMonthly || !monthFormWeight}
+                  className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 disabled:opacity-50 text-white font-black rounded-xl text-xs shadow-md shadow-teal-600/20 transition-all cursor-pointer"
+                >
+                  {savingMonthly ? 'Saving...' : 'Save Monthly Record'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Patient Profile & Health Details Modal */}
       {profile?.uid && (

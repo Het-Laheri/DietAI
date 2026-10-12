@@ -573,8 +573,33 @@ export interface ProgressRecord {
   patientId: string;
   date: string;
   weightKg: number;
-  waterLiters: number;
-  adherencePercentage: number;
+  waterLiters?: number;
+  adherencePercentage?: number;
+  waistCm?: number;
+  inchLoss?: number;
+  bloodPressureSystolic?: number;
+  bloodPressureDiastolic?: number;
+  fastingSugar?: number;
+  hba1c?: number;
+  month?: string;
+  notes?: string;
+  createdAt?: any;
+}
+
+export interface MonthlyParameterRecord {
+  id?: string;
+  patientId: string;
+  date: string;
+  month: string; // e.g. "Oct 2026"
+  weightKg: number;
+  waistCm?: number;
+  inchLoss?: number;
+  bloodPressureSystolic?: number;
+  bloodPressureDiastolic?: number;
+  fastingSugar?: number;
+  hba1c?: number;
+  bmi?: number;
+  notes?: string;
   createdAt?: any;
 }
 
@@ -1326,6 +1351,68 @@ export async function saveProgressRecord(record: ProgressRecord): Promise<string
     console.warn('Direct Firestore saveProgressRecord error:', fsErr);
     return null;
   }
+}
+
+const LOCAL_MONTHLY_PARAMS_PREFIX = 'nutrisnap_monthly_params_';
+
+export async function getMonthlyParameters(patientId: string): Promise<MonthlyParameterRecord[]> {
+  try {
+    const q = query(
+      collection(db, 'monthly_parameters'),
+      where('patientId', '==', patientId)
+    );
+    const snap = await getDocs(q);
+    const records = snap.docs.map(d => ({ ...d.data(), id: d.id } as MonthlyParameterRecord));
+    records.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    if (records.length > 0 && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`${LOCAL_MONTHLY_PARAMS_PREFIX}${patientId}`, JSON.stringify(records));
+      } catch {}
+    }
+    if (records.length > 0) return records;
+  } catch (err) {
+    console.warn('getMonthlyParameters firestore note:', err);
+  }
+
+  // Local storage fallback
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(`${LOCAL_MONTHLY_PARAMS_PREFIX}${patientId}`);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+  }
+
+  return [];
+}
+
+export async function saveMonthlyParameter(patientId: string, record: Omit<MonthlyParameterRecord, 'id'>): Promise<string> {
+  const sanitized = cleanFirestoreData({ ...record, patientId });
+  let savedId = `mparam_${Date.now()}`;
+
+  try {
+    const ref = await addDoc(collection(db, 'monthly_parameters'), {
+      ...sanitized,
+      createdAt: serverTimestamp()
+    });
+    savedId = ref.id;
+  } catch (err) {
+    console.warn('saveMonthlyParameter firestore note:', err);
+  }
+
+  // Also cache in local storage
+  if (typeof window !== 'undefined') {
+    try {
+      const key = `${LOCAL_MONTHLY_PARAMS_PREFIX}${patientId}`;
+      const raw = localStorage.getItem(key);
+      const existing: MonthlyParameterRecord[] = raw ? JSON.parse(raw) : [];
+      const updated = [{ ...sanitized, id: savedId }, ...existing.filter(r => r.date !== record.date)];
+      updated.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      localStorage.setItem(key, JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('nutrisnap:monthly_parameters_updated', { detail: sanitized }));
+    } catch {}
+  }
+
+  return savedId;
 }
 
 const LOCAL_QUERIES_KEY = 'nutrisnap_cached_queries';

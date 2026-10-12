@@ -114,14 +114,23 @@ export default function PatientDashboard() {
       iconInactive: 'text-emerald-500'
     },
     { 
-      name: "Build My Plate", 
-      path: '/patient/plate', 
-      icon: Utensils, 
-      locked: !isSubscribed,
+      name: "Today's Meals", 
+      path: '/patient/meals', 
+      icon: ClipboardList,
       activeClass: 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow-md shadow-orange-500/25',
       iconActive: 'text-white',
       hoverClass: 'hover:text-orange-700 hover:bg-orange-50/80',
       iconInactive: 'text-orange-500'
+    },
+    { 
+      name: "Build My Plate", 
+      path: '/patient/plate', 
+      icon: Utensils, 
+      locked: !isSubscribed,
+      activeClass: 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white shadow-md shadow-teal-500/25',
+      iconActive: 'text-white',
+      hoverClass: 'hover:text-teal-700 hover:bg-teal-50/80',
+      iconInactive: 'text-teal-500'
     },
     { 
       name: 'AI Scanner', 
@@ -354,9 +363,9 @@ export default function PatientDashboard() {
             <Routes>
               <Route path="/" element={<PatientOverview />} />
               <Route path="/overview" element={<PatientOverview />} />
+              <Route path="/meals" element={<MealNotepad />} />
+              <Route path="/today" element={<MealNotepad />} />
               <Route path="/plate" element={<BuildMyPlate />} />
-              <Route path="/meals" element={<BuildMyPlate />} />
-              <Route path="/today" element={<BuildMyPlate />} />
               <Route path="/swap" element={<BuildMyPlate />} />
               <Route path="/scanner" element={<FoodScanner />} />
               <Route path="/progress" element={<Progress />} />
@@ -375,7 +384,7 @@ export default function PatientDashboard() {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-orange-100/90 flex items-center justify-around pt-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] px-2 shadow-[0_-4px_20px_rgba(249,115,22,0.1)]">
         {[
           { name: 'Dashboard', path: '/patient', icon: Home, isCenter: false },
-          { name: 'Build Plate', path: '/patient/plate', icon: Utensils, isCenter: false, locked: !isSubscribed },
+          { name: 'Meals', path: '/patient/meals', icon: ClipboardList, isCenter: false },
           { name: 'AI Scan', path: '/patient/scanner', icon: Camera, isCenter: true },
           { name: 'Progress', path: '/patient/progress', icon: Activity, isCenter: false },
           { name: 'Consult', path: '/patient/inbox', icon: MessageCircle, isCenter: false }

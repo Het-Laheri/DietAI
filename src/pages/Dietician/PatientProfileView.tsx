@@ -35,8 +35,10 @@ import {
   DEFAULT_SAMPLE_LABS,
   evaluateLabBiomarkers,
   isBiomarkerRelevantForConditions,
-  updatePatientProfile
+  updatePatientProfile,
+  ClinicalGuideItem
 } from '../../services/db';
+import { CLINICAL_GUIDES } from '../../data/clinicalGuides';
 import { 
   LineChart, 
   Line, 
@@ -96,15 +98,21 @@ import {
   BarChart3,
   TrendingUp,
   Info,
-  HeartPulse
+  HeartPulse,
+  BookOpen,
+  Eye,
+  ExternalLink
 } from 'lucide-react';
 
-type ActiveTab = 'overview' | 'biomarkers' | 'food_logs' | 'meal_plans' | 'progress' | 'chat' | 'notes' | 'reports';
+type ActiveTab = 'overview' | 'biomarkers' | 'food_logs' | 'meal_plans' | 'progress' | 'chat' | 'notes' | 'reports' | 'handouts';
 
 export default function PatientProfileView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { profile: authProfile } = useAuth();
+
+  const [viewingGuide, setViewingGuide] = useState<ClinicalGuideItem | null>(null);
+  const [assignedGuideIds, setAssignedGuideIds] = useState<string[]>([]);
 
   const [profile, setProfile] = useState<PatientProfile | null>(null);
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
@@ -1521,6 +1529,7 @@ export default function PatientProfileView() {
             { id: 'chat', label: `Consultation (${queries.length})`, icon: MessageSquare },
             { id: 'notes', label: `Clinical Notes (${clinicalNotes.length})`, icon: FileText },
             { id: 'reports', label: 'Clinical Report', icon: Printer },
+            { id: 'handouts', label: 'Clinical Handouts', icon: BookOpen },
           ].map(tab => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -2493,6 +2502,241 @@ export default function PatientProfileView() {
                   <p className="font-bold text-stone-900 mt-0.5">{targetFat}g</p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. CLINICAL HANDOUTS TAB */}
+      {activeTab === 'handouts' && (
+        <div className="bg-white rounded-xl border border-stone-200/90 p-6 md:p-8 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
+            <div>
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-orange-600" />
+                <h3 className="font-serif font-bold text-stone-900 text-base">
+                  Clinical Care Handouts & Dietary Guidelines
+                </h3>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+                  Dietician Library
+                </span>
+              </div>
+              <p className="text-xs text-stone-500 mt-1">
+                Evidence-based cardiovascular, glycemic, lipid, and renal dietary protocols to educate and guide {profile.name || 'this patient'}.
+              </p>
+            </div>
+          </div>
+
+          {/* Guide Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {CLINICAL_GUIDES.map(guide => {
+              const isAssigned = assignedGuideIds.includes(guide.id);
+
+              return (
+                <div
+                  key={guide.id}
+                  className="bg-white rounded-2xl border border-stone-200/90 p-4 shadow-sm hover:shadow-md hover:border-orange-300 transition-all flex flex-col justify-between group"
+                >
+                  <div>
+                    {/* Thumbnail */}
+                    <div className="relative w-full h-40 rounded-xl overflow-hidden mb-3 bg-stone-100 border border-stone-200">
+                      <img
+                        src={guide.imageUrl}
+                        alt={guide.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <div className="absolute top-2 left-2">
+                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-stone-900/80 text-white backdrop-blur-xs">
+                          {guide.category}
+                        </span>
+                      </div>
+                      {isAssigned && (
+                        <div className="absolute top-2 right-2">
+                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-600 text-white shadow-xs flex items-center gap-1">
+                            <Check className="w-2.5 h-2.5" /> Assigned
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <h4 className="font-bold text-stone-900 text-sm mb-1 group-hover:text-orange-600 transition-colors line-clamp-2">
+                      {guide.title}
+                    </h4>
+                    {guide.subtitle && (
+                      <p className="text-xs text-stone-500 mb-2 line-clamp-1 font-medium">
+                        {guide.subtitle}
+                      </p>
+                    )}
+                    <p className="text-xs text-stone-600 line-clamp-3 leading-relaxed">
+                      {guide.description}
+                    </p>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-4 border-t border-stone-100 mt-4">
+                    <button
+                      type="button"
+                      onClick={() => setViewingGuide(guide)}
+                      className="flex-1 py-2 px-3 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>View Full Guide</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = isAssigned
+                          ? assignedGuideIds.filter(gId => gId !== guide.id)
+                          : [...assignedGuideIds, guide.id];
+                        setAssignedGuideIds(next);
+                        if (activePlan) {
+                          saveMealPlan({ ...activePlan, attachedGuideIds: next }, 'dietician').catch(console.warn);
+                        }
+                      }}
+                      className={`py-2 px-3 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                        isAssigned
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-rose-50 hover:text-rose-700'
+                          : 'bg-orange-600 hover:bg-orange-700 text-white shadow-xs'
+                      }`}
+                    >
+                      {isAssigned ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Assigned</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Assign</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* CLINICAL GUIDE LIGHTBOX MODAL */}
+      {viewingGuide && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl border border-stone-200 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-stone-200">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-800 border border-orange-200">
+                    {viewingGuide.category}
+                  </span>
+                  <h3 className="font-serif font-bold text-stone-900 text-base sm:text-lg">
+                    {viewingGuide.title}
+                  </h3>
+                </div>
+                {viewingGuide.subtitle && (
+                  <p className="text-xs text-stone-500 mt-0.5 font-medium">{viewingGuide.subtitle}</p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={viewingGuide.imageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors flex items-center gap-1 text-xs"
+                  title="Open high-res chart in new tab"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+                <button
+                  onClick={() => setViewingGuide(null)}
+                  className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+              <div className="rounded-xl overflow-hidden border border-stone-200 bg-stone-900/5 flex items-center justify-center max-h-[440px]">
+                <img
+                  src={viewingGuide.imageUrl}
+                  alt={viewingGuide.title}
+                  className="max-h-[440px] w-auto object-contain rounded-lg shadow-sm"
+                />
+              </div>
+
+              <p className="text-xs text-stone-600 leading-relaxed bg-stone-50 p-3.5 rounded-xl border border-stone-200/60">
+                {viewingGuide.description}
+              </p>
+
+              {(viewingGuide.chooseFoods || viewingGuide.goEasyFoods || viewingGuide.avoidFoods) && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  {viewingGuide.chooseFoods && (
+                    <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3.5 space-y-2">
+                      <span className="font-bold text-emerald-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Choose / Prioritize
+                      </span>
+                      <ul className="space-y-1.5 text-[11px] text-emerald-950">
+                        {viewingGuide.chooseFoods.map((item, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5">
+                            <span className="text-emerald-600 font-bold">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {viewingGuide.goEasyFoods && (
+                    <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 space-y-2">
+                      <span className="font-bold text-amber-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span> Go Easy / Moderate
+                      </span>
+                      <ul className="space-y-1.5 text-[11px] text-amber-950">
+                        {viewingGuide.goEasyFoods.map((item, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5">
+                            <span className="text-amber-600 font-bold">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {viewingGuide.avoidFoods && (
+                    <div className="bg-rose-50/80 border border-rose-200 rounded-xl p-3.5 space-y-2">
+                      <span className="font-bold text-rose-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-rose-500"></span> Avoid / Limit
+                      </span>
+                      <ul className="space-y-1.5 text-[11px] text-rose-950">
+                        {viewingGuide.avoidFoods.map((item, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5">
+                            <span className="text-rose-600 font-bold">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-stone-200 flex items-center justify-between">
+              <span className="text-[11px] text-stone-500">
+                NutriSnap Clinical Library Handout
+              </span>
+              <button
+                onClick={() => setViewingGuide(null)}
+                className="px-5 py-2 bg-stone-900 hover:bg-black text-white rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Close Guide
+              </button>
             </div>
           </div>
         </div>

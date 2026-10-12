@@ -17,10 +17,8 @@ import {
   RecipeDBItem, 
   WeekDay,
   calculatePatientProgramTimeline,
-  createNotification,
-  ClinicalGuideItem
+  createNotification
 } from '../../services/db';
-import { CLINICAL_GUIDES } from '../../data/clinicalGuides';
 import { isPatientSubscribed } from '../../services/subscription';
 import SubscriptionPaywall from '../../components/SubscriptionPaywall';
 import { 
@@ -45,9 +43,7 @@ import {
   ArrowRight,
   TrendingUp,
   Info,
-  BookOpen,
-  Eye,
-  ExternalLink
+  RefreshCw
 } from 'lucide-react';
 
 interface ExtraFoodEstimate {
@@ -58,6 +54,55 @@ interface ExtraFoodEstimate {
   carbs: number;
   fat: number;
 }
+
+interface SwapSuggestion {
+  name: string;
+  portion: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  tag: string;
+}
+
+const DEFAULT_SWAP_SUGGESTIONS: Record<string, SwapSuggestion[]> = {
+  'Breakfast': [
+    { name: 'Moong Dal & Spinach Cheela with Mint Chutney', portion: '2 cheelas (150g)', calories: 230, protein: 12, carbs: 28, fat: 5, tag: 'High Protein • Low GI' },
+    { name: 'Vegetable Oats Upma with Crushed Peanuts', portion: '1 medium bowl (180g)', calories: 245, protein: 9, carbs: 36, fat: 6, tag: 'Heart Healthy • Soluble Fiber' },
+    { name: 'Sprouts & Vegetable Poha with Lemon', portion: '1 plate (200g)', calories: 220, protein: 8, carbs: 38, fat: 4, tag: 'Gut Friendly • Light' },
+    { name: 'Multigrain Toast with Boiled Egg Whites & Herbs', portion: '2 slices + 2 eggs', calories: 250, protein: 16, carbs: 24, fat: 7, tag: 'Lean Protein • Sustained Energy' },
+    { name: 'Ragi Porridge with Roasted Flaxseeds', portion: '1 bowl (200ml)', calories: 210, protein: 8, carbs: 32, fat: 4, tag: 'Calcium Rich • Low Sodium' }
+  ],
+  'Morning Snack': [
+    { name: 'Roasted Spiced Makhana (Foxnuts)', portion: '1 large cup (35g)', calories: 120, protein: 4, carbs: 22, fat: 2, tag: 'Antioxidant • Light' },
+    { name: 'Cucumber & Carrot Sticks with Greek Yogurt Dip', portion: '1 cup + 2 tbsp dip', calories: 95, protein: 6, carbs: 12, fat: 1.5, tag: 'Hydrating • High Fiber' },
+    { name: 'Handful of Soaked Almonds & Walnuts', portion: '8 almonds + 2 walnuts', calories: 135, protein: 4.5, carbs: 5, fat: 12, tag: 'Brain Fuel • Healthy Lipids' },
+    { name: 'Fresh Seasonal Apple or Papaya Slices', portion: '1 medium bowl (150g)', calories: 85, protein: 1.5, carbs: 20, fat: 0.5, tag: 'Low GI • Digestive Enzymes' }
+  ],
+  'Lunch': [
+    { name: 'Quinoa & Yellow Moong Khichdi with Steamed Beans', portion: '1 bowl (250g)', calories: 340, protein: 15, carbs: 52, fat: 6, tag: 'Complete Protein • Easy Digestion' },
+    { name: '2 Jowar Rotis with Paneer Bhurji & Cucumber Raita', portion: '2 rotis + 1 cup paneer', calories: 360, protein: 18, carbs: 42, fat: 10, tag: 'Gluten Free • High Satiety' },
+    { name: 'Brown Rice with Palak Dal Tadka & Salad', portion: '1 bowl rice + 1 cup dal', calories: 350, protein: 14, carbs: 58, fat: 5, tag: 'Iron Rich • Whole Grain' },
+    { name: 'Methi Thepla with Low-Fat Spiced Curd & Kachumber', portion: '2 theplas + 1/2 cup curd', calories: 320, protein: 11, carbs: 46, fat: 8, tag: 'Blood Sugar Balancing' },
+    { name: 'Grilled Herb Tofu / Paneer Salad with Bell Peppers', portion: '1 large bowl (220g)', calories: 290, protein: 20, carbs: 18, fat: 12, tag: 'Ketogenic • Anti-Inflammatory' }
+  ],
+  'Evening Snack': [
+    { name: 'Boiled Kala Chana Chaat with Tomatoes & Green Chili', portion: '1 small cup (120g)', calories: 140, protein: 8, carbs: 22, fat: 2.5, tag: 'Dietary Fiber • Satiety' },
+    { name: 'Masala Sprouted Green Moong Salad', portion: '1 cup (130g)', calories: 130, protein: 9, carbs: 20, fat: 1.5, tag: 'Enzyme Active • Gut Healing' },
+    { name: 'Roasted Salted Edamame / Chana', portion: '1/3 cup (40g)', calories: 145, protein: 11, carbs: 15, fat: 4, tag: 'High Protein • Crunch' },
+    { name: 'Herbal Tulsi Ginger Tea with 2 Multigrain Crackers', portion: '1 cup tea + 2 crackers', calories: 75, protein: 2, carbs: 14, fat: 1, tag: 'Calming • Digestive Aid' }
+  ],
+  'Dinner': [
+    { name: 'Palak Paneer with 2 Multigrain Phulkas & Salad', portion: '2 phulkas + 1 cup subzi', calories: 350, protein: 17, carbs: 40, fat: 11, tag: 'High Magnesium • Relaxing' },
+    { name: 'Mixed Vegetable Daliya Khichdi with Garlic Tadka', portion: '1 large bowl (260g)', calories: 310, protein: 12, carbs: 50, fat: 5, tag: 'Light Night Dinner • Easy Sleep' },
+    { name: 'Grilled Lemon Herb Fish / Tofu with Steamed Broccoli', portion: '150g protein + 1 cup veg', calories: 280, protein: 24, carbs: 12, fat: 8, tag: 'Lean Protein • Fast Digestion' },
+    { name: 'Moong Dal & Bottle Gourd (Lauki) Soup with 1 Besan Roti', portion: '1 bowl soup + 1 roti', calories: 260, protein: 11, carbs: 38, fat: 4, tag: 'Gentle on Gut • Detoxifying' }
+  ],
+  'Bedtime Snack': [
+    { name: 'Warm Turmeric Spiced Skim Milk (Golden Milk)', portion: '1 small cup (150ml)', calories: 85, protein: 6, carbs: 9, fat: 2, tag: 'Curcumin • Sleep Harmony' },
+    { name: 'Chamomile Infusion with 4 Soaked Almonds', portion: '1 cup + 4 almonds', calories: 55, protein: 2, carbs: 2, fat: 4.5, tag: 'Melatonin Support • Zero Sugar' }
+  ]
+};
 
 export default function MealNotepad() {
   const { profile } = useAuth();
@@ -78,24 +123,8 @@ export default function MealNotepad() {
   const [extraError, setExtraError] = useState<string | null>(null);
   const [extraSuccessToast, setExtraSuccessToast] = useState<string | null>(null);
 
-  // Clinical Educational Guides Modal & Display State
-  const [viewingGuide, setViewingGuide] = useState<ClinicalGuideItem | null>(null);
-  const [showAllGuides, setShowAllGuides] = useState(false);
-
-  // Clinical Guides attached by dietician or available for patient
-  const attachedGuides: ClinicalGuideItem[] = useMemo(() => {
-    if (activePlan?.clinicalGuides && activePlan.clinicalGuides.length > 0) {
-      return activePlan.clinicalGuides;
-    }
-    if (activePlan?.attachedGuideIds && activePlan.attachedGuideIds.length > 0) {
-      return CLINICAL_GUIDES.filter(g => activePlan.attachedGuideIds!.includes(g.id));
-    }
-    const dietaryType = (profile?.dietaryType || '').toLowerCase();
-    if (dietaryType.includes('keto')) {
-      return CLINICAL_GUIDES.filter(g => g.id === 'keto_food_pyramid' || g.id === 'nutrition_facts_label');
-    }
-    return CLINICAL_GUIDES;
-  }, [activePlan, profile]);
+  // Meal Swap State
+  const [swappingItem, setSwappingItem] = useState<ChecklistMealItem | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
   const storageKey = `nutrisnap_meals_checklist_${profile?.uid}_${todayStr}`;
@@ -357,10 +386,58 @@ export default function MealNotepad() {
         deleteFoodLog(itemToRemove.logMealId).catch(console.warn);
       }
       window.dispatchEvent(new CustomEvent('nutrisnap:checklist_updated'));
-    }
   };
 
-  const handleSaveReflection = () => {
+  // Swap Prescribed Meal
+  const handleConfirmSwap = async (originalItem: ChecklistMealItem, alt: SwapSuggestion) => {
+    isLocalUpdating.current = true;
+    const swappedItem: ChecklistMealItem = {
+      ...originalItem,
+      name: alt.name,
+      portion: alt.portion,
+      calories: alt.calories,
+      protein: alt.protein,
+      carbs: alt.carbs,
+      fat: alt.fat,
+      notes: `Swapped by patient • ${alt.tag}`,
+      completed: false,
+      completedAt: undefined
+    };
+
+    const updated = items.map(it => it.id === originalItem.id ? swappedItem : it);
+    setItems(updated);
+
+    const storageKey1 = `nutrisnap_meals_checklist_${profile?.uid}_${todayStr}`;
+    const storageKey2 = `nutrisnap_checklist_states_${profile?.uid}_${todayStr}`;
+    const stateMap: Record<string, { completed: boolean; completedAt?: string }> = {};
+    updated.forEach(it => {
+      stateMap[it.id] = { completed: it.completed, completedAt: it.completedAt };
+    });
+    try {
+      localStorage.setItem(storageKey1, JSON.stringify(stateMap));
+      localStorage.setItem(storageKey2, JSON.stringify(stateMap));
+    } catch {}
+
+    if (profile?.uid) {
+      await savePatientChecklist(profile.uid, todayStr, updated);
+      createNotification({
+        recipientRole: 'dietician',
+        type: 'MEAL_LOGGED',
+        title: 'Prescribed Meal Swapped',
+        patientId: profile.uid,
+        patientName: profile.name || 'Patient',
+        message: `${profile.name || 'Patient'} swapped ${originalItem.mealType} (${originalItem.name}) with "${alt.name}" (${alt.calories} kcal).`,
+        link: `/dietician/patients/${profile.uid}`,
+        read: false
+      }).catch(console.warn);
+      window.dispatchEvent(new CustomEvent('nutrisnap:checklist_updated'));
+    }
+
+    setSwappingItem(null);
+    setExtraSuccessToast(`Swapped ${originalItem.mealType} with ${alt.name}!`);
+    setTimeout(() => setExtraSuccessToast(null), 4000);
+  };
+
     if (!profile) return;
     localStorage.setItem(reflectionKey, patientReflection);
     setNotesSavedToast(true);
@@ -607,58 +684,6 @@ export default function MealNotepad() {
           </div>
         </div>
 
-        {/* CLINICAL EDUCATION GUIDES & PATIENT HANDOUTS */}
-        {attachedGuides.length > 0 && (
-          <div className="px-6 py-4 border-b border-orange-100 bg-gradient-to-r from-orange-50/40 via-amber-50/30 to-white">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-orange-600" />
-                <h3 className="text-xs font-black uppercase tracking-wider text-stone-900">
-                  Dietician's Clinical Care Handouts & Guidelines ({attachedGuides.length})
-                </h3>
-              </div>
-              <span className="text-[11px] text-stone-500 font-medium">
-                Tap any guide to view high-resolution food charts & clinical instructions
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {attachedGuides.map(guide => (
-                <div
-                  key={guide.id}
-                  onClick={() => setViewingGuide(guide)}
-                  className="bg-white rounded-xl border border-orange-200/80 p-3 shadow-2xs hover:shadow-md hover:border-orange-400 transition-all cursor-pointer flex items-center gap-3 group"
-                >
-                  <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-stone-100 border border-stone-200 relative group-hover:scale-105 transition-transform">
-                    <img
-                      src={guide.imageUrl}
-                      alt={guide.title}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-stone-900/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                      <Eye className="w-4 h-4 text-white" />
-                    </div>
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-orange-100/70 text-orange-800 inline-block mb-1">
-                      {guide.category}
-                    </span>
-                    <h4 className="font-bold text-xs text-stone-900 truncate group-hover:text-orange-600 transition-colors">
-                      {guide.title}
-                    </h4>
-                    <p className="text-[10px] text-stone-500 truncate mt-0.5">
-                      {guide.subtitle || guide.description}
-                    </p>
-                  </div>
-
-                  <ArrowRight className="w-4 h-4 text-stone-300 group-hover:text-orange-500 shrink-0 transition-colors" />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* TO-DO CHECKLIST ITEMS */}
         <div className="p-4 md:p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -750,6 +775,18 @@ export default function MealNotepad() {
                           </div>
                           
                           <div className="flex items-center gap-2">
+                            {!isExtra && (
+                              <button
+                                type="button"
+                                onClick={() => setSwappingItem(item)}
+                                className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-orange-200 bg-orange-50/90 hover:bg-orange-100 text-orange-700 flex items-center gap-1 transition-all cursor-pointer shadow-2xs hover:scale-102"
+                                title="Swap this prescribed meal"
+                              >
+                                <RefreshCw className="w-3 h-3 text-orange-600" />
+                                <span>Swap</span>
+                              </button>
+                            )}
+
                             {item.completed && item.completedAt && (
                               <span className={`text-[10px] font-medium px-2 py-0.5 rounded flex items-center gap-1 ${
                                 isExtra 
@@ -1078,144 +1115,107 @@ export default function MealNotepad() {
         </div>
       )}
 
-      {/* CLINICAL GUIDE MODAL / LIGHTBOX */}
-      {viewingGuide && (
-        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5">
-          <div className="bg-white rounded-2xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl border border-stone-200 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* MEAL SWAP MODAL (HEALTHY CLINICAL ALTERNATIVES & PLATE SWAP)  */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {swappingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="flex items-start justify-between gap-3 pb-3 border-b border-stone-200">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-800 border border-orange-200">
-                    {viewingGuide.category}
-                  </span>
-                  <h3 className="font-serif font-bold text-stone-900 text-base sm:text-lg">
-                    {viewingGuide.title}
-                  </h3>
+            <div className="bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 text-white p-5 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center">
+                  <RefreshCw className="w-5 h-5 text-white" />
                 </div>
-                {viewingGuide.subtitle && (
-                  <p className="text-xs text-stone-500 mt-0.5 font-medium">{viewingGuide.subtitle}</p>
-                )}
+                <div>
+                  <h3 className="font-serif font-black text-lg">Swap {swappingItem.mealType}</h3>
+                  <p className="text-xs text-orange-100">
+                    Replace prescribed dish with balanced alternatives or custom plate
+                  </p>
+                </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                <a
-                  href={viewingGuide.imageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors flex items-center gap-1 text-xs"
-                  title="Open high-res chart in new tab"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-                <button
-                  onClick={() => setViewingGuide(null)}
-                  className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
-                  title="Close"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setSwappingItem(null)}
+                className="w-8 h-8 rounded-full bg-black/20 hover:bg-black/40 text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-4">
-              <div className="rounded-xl overflow-hidden border border-stone-200 bg-stone-900/5 flex items-center justify-center max-h-[440px]">
-                <img
-                  src={viewingGuide.imageUrl}
-                  alt={viewingGuide.title}
-                  className="max-h-[440px] w-auto object-contain rounded-lg shadow-sm"
-                />
+            {/* Current Item Banner */}
+            <div className="p-4 bg-orange-50/60 border-b border-orange-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+              <div>
+                <span className="text-[10px] font-black uppercase text-orange-700 tracking-wider">Currently Prescribed</span>
+                <h4 className="font-bold text-stone-900 text-sm">{swappingItem.name}</h4>
+                <p className="text-xs text-stone-500">{swappingItem.portion} • {swappingItem.calories} kcal</p>
               </div>
+              <Link
+                to={`/patient/plate?slot=${encodeURIComponent(swappingItem.mealType)}`}
+                className="px-3 py-1.5 bg-white border border-orange-300 text-orange-700 hover:bg-orange-100 text-xs font-bold rounded-xl flex items-center gap-1 transition-all shadow-2xs self-start sm:self-center"
+              >
+                <span>Plate Builder (450+ Dishes)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
 
-              <p className="text-xs text-stone-600 leading-relaxed bg-stone-50 p-3.5 rounded-xl border border-stone-200/60">
-                {viewingGuide.description}
+            {/* List of Swap Options */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <p className="text-xs font-black uppercase tracking-wider text-stone-500 mb-2">
+                Recommended Healthy Clinical Swaps ({DEFAULT_SWAP_SUGGESTIONS[swappingItem.mealType]?.length || 4})
               </p>
-
-              {(viewingGuide.chooseFoods || viewingGuide.goEasyFoods || viewingGuide.avoidFoods) && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                  {viewingGuide.chooseFoods && (
-                    <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3.5 space-y-2">
-                      <span className="font-bold text-emerald-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Choose / Prioritize
+              {(DEFAULT_SWAP_SUGGESTIONS[swappingItem.mealType] || DEFAULT_SWAP_SUGGESTIONS['Lunch']).map((alt, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 bg-stone-50/60 hover:bg-orange-50/40 rounded-2xl border border-stone-200 hover:border-orange-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[10px] font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
+                        {alt.tag}
                       </span>
-                      <ul className="space-y-1.5 text-[11px] text-emerald-950">
-                        {viewingGuide.chooseFoods.map((item, idx) => (
-                          <li key={idx} className="flex items-start gap-1.5">
-                            <span className="text-emerald-600 font-bold">•</span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
                     </div>
-                  )}
+                    <h5 className="font-bold text-stone-900 text-sm group-hover:text-orange-600 transition-colors">
+                      {alt.name}
+                    </h5>
+                    <div className="flex items-center gap-3 text-xs text-stone-500 mt-1">
+                      <span>Portion: <strong className="text-stone-700">{alt.portion}</strong></span>
+                      <span>• <strong className="text-orange-600">{alt.calories}</strong> kcal</span>
+                      <span>• <strong className="text-stone-700">{alt.protein}g</strong> P</span>
+                      <span>• <strong className="text-stone-700">{alt.carbs}g</strong> C</span>
+                      <span>• <strong className="text-stone-700">{alt.fat}g</strong> F</span>
+                    </div>
+                  </div>
 
-                  {viewingGuide.goEasyFoods && (
-                    <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 space-y-2">
-                      <span className="font-bold text-amber-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-amber-500"></span> Go Easy / Moderate
-                      </span>
-                      <ul className="space-y-1.5 text-[11px] text-amber-950">
-                        {viewingGuide.goEasyFoods.map((item, idx) => (
-                          <li key={idx} className="flex items-start gap-1.5">
-                            <span className="text-amber-600 font-bold">•</span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {viewingGuide.avoidFoods && (
-                    <div className="bg-rose-50/80 border border-rose-200 rounded-xl p-3.5 space-y-2">
-                      <span className="font-bold text-rose-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-rose-500"></span> Avoid / Limit
-                      </span>
-                      <ul className="space-y-1.5 text-[11px] text-rose-950">
-                        {viewingGuide.avoidFoods.map((item, idx) => (
-                          <li key={idx} className="flex items-start gap-1.5">
-                            <span className="text-rose-600 font-bold">•</span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmSwap(swappingItem, alt)}
+                    className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-black rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Swap to This</span>
+                  </button>
                 </div>
-              )}
-
-              {viewingGuide.bulletPoints && (
-                <div className="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3.5 space-y-2">
-                  <span className="font-bold text-blue-900 uppercase tracking-wider text-[10px]">
-                    Clinical Reference Highlights
-                  </span>
-                  <ul className="space-y-1.5 text-xs text-blue-950">
-                    {viewingGuide.bulletPoints.map((pt, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <span className="text-blue-500 font-bold">✓</span>
-                        <span>{pt}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              ))}
             </div>
 
             {/* Modal Footer */}
-            <div className="pt-3 border-t border-stone-200 flex items-center justify-between">
+            <div className="p-3.5 border-t border-stone-100 bg-stone-50/80 flex items-center justify-between shrink-0">
               <span className="text-[11px] text-stone-500">
-                Prescribed by your clinical nutritionist on NutriSnap
+                Swapping automatically updates calories and notifies your dietician.
               </span>
               <button
-                onClick={() => setViewingGuide(null)}
-                className="px-5 py-2 bg-stone-900 hover:bg-black text-white rounded-xl text-xs font-semibold cursor-pointer"
+                type="button"
+                onClick={() => setSwappingItem(null)}
+                className="px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
               >
-                Close Guide
+                Cancel
               </button>
             </div>
           </div>
         </div>
       )}
+
 
     </div>
   );

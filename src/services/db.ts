@@ -34,6 +34,9 @@ export interface PatientProfile {
   heightCm: number;
   currentWeightKg: number;
   targetWeightKg: number;
+  waistCm?: number;
+  initialWaistCm?: number;
+  inchLoss?: number;
   idealBodyWeightKg?: number;
   bmi?: number;
   bmiClassification?: string;
@@ -42,6 +45,8 @@ export interface PatientProfile {
     targetPace?: string;
     specificFocus?: string[];
     targetDifferenceKg?: number;
+    initialWeightKg?: number;
+    inchLoss?: number;
   };
   medicalHistory?: string[];
   diagnosisOrProcedure?: string;

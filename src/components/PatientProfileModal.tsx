@@ -77,6 +77,8 @@ export default function PatientProfileModal({ isOpen, onClose, patientId, onProf
   const [heightCm, setHeightCm] = useState<number | ''>(165);
   const [currentWeightKg, setCurrentWeightKg] = useState<number | ''>(68);
   const [targetWeightKg, setTargetWeightKg] = useState<number | ''>(60);
+  const [waistCm, setWaistCm] = useState<number | ''>(81);
+  const [inchLoss, setInchLoss] = useState<number | ''>(0);
   const [targetPace, setTargetPace] = useState(TARGET_PACES[0]);
   const [recordNewWeighIn, setRecordNewWeighIn] = useState(true);
 
@@ -113,6 +115,8 @@ export default function PatientProfileModal({ isOpen, onClose, patientId, onProf
         setHeightCm(profile.heightCm || 165);
         setCurrentWeightKg(profile.currentWeightKg || 68);
         setTargetWeightKg(profile.targetWeightKg || 60);
+        setWaistCm(profile.waistCm || 81);
+        setInchLoss(profile.inchLoss ?? (profile.initialWaistCm && profile.waistCm ? Number(((profile.initialWaistCm - profile.waistCm) / 2.54).toFixed(1)) : 0));
         setTargetPace(profile.weightManagement?.targetPace || TARGET_PACES[0]);
 
         setDietaryType(profile.dietaryType || 'Vegetarian');
@@ -196,6 +200,8 @@ export default function PatientProfileModal({ isOpen, onClose, patientId, onProf
       heightCm: hNum,
       currentWeightKg: wNum,
       targetWeightKg: tNum,
+      waistCm: Number(waistCm) || undefined,
+      inchLoss: Number(inchLoss) || 0,
       idealBodyWeightKg: brocaIbw,
       bmi: calculatedBmi,
       bmiClassification: bmiClass,
@@ -203,7 +209,8 @@ export default function PatientProfileModal({ isOpen, onClose, patientId, onProf
         primaryGoal: selectedGoals[0] || 'Weight Loss & Fat Reduction',
         targetPace,
         specificFocus: selectedGoals,
-        targetDifferenceKg: Math.abs(weightDifference)
+        targetDifferenceKg: Math.abs(weightDifference),
+        inchLoss: Number(inchLoss) || 0
       },
       goals: selectedGoals,
       dietaryType,
@@ -359,6 +366,39 @@ export default function PatientProfileModal({ isOpen, onClose, patientId, onProf
                       onChange={e => setHeightCm(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm font-bold text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
                       required
+                    />
+                  </div>
+
+                  {/* Waist Circumference */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                      Waist Circumference (cm)
+                    </label>
+                    <input 
+                      type="number" 
+                      step="0.5"
+                      value={waistCm}
+                      onChange={e => {
+                        const val = e.target.value === '' ? '' : parseFloat(e.target.value);
+                        setWaistCm(val);
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm font-bold text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+                      placeholder="e.g. 81"
+                    />
+                  </div>
+
+                  {/* Inch Loss */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                      Cumulative Inch Loss (inches)
+                    </label>
+                    <input 
+                      type="number" 
+                      step="0.1"
+                      value={inchLoss}
+                      onChange={e => setInchLoss(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm font-bold text-emerald-800 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+                      placeholder="e.g. 2.5"
                     />
                   </div>
                 </div>

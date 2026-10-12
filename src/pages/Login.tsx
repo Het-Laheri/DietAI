@@ -118,6 +118,7 @@ export default function Login() {
   // Step 2: Anthropometrics & Clinical BMI Gauge
   const [heightCm, setHeightCm] = useState<number>(165);
   const [currentWeightKg, setCurrentWeightKg] = useState<number>(68);
+  const [waistInches, setWaistInches] = useState<number>(32);
 
   // Step 3: Specific Weight Management Goals
   const [weightPrimaryGoal, setWeightPrimaryGoal] = useState<string>('Weight Loss & Fat Reduction');
@@ -374,6 +375,9 @@ export default function Login() {
         heightCm,
         currentWeightKg,
         targetWeightKg,
+        waistCm: Math.round(waistInches * 2.54),
+        initialWaistCm: Math.round(waistInches * 2.54),
+        inchLoss: 0,
         idealBodyWeightKg: liveIBW,
         bmi: liveBmi,
         bmiClassification: bmiDetails.label,
@@ -381,7 +385,9 @@ export default function Login() {
           primaryGoal: weightPrimaryGoal,
           targetPace: weightPace,
           specificFocus: selectedFocusAreas,
-          targetDifferenceKg: Math.abs(weightDiff)
+          targetDifferenceKg: Math.abs(weightDiff),
+          initialWeightKg: currentWeightKg,
+          inchLoss: 0
         },
         medicalHistory: selectedConditions.length > 0 ? selectedConditions : ['None / Healthy'],
         diagnosisOrProcedure,
@@ -776,6 +782,32 @@ export default function Login() {
                   <span>35 kg</span>
                   <span>70 kg</span>
                   <span>180 kg</span>
+                </div>
+              </div>
+
+              {/* Waist Circumference for Inch Loss tracking */}
+              <div className="bg-stone-50/70 p-4 rounded-2xl border border-stone-200/80 sm:col-span-2">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs uppercase tracking-wider font-extrabold text-stone-700">
+                    Baseline Waist Circumference (For Inch Loss Tracking)
+                  </label>
+                  <span className="text-sm font-black font-mono text-stone-900">
+                    {waistInches} inches <span className="text-stone-400 font-normal">({Math.round(waistInches * 2.54)} cm)</span>
+                  </span>
+                </div>
+                <input 
+                  type="range"
+                  min="20"
+                  max="55"
+                  step="0.5"
+                  value={waistInches}
+                  onChange={e => setWaistInches(Number(e.target.value))}
+                  className="w-full accent-orange-600 cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-stone-400 mt-1 font-mono">
+                  <span>20 in (51 cm)</span>
+                  <span>32 in (81 cm)</span>
+                  <span>55 in (140 cm)</span>
                 </div>
               </div>
             </div>

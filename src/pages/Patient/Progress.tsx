@@ -35,9 +35,15 @@ import {
   Check,
   Scale,
   Edit3,
-  TrendingDown
+  TrendingDown,
+  Dumbbell,
+  Heart,
+  ChevronLeft,
+  Play,
+  Pause,
+  ArrowRight
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import React from 'react';
 import PatientProfileModal from '../../components/PatientProfileModal';
 
 export default function Progress() {
@@ -50,6 +56,12 @@ export default function Progress() {
   const [progressRecords, setProgressRecords] = useState<ProgressRecord[]>([]);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Carousel state
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const touchStartX = React.useRef<number | null>(null);
+  const touchEndX = React.useRef<number | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -275,9 +287,188 @@ export default function Progress() {
     mealsLogged: d.mealsLogged
   }));
 
+    // Carousel definition for Today's Intake
+  const totalAssignedMeals = assignedPrescribedItems.length;
+  const checkedItemsCount = assignedCompleted.length;
+  const nextMeal = todayChecklist.find(item => !item.completed && !item.isExtra);
+
+  const carouselSlides = [
+    {
+      id: 'meals',
+      label: 'Meals Protocol',
+      tabName: 'Meals',
+      icon: Utensils,
+      current: checkedItemsCount,
+      total: totalAssignedMeals,
+      unit: 'meals logged',
+      percent: Math.min(100, Math.round((assignedCompleted.length / Math.max(1, totalAssignedMeals)) * 100)),
+      gradient: 'from-emerald-50 via-teal-50/70 to-emerald-100/90 border border-emerald-200/90',
+      ringColor: '#10b981',
+      ringTrack: 'rgba(16, 185, 129, 0.16)',
+      titleColor: 'text-emerald-950',
+      subColor: 'text-emerald-800/90',
+      badgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      btnBg: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20',
+      activeTabBg: 'bg-emerald-600 text-white shadow-emerald-600/20',
+      title: extraCompleted.length > 0
+        ? `${assignedCompleted.length} of ${totalAssignedMeals} meals done (+${extraCompleted.length} extra)`
+        : `${checkedItemsCount} of ${totalAssignedMeals} meals done`,
+      subtitle: nextMeal 
+        ? `Next up: ${nextMeal.mealType} — ${nextMeal.name}${extraCompleted.length > 0 ? ` (+${extraCompleted.length} extra logged)` : ''}` 
+        : (assignedCompleted.length >= totalAssignedMeals && totalAssignedMeals > 0
+          ? `All scheduled meals completed!${extraCompleted.length > 0 ? ` Plus ${extraCompleted.length} extra meal logged (+${extraCalories} kcal).` : ' Exceptional clinical discipline today.'}`
+          : (extraCompleted.length > 0 ? `${extraCompleted.length} extra meal logged (+${extraCalories} kcal). All macros synced.` : 'Ready to stay consistent with your dietician meal plan today.')),
+      ctaText: 'Open Meal Checklist',
+      ctaLink: '/patient/meals'
+    },
+    {
+      id: 'calories',
+      label: 'Caloric Balance',
+      tabName: 'Calories',
+      icon: Flame,
+      current: todayCalories,
+      total: targetCalories,
+      unit: 'kcal eaten',
+      percent: Math.min(100, Math.round((todayCalories / targetCalories) * 100)),
+      gradient: 'from-orange-50 via-amber-50/70 to-rose-100/90 border border-orange-200/90',
+      ringColor: '#f97316',
+      ringTrack: 'rgba(249, 115, 22, 0.16)',
+      titleColor: 'text-stone-900',
+      subColor: 'text-stone-700',
+      badgeBg: 'bg-orange-100 text-orange-800 border-orange-200',
+      btnBg: 'bg-orange-600 hover:bg-orange-700 text-white shadow-orange-600/20',
+      activeTabBg: 'bg-orange-600 text-white shadow-orange-600/20',
+      title: `${todayCalories.toLocaleString()} of ${targetCalories.toLocaleString()} kcal`,
+      subtitle: targetCalories > todayCalories 
+        ? `${(targetCalories - todayCalories).toLocaleString()} kcal remaining for dinner & wholesome nourishment.` 
+        : 'Daily caloric target fulfilled! Great energy balance today.',
+      ctaText: 'View Food Logs',
+      ctaLink: '/patient/meals'
+    },
+    {
+      id: 'protein',
+      label: 'Daily Protein',
+      tabName: 'Protein',
+      icon: Dumbbell,
+      current: Math.round(todayProtein),
+      total: targetProtein,
+      unit: 'g Protein',
+      percent: Math.min(100, Math.round((todayProtein / targetProtein) * 100)),
+      gradient: 'from-purple-50 via-indigo-50/70 to-violet-100/90 border border-purple-200/90',
+      ringColor: '#8b5cf6',
+      ringTrack: 'rgba(139, 92, 246, 0.16)',
+      titleColor: 'text-purple-950',
+      subColor: 'text-purple-850',
+      badgeBg: 'bg-purple-100 text-purple-800 border-purple-200',
+      btnBg: 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-600/20',
+      activeTabBg: 'bg-purple-600 text-white shadow-purple-600/20',
+      title: `${Math.round(todayProtein)}g of ${targetProtein}g Protein`,
+      subtitle: targetProtein > todayProtein
+        ? `${Math.max(0, targetProtein - Math.round(todayProtein))}g needed • Essential for cellular repair, lean muscle & satiety.`
+        : 'Protein target hit! Optimal satiety and muscle maintenance.',
+      ctaText: 'High-Protein Recipes',
+      ctaLink: '/patient/meals'
+    },
+    {
+      id: 'carbs',
+      label: 'Daily Carbs',
+      tabName: 'Carbs',
+      icon: Wheat,
+      current: Math.round(todayCarbs),
+      total: targetCarbs,
+      unit: 'g Carbs',
+      percent: Math.min(100, Math.round((todayCarbs / targetCarbs) * 100)),
+      gradient: 'from-amber-50 via-yellow-50/70 to-orange-100/90 border border-amber-200/90',
+      ringColor: '#f59e0b',
+      ringTrack: 'rgba(245, 158, 11, 0.16)',
+      titleColor: 'text-amber-950',
+      subColor: 'text-amber-850',
+      badgeBg: 'bg-amber-100 text-amber-800 border-amber-200',
+      btnBg: 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20',
+      activeTabBg: 'bg-amber-600 text-white shadow-amber-600/20',
+      title: `${Math.round(todayCarbs)}g of ${targetCarbs}g Carbs`,
+      subtitle: targetCarbs > todayCarbs
+        ? `${Math.max(0, targetCarbs - Math.round(todayCarbs))}g remaining • Low-GI complex carbs fuel brain & sustained physical energy.`
+        : 'Carbohydrate daily target achieved smoothly.',
+      ctaText: 'View Complex Carbs',
+      ctaLink: '/patient/meals'
+    },
+    {
+      id: 'fats',
+      label: 'Healthy Fats',
+      tabName: 'Fats',
+      icon: Heart,
+      current: Math.round(todayFat),
+      total: targetFat,
+      unit: 'g Fats',
+      percent: Math.min(100, Math.round((todayFat / targetFat) * 100)),
+      gradient: 'from-rose-50 via-pink-50/70 to-fuchsia-100/90 border border-rose-200/90',
+      ringColor: '#ec4899',
+      ringTrack: 'rgba(236, 72, 153, 0.16)',
+      titleColor: 'text-rose-950',
+      subColor: 'text-rose-850',
+      badgeBg: 'bg-rose-100 text-rose-800 border-rose-200',
+      btnBg: 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20',
+      activeTabBg: 'bg-rose-600 text-white shadow-rose-600/20',
+      title: `${Math.round(todayFat)}g of ${targetFat}g Fats`,
+      subtitle: targetFat > todayFat
+        ? `${Math.max(0, targetFat - Math.round(todayFat))}g remaining • Essential fatty acids for hormones, joints & cellular health.`
+        : 'Healthy lipid target satisfied today.',
+      ctaText: 'Explore Healthy Fats',
+      ctaLink: '/patient/meals'
+    }
+  ];
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsPaused(true);
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current === null || touchEndX.current === null) return;
+    const distance = touchStartX.current - touchEndX.current;
+    const minSwipeDistance = 45;
+
+    if (distance > minSwipeDistance) {
+      setActiveSlide(prev => (prev + 1) % carouselSlides.length);
+    } else if (distance < -minSwipeDistance) {
+      setActiveSlide(prev => (prev - 1 + carouselSlides.length) % carouselSlides.length);
+    }
+
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
+
+  useEffect(() => {
+    if (isPaused) return;
+    const timer = setInterval(() => {
+      setActiveSlide(prev => (prev + 1) % carouselSlides.length);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, [isPaused, carouselSlides.length]);
+
+  const currentSlide = carouselSlides[activeSlide];
+  const ringRadius = 42;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  const strokeOffset = ringCircumference - (ringCircumference * Math.min(100, Math.max(0, currentSlide.percent))) / 100;
+
+  // Weight Change and Inch Loss Calculations
+  const startingWeight = Number(patientProfile?.weightManagement?.initialWeightKg || patientProfile?.currentWeightKg || 68);
+  const currentWeight = Number(patientProfile?.currentWeightKg || 68);
+  const weightChangeKg = Number((currentWeight - startingWeight).toFixed(1));
+  const displayedInchLoss = patientProfile?.inchLoss ?? (
+    patientProfile?.initialWaistCm && patientProfile?.waistCm 
+      ? Number(((patientProfile.initialWaistCm - patientProfile.waistCm) / 2.54).toFixed(1))
+      : 0
+  );
+
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto pb-24 md:pb-8">
-      {/* Page Title */}
+      {/* Page Title (Scan Meal Button Removed) */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-2xl md:text-3xl font-serif font-black text-stone-900 tracking-tight">Your Nutrition & Goal Progress</h1>
@@ -290,188 +481,151 @@ export default function Progress() {
             </span>
           </div>
         </div>
-        <Link 
-          to="/patient/scanner"
-          className="px-5 py-3 bg-gradient-to-r from-purple-600 via-indigo-600 to-violet-700 hover:from-purple-700 hover:to-violet-800 text-white text-xs uppercase font-black tracking-wider rounded-xl transition-all inline-flex items-center gap-2 shrink-0 shadow-lg shadow-purple-500/25 hover:scale-102 cursor-pointer"
-        >
-          <Camera className="w-4 h-4 text-purple-200" />
-          Scan Meal
-        </Link>
       </div>
 
-      {/* ─── TODAY'S CALORIE & MACRO INTAKE TRACKER ───────────────────────── */}
-      <div className="bg-gradient-to-br from-white via-orange-50/15 to-amber-50/20 border-2 border-orange-200/90 rounded-3xl p-6 md:p-8 mb-8 shadow-xl shadow-orange-500/5">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-orange-100 gap-4">
-          <div>
-            <span className="text-[11px] uppercase tracking-wider font-black px-3 py-1 bg-gradient-to-r from-orange-500 to-rose-500 text-white rounded-full shadow-2xs inline-flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-200" /> Today's Live Intake Target
+      {/* ─── TODAY'S INTAKE MEAL CAROUSEL (REPLACING STATIC CARD) ─────────── */}
+      <div 
+        className={`relative overflow-hidden rounded-3xl p-5 sm:p-6 md:p-8 shadow-md mb-8 transition-all duration-700 bg-gradient-to-br select-none touch-pan-y ${currentSlide.gradient}`}
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div className="absolute -top-20 -right-20 w-72 h-72 bg-white/60 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-20 -left-20 w-72 h-72 bg-white/40 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="flex items-center justify-between gap-3 mb-5 sm:mb-6 relative z-10">
+          <div className="flex items-center gap-2">
+            <span className={`text-[10px] sm:text-[11px] font-black uppercase tracking-wider px-2.5 sm:px-3 py-1 rounded-full border backdrop-blur-md inline-flex items-center gap-1.5 shadow-2xs ${currentSlide.badgeBg}`}>
+              <currentSlide.icon className="w-3.5 h-3.5" />
+              {currentSlide.label}
             </span>
-            <h2 className="text-xl md:text-2xl font-serif font-black text-stone-900 mt-2">Daily Calorie Consumption Goal</h2>
-            <p className="text-xs text-stone-600 font-medium mt-0.5">
-              {totalItemsConsumedToday} {totalItemsConsumedToday === 1 ? 'meal' : 'meals'} logged today ({todayStr})
-            </p>
+            <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-stone-600 bg-white/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-stone-200/60 shadow-2xs">
+              <button
+                onClick={() => setIsPaused(!isPaused)}
+                className="hover:text-stone-900 transition-colors flex items-center gap-1 cursor-pointer"
+                title={isPaused ? "Resume auto-rotation" : "Pause auto-rotation"}
+              >
+                {isPaused ? <Play className="w-3 h-3 text-amber-600" /> : <Pause className="w-3 h-3 text-emerald-600" />}
+                <span>{isPaused ? 'Paused' : 'Auto-rotating'}</span>
+              </button>
+            </div>
           </div>
 
-          <div className="bg-gradient-to-r from-orange-500 via-rose-500 to-pink-600 text-white px-6 py-3.5 rounded-2xl text-right shadow-lg shadow-orange-500/25">
-            <div className="text-2xl md:text-3xl font-black text-white font-mono flex items-baseline justify-end gap-1">
-              {todayCalories} <span className="text-xs font-semibold text-rose-100 font-sans">/ {targetCalories} kcal</span>
-            </div>
-            <p className="text-[11px] text-amber-100 mt-0.5 font-bold">
-              {remainingCalories > 0 
-                ? `${remainingCalories} kcal remaining today` 
-                : isOverTarget 
-                  ? `Goal achieved (+${todayCalories - targetCalories} kcal extra) 🎉` 
-                  : 'Target reached for today! 🎉'}
-            </p>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <button
+              onClick={() => setActiveSlide(prev => (prev - 1 + carouselSlides.length) % carouselSlides.length)}
+              className="w-8 h-8 rounded-full bg-white/90 hover:bg-white active:scale-95 border border-stone-200/80 flex items-center justify-center text-stone-700 transition-all backdrop-blur-md shadow-xs cursor-pointer"
+              title="Previous metric"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-xs font-bold text-stone-600 min-w-[32px] sm:min-w-[36px] text-center">
+              {activeSlide + 1} / {carouselSlides.length}
+            </span>
+            <button
+              onClick={() => setActiveSlide(prev => (prev + 1) % carouselSlides.length)}
+              className="w-8 h-8 rounded-full bg-white/90 hover:bg-white active:scale-95 border border-stone-200/80 flex items-center justify-center text-stone-700 transition-all backdrop-blur-md shadow-xs cursor-pointer"
+              title="Next metric"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        {/* Calorie Dual-Segment Progress Bar */}
-        <div className="my-6">
-          <div className="flex justify-between text-xs font-black mb-2">
-            <span className="text-stone-700">Daily Calorie Goal Adherence</span>
-            <span className={todayCalories > targetCalories ? 'text-amber-800' : 'text-emerald-700 font-mono text-sm'}>
-              {caloriePct}%
-            </span>
-          </div>
+        {/* Carousel Body: Left Circular Meter + Right Content */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 md:gap-6 items-center relative z-10">
+          <div className="md:col-span-4 flex items-center justify-center">
+            <div className="relative w-32 h-32 sm:w-36 sm:h-36 md:w-44 md:h-44 flex items-center justify-center">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                <circle
+                  cx="50"
+                  cy="50"
+                  r={ringRadius}
+                  stroke={currentSlide.ringTrack}
+                  strokeWidth="8.5"
+                  fill="transparent"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r={ringRadius}
+                  stroke={currentSlide.ringColor}
+                  strokeWidth="8.5"
+                  strokeDasharray={ringCircumference}
+                  strokeDashoffset={strokeOffset}
+                  strokeLinecap="round"
+                  fill="transparent"
+                  className="transition-all duration-700 ease-out"
+                />
+              </svg>
 
-          <div className="w-full bg-stone-100 h-3.5 rounded-full overflow-hidden p-0.5 border border-stone-200 flex shadow-inner">
-            {/* Prescribed meals portion (emerald-teal) */}
-            <div 
-              className={`bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-l-full transition-all duration-500 shadow-xs ${
-                extraProgressPercent === 0 && assignedProgressPercent >= 100 ? 'rounded-r-full' : ''
-              }`}
-              style={{ width: `${assignedProgressPercent}%` }}
-              title={`Prescribed Meals: ${assignedCalories} kcal`}
-            />
-            {/* Extra food portion (amber-orange) */}
-            {extraProgressPercent > 0 && (
-              <div 
-                className={`bg-gradient-to-r from-amber-400 to-orange-500 h-full transition-all duration-500 ${
-                  assignedProgressPercent === 0 ? 'rounded-l-full' : ''
-                } ${(assignedProgressPercent + extraProgressPercent) >= 100 ? 'rounded-r-full' : ''}`}
-                style={{ width: `${extraProgressPercent}%` }}
-                title={`Extra Food & Scans: ${extraCalories + scanCalories} kcal`}
-              />
-            )}
-          </div>
-
-          {/* Bar legend tags */}
-          <div className="flex flex-wrap items-center justify-between text-[11px] text-stone-500 mt-2.5 gap-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-1.5 font-bold text-emerald-900 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block shadow-xs" />
-                Prescribed: <strong className="text-stone-900">{assignedCalories} kcal</strong>
-              </span>
-              {(extraCalories + scanCalories) > 0 && (
-                <span className="inline-flex items-center gap-1.5 font-bold text-amber-900 bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-200">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block shadow-xs" />
-                  Extra Food: <strong className="text-stone-900">{extraCalories + scanCalories} kcal</strong>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none">
+                <span className={`text-2xl sm:text-3xl md:text-4xl font-serif font-black tracking-tight ${currentSlide.titleColor}`}>
+                  {currentSlide.percent}%
                 </span>
-              )}
+                <span className="text-[10px] md:text-[11px] font-bold text-stone-500 uppercase tracking-wider mt-0.5">
+                  {currentSlide.current} / {currentSlide.total}
+                </span>
+              </div>
             </div>
-            <span className="font-black text-stone-800">
-              {targetCalories} kcal (Target)
-              {isOverTarget && ` • ${todayCalories} kcal total`}
-            </span>
+          </div>
+
+          <div className="md:col-span-8 flex flex-col justify-center space-y-2.5 sm:space-y-3">
+            <h2 className={`text-xl sm:text-2xl md:text-3xl font-serif font-black tracking-tight ${currentSlide.titleColor} leading-tight`}>
+              {currentSlide.title}
+            </h2>
+            <p className={`text-xs md:text-sm ${currentSlide.subColor} font-medium leading-relaxed max-w-xl`}>
+              {currentSlide.subtitle}
+            </p>
+
+            <div className="pt-1.5 sm:pt-2 flex flex-wrap items-center gap-3">
+              <a
+                href={currentSlide.ctaLink}
+                className={`w-full sm:w-auto justify-center px-5 py-2.5 ${currentSlide.btnBg} active:scale-95 font-extrabold rounded-xl text-xs md:text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer`}
+              >
+                <span>{currentSlide.ctaText}</span>
+                <ArrowRight className="w-4 h-4 text-white" />
+              </a>
+            </div>
           </div>
         </div>
 
-        {/* Today's Macronutrient Breakdown vs Targets */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-2">
-          {/* Protein */}
-          <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-200/80 rounded-2xl shadow-xs">
-            <div className="flex items-center justify-between text-emerald-900 mb-1.5">
-              <span className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
-                <Dna className="w-4 h-4 text-emerald-600" /> Protein
-              </span>
-              <span className="text-xs font-mono text-emerald-950 font-black">{todayProtein}g / {targetProtein}g</span>
-            </div>
-            <div className="w-full bg-emerald-200/70 h-2 rounded-full overflow-hidden mt-2">
-              <div 
-                className="bg-gradient-to-r from-emerald-500 to-teal-600 h-full rounded-full transition-all duration-500 shadow-xs" 
-                style={{ width: `${Math.min(Math.round((todayProtein / targetProtein) * 100), 100)}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Carbs */}
-          <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200/80 rounded-2xl shadow-xs">
-            <div className="flex items-center justify-between text-amber-900 mb-1.5">
-              <span className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
-                <Wheat className="w-4 h-4 text-amber-600" /> Carbs
-              </span>
-              <span className="text-xs font-mono text-amber-950 font-black">{todayCarbs}g / {targetCarbs}g</span>
-            </div>
-            <div className="w-full bg-amber-200/70 h-2 rounded-full overflow-hidden mt-2">
-              <div 
-                className="bg-gradient-to-r from-amber-500 to-orange-600 h-full rounded-full transition-all duration-500 shadow-xs" 
-                style={{ width: `${Math.min(Math.round((todayCarbs / targetCarbs) * 100), 100)}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Fats */}
-          <div className="p-4 bg-gradient-to-br from-rose-50 to-pink-50 border-2 border-rose-200/80 rounded-2xl shadow-xs">
-            <div className="flex items-center justify-between text-rose-900 mb-1.5">
-              <span className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
-                <Droplet className="w-4 h-4 text-rose-600" /> Fats
-              </span>
-              <span className="text-xs font-mono text-rose-950 font-black">{todayFat}g / {targetFat}g</span>
-            </div>
-            <div className="w-full bg-rose-200/70 h-2 rounded-full overflow-hidden mt-2">
-              <div 
-                className="bg-gradient-to-r from-rose-500 to-pink-600 h-full rounded-full transition-all duration-500 shadow-xs" 
-                style={{ width: `${Math.min(Math.round((todayFat / targetFat) * 100), 100)}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ─── ACTIVE CLINICAL GOALS BADGES ─────────────────────────────────── */}
-      <div className="bg-gradient-to-br from-white via-purple-50/20 to-indigo-50/15 border-2 border-purple-200/80 rounded-3xl p-6 mb-8 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xs uppercase tracking-wider font-black text-purple-950 flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-purple-100 flex items-center justify-center">
-              <Target className="w-3.5 h-3.5 text-purple-700" />
-            </div>
-            Active Health & Clinical Goals
-          </h2>
-          <button
-            onClick={() => setIsProfileModalOpen(true)}
-            className="text-xs font-black text-purple-700 hover:text-purple-900 uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <Edit3 className="w-3.5 h-3.5" /> Edit Goals
-          </button>
-        </div>
-        {patientProfile?.goals && patientProfile.goals.length > 0 ? (
-          <div className="flex flex-wrap gap-2.5">
-            {patientProfile.goals.map((goal, idx) => {
-              const pillColors = [
-                'bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-950 border-emerald-300',
-                'bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-950 border-purple-300',
-                'bg-gradient-to-r from-sky-50 to-blue-50 text-sky-950 border-sky-300',
-                'bg-gradient-to-r from-amber-50 to-orange-50 text-amber-950 border-amber-300',
-                'bg-gradient-to-r from-rose-50 to-pink-50 text-rose-950 border-rose-300'
-              ];
-              const colorClass = pillColors[idx % pillColors.length];
+        {/* Carousel Tabs */}
+        <div className="mt-6 sm:mt-8 pt-4 sm:pt-5 border-t border-stone-200/60 relative z-10">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1.5 no-scrollbar scroll-smooth -mx-2 px-2">
+            {carouselSlides.map((slide, index) => {
+              const isActive = index === activeSlide;
+              const SlideIcon = slide.icon;
               return (
-                <span key={idx} className={`px-3.5 py-1.5 border-2 rounded-xl text-xs font-black flex items-center gap-2 shadow-2xs ${colorClass}`}>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  {goal}
-                </span>
+                <button
+                  key={slide.id}
+                  onClick={() => {
+                    setActiveSlide(index);
+                    setIsPaused(true);
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer shrink-0 ${
+                    isActive
+                      ? `${slide.activeTabBg} shadow-md scale-102 font-black`
+                      : 'bg-white/80 hover:bg-white text-stone-700 border border-stone-200/80 shadow-2xs'
+                  }`}
+                >
+                  <SlideIcon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-stone-600'}`} />
+                  <span>{slide.tabName}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+                  }`}>
+                    {slide.percent}%
+                  </span>
+                </button>
               );
             })}
           </div>
-        ) : (
-          <div className="text-sm text-stone-600 bg-white/80 p-4 border border-purple-100 rounded-2xl font-medium">
-            Primary Goal: <span className="font-black text-purple-950">General Clinical Nutrition & Health Optimization</span>
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* ─── ANTHROPOMETRICS & CLINICAL WEIGHT MANAGEMENT CARD ───────────── */}
+      {/* ─── ANTHROPOMETRICS, WEEK END, WEIGHT CHANGE & INCH LOSS ─────────── */}
       <div className="bg-gradient-to-br from-white via-teal-50/15 to-emerald-50/15 border-2 border-teal-200/80 rounded-3xl p-6 md:p-8 mb-8 shadow-sm">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-teal-100 mb-5">
           <div>
@@ -479,7 +633,7 @@ export default function Progress() {
               <div className="w-6 h-6 rounded-lg bg-teal-100 flex items-center justify-center">
                 <Scale className="w-3.5 h-3.5 text-teal-700" />
               </div>
-              Anthropometrics & Weight Progress
+              Anthropometrics, Weight Change & Inch Loss
             </h2>
             <p className="text-xs text-stone-600 mt-1 font-medium">
               Target pace: <strong className="text-teal-900 font-bold">{patientProfile?.weightManagement?.targetPace || 'Steady & Sustainable (0.5 kg / week)'}</strong>
@@ -491,37 +645,66 @@ export default function Progress() {
             className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white text-xs font-black rounded-xl transition-all flex items-center gap-1.5 shrink-0 shadow-md shadow-teal-600/20 cursor-pointer"
           >
             <Edit3 className="w-3.5 h-3.5" />
-            Alter Metrics / Log Weight
+            Edit Metrics / Log Weight & Inches
           </button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 text-center">
-          <div className="p-4 bg-white/80 border-2 border-teal-100 rounded-2xl shadow-2xs">
+        {/* 6 Metric Grid: Current Weight, Weight Change, Inch Loss, Week End, Target Goal, Clinical BMI */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-center">
+          {/* Current Weight */}
+          <div className="p-3.5 bg-white/80 border-2 border-teal-100 rounded-2xl shadow-2xs">
             <span className="block text-[10px] text-teal-700 uppercase font-black tracking-wider">Current Weight</span>
-            <span className="text-2xl font-black font-serif text-stone-900 mt-0.5 block">{patientProfile?.currentWeightKg || 68} kg</span>
-            <span className="block text-[11px] text-stone-500 font-medium mt-0.5">Height: {patientProfile?.heightCm || 165} cm</span>
+            <span className="text-xl font-black font-serif text-stone-900 mt-0.5 block">{currentWeight} kg</span>
+            <span className="block text-[10px] text-stone-500 font-medium mt-0.5">Ht: {patientProfile?.heightCm || 165} cm</span>
           </div>
 
-          <div className="p-4 bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border-2 border-emerald-300 rounded-2xl shadow-2xs">
-            <span className="block text-[10px] text-emerald-800 uppercase font-black tracking-wider">Target Goal</span>
-            <span className="text-2xl font-black font-serif text-emerald-700 mt-0.5 block">{patientProfile?.targetWeightKg || 60} kg</span>
-            <span className="block text-[11px] text-emerald-800 font-bold mt-0.5">
-              {Number(patientProfile?.currentWeightKg || 68) > Number(patientProfile?.targetWeightKg || 60)
-                ? `${(Number(patientProfile?.currentWeightKg || 68) - Number(patientProfile?.targetWeightKg || 60)).toFixed(1)} kg to lose`
-                : 'Target Reached! 🎉'}
+          {/* Weight Change */}
+          <div className="p-3.5 bg-white/80 border-2 border-teal-100 rounded-2xl shadow-2xs">
+            <span className="block text-[10px] text-teal-700 uppercase font-black tracking-wider">Weight Change</span>
+            <span className={`text-xl font-black font-serif mt-0.5 block ${weightChangeKg < 0 ? 'text-emerald-700' : weightChangeKg > 0 ? 'text-amber-700' : 'text-stone-900'}`}>
+              {weightChangeKg < 0 ? `${weightChangeKg} kg` : weightChangeKg > 0 ? `+${weightChangeKg} kg` : '0.0 kg'}
+            </span>
+            <span className="block text-[10px] text-stone-500 font-medium mt-0.5">Since start</span>
+          </div>
+
+          {/* Inch Loss */}
+          <div className="p-3.5 bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border-2 border-emerald-300 rounded-2xl shadow-2xs">
+            <span className="block text-[10px] text-emerald-800 uppercase font-black tracking-wider">Inch Loss</span>
+            <span className="text-xl font-black font-serif text-emerald-700 mt-0.5 block">
+              {displayedInchLoss > 0 ? `-${displayedInchLoss}"` : `${displayedInchLoss}"`}
+            </span>
+            <span className="block text-[10px] text-emerald-800 font-bold mt-0.5">
+              Waist: {patientProfile?.waistCm ? `${patientProfile.waistCm} cm` : 'Logged'}
             </span>
           </div>
 
-          <div className="p-4 bg-white/80 border-2 border-teal-100 rounded-2xl shadow-2xs">
-            <span className="block text-[10px] text-teal-700 uppercase font-black tracking-wider">Clinical BMI</span>
-            <span className="text-2xl font-black font-serif text-stone-900 mt-0.5 block">{patientProfile?.bmi || 25.0}</span>
-            <span className="block text-[11px] text-stone-600 font-medium mt-0.5">{patientProfile?.bmiClassification || 'Overweight (25 - 29.9)'}</span>
+          {/* Week End Assessment */}
+          <div className="p-3.5 bg-white/80 border-2 border-teal-100 rounded-2xl shadow-2xs">
+            <span className="block text-[10px] text-teal-700 uppercase font-black tracking-wider">Week Cycle</span>
+            <span className="text-xl font-black font-serif text-stone-900 mt-0.5 block">
+              Week {Math.ceil(timeline.totalDays / 7)}
+            </span>
+            <span className="block text-[10px] text-stone-500 font-medium mt-0.5">
+              Day {timeline.totalDays % 7 || 7} of 7
+            </span>
           </div>
 
-          <div className="p-4 bg-white/80 border-2 border-teal-100 rounded-2xl shadow-2xs">
-            <span className="block text-[10px] text-teal-700 uppercase font-black tracking-wider">Broca Ideal Weight</span>
-            <span className="text-2xl font-black font-serif text-stone-900 mt-0.5 block">~{patientProfile?.idealBodyWeightKg || 60} kg</span>
-            <span className="block text-[11px] text-stone-500 font-medium mt-0.5">Broca Protocol</span>
+          {/* Target Goal */}
+          <div className="p-3.5 bg-white/80 border-2 border-teal-100 rounded-2xl shadow-2xs">
+            <span className="block text-[10px] text-teal-700 uppercase font-black tracking-wider">Target Goal</span>
+            <span className="text-xl font-black font-serif text-stone-900 mt-0.5 block">{patientProfile?.targetWeightKg || 60} kg</span>
+            <span className="block text-[10px] text-stone-500 font-medium mt-0.5">
+              {Number(currentWeight) > Number(patientProfile?.targetWeightKg || 60)
+                ? `${(Number(currentWeight) - Number(patientProfile?.targetWeightKg || 60)).toFixed(1)} kg to go`
+                : 'Target Reached!'}
+            </span>
+          </div>
+
+          {/* Clinical BMI */}
+          <div className="p-3.5 bg-white/80 border-2 border-teal-100 rounded-2xl shadow-2xs">
+            <span className="block text-[10px] text-teal-700 uppercase font-black tracking-wider">Clinical BMI</span>
+            <span className="text-xl font-black font-serif text-stone-900 mt-0.5 block">{patientProfile?.bmi || 25.0}</span>
+            <span className="block text-[10px] text-stone-600 font-medium mt-0.5">{patientProfile?.bmiClassification?.split(' ')[0] || 'Normal'}</span>
           </div>
         </div>
 
@@ -545,183 +728,7 @@ export default function Progress() {
         )}
       </div>
 
-      {/* ─── HEALTH OVERVIEW CARDS ────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-gradient-to-br from-white via-amber-50/20 to-orange-50/30 p-6 rounded-3xl border-2 border-amber-200/80 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs uppercase tracking-wider font-black text-amber-900">Program Consistency</span>
-            <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center">
-              <Flame className="w-5 h-5 text-amber-600" />
-            </div>
-          </div>
-          <p className="text-3xl font-serif font-black text-stone-900">{timeline.consistencyPercentage}%</p>
-          <p className="text-xs text-stone-600 mt-1 font-medium">
-            {timeline.loggedDaysCount > 0 
-              ? `Logged ${timeline.loggedDaysCount} of ${timeline.totalDays} ${timeline.totalDays === 1 ? 'day' : 'days'} on program` 
-              : 'No logs recorded yet'}
-          </p>
-        </div>
-
-        <div className="bg-gradient-to-br from-white via-sky-50/20 to-blue-50/30 p-6 rounded-3xl border-2 border-sky-200/80 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs uppercase tracking-wider font-black text-sky-900">Program Duration</span>
-            <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-sky-600" />
-            </div>
-          </div>
-          <p className="text-3xl font-serif font-black text-stone-900">Day {timeline.totalDays}</p>
-          <p className="text-xs text-stone-600 mt-1 font-medium">
-            Enrolled {timeline.startDateFormatted}
-          </p>
-        </div>
-
-        <div className="bg-gradient-to-br from-white via-rose-50/20 to-pink-50/30 p-6 rounded-3xl border-2 border-rose-200/80 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs uppercase tracking-wider font-black text-rose-900">Total Logged Meals</span>
-            <div className="w-9 h-9 rounded-xl bg-rose-100 flex items-center justify-center">
-              <Award className="w-5 h-5 text-rose-600" />
-            </div>
-          </div>
-          <p className="text-3xl font-serif font-black text-stone-900">{totalMealsLogged}</p>
-          <p className="text-xs text-stone-600 mt-1 font-medium">
-            {uniqueLoggedDates.length} unique recording {uniqueLoggedDates.length === 1 ? 'day' : 'days'}
-          </p>
-        </div>
-      </div>
-
-      {/* ─── LOGGED MEALS TIMELINE & PLATE BREAKDOWN ──────────────────────── */}
-      <div className="bg-white border-2 border-orange-200/80 rounded-3xl p-6 md:p-8 mb-8 shadow-sm">
-        <div className="flex justify-between items-center pb-4 border-b border-orange-100 mb-5">
-          <div>
-            <h2 className="text-lg md:text-xl font-serif font-black text-stone-900 flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-orange-100 flex items-center justify-center">
-                <Utensils className="w-4 h-4 text-orange-600" />
-              </div>
-              Recorded Meals & Scanned Food Logs
-            </h2>
-            <p className="text-xs text-stone-500 font-medium mt-0.5">
-              Complete history of meals completed in your Daily Notepad and Food Scanner
-            </p>
-          </div>
-          <Link 
-            to="/patient/scanner"
-            className="text-xs font-black text-orange-600 hover:text-orange-700 uppercase tracking-wider flex items-center gap-1 transition-colors"
-          >
-            + Scan New <ChevronRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-
-        {allCompletedItems.length === 0 ? (
-          <div className="py-12 px-4 border-2 border-dashed border-orange-200 rounded-2xl text-center bg-orange-50/20">
-            <Link
-              to="/patient/scanner"
-              title="Open AI Food Scanner"
-              className="w-16 h-16 rounded-2xl bg-orange-100 hover:bg-orange-200 flex items-center justify-center mx-auto mb-3 transition-transform hover:scale-110 active:scale-95 cursor-pointer group shadow-xs"
-            >
-              <Camera className="w-8 h-8 text-orange-500 group-hover:scale-105 transition-transform" />
-            </Link>
-            <h3 className="text-base font-black text-stone-900 mb-1">No Food Logs Recorded Yet</h3>
-            <p className="text-xs text-stone-500 max-w-sm mx-auto mb-6 font-medium">
-              Check off meals in your Today's Meals plan or click the camera icon above to scan a picture.
-            </p>
-            <Link 
-              to="/patient/meals"
-              className="px-6 py-3 bg-gradient-to-r from-orange-500 via-rose-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white text-xs uppercase font-black tracking-wider rounded-xl transition-all inline-flex items-center gap-2 shadow-md shadow-orange-500/25"
-            >
-              <Utensils className="w-4 h-4" /> Go to Today's Meals
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-4 divide-y divide-orange-100/70">
-            {allCompletedItems.map((log) => {
-              const isExtra = log.isExtra || log.type === 'extra';
-              const isScanned = log.type === 'scanned';
-              const dayInfo = timeline.days.find(d => d.date === log.date);
-
-              return (
-                <div key={log.id} className="pt-4 first:pt-0">
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                    <div className="flex items-start gap-3.5">
-                      {/* Thumbnail or Icon */}
-                      {log.imageUrl ? (
-                        <div className="w-14 h-14 bg-stone-100 border-2 border-orange-200 overflow-hidden shrink-0 rounded-2xl shadow-2xs">
-                          <img src={log.imageUrl} alt="Meal" className="w-full h-full object-cover" />
-                        </div>
-                      ) : (
-                        <div className={`w-12 h-12 border-2 flex items-center justify-center shrink-0 rounded-2xl shadow-2xs ${
-                          isExtra 
-                            ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200 text-amber-700' 
-                            : 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200 text-emerald-700'
-                        }`}>
-                          <Utensils className="w-5 h-5" />
-                        </div>
-                      )}
-
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <span className="px-2.5 py-0.5 bg-stone-100 border border-stone-200 text-stone-800 text-[10px] font-black uppercase tracking-wider rounded-md">
-                            {log.mealType || 'Meal'}
-                          </span>
-
-                          {isExtra ? (
-                            <span className="px-2.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-black uppercase tracking-wider rounded-md shadow-2xs">
-                              Extra Food
-                            </span>
-                          ) : isScanned ? (
-                            <span className="px-2.5 py-0.5 bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-md shadow-2xs flex items-center gap-1">
-                              <Sparkles className="w-2.5 h-2.5 text-amber-200" /> AI Scan
-                            </span>
-                          ) : (
-                            <span className="px-2.5 py-0.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] font-black uppercase tracking-wider rounded-md shadow-2xs flex items-center gap-1">
-                              <Check className="w-2.5 h-2.5" /> Prescribed Meal
-                            </span>
-                          )}
-
-                          <span className="text-[11px] text-stone-500 font-medium flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-stone-400" />
-                            {dayInfo ? <strong className="text-orange-700 font-black">Day {dayInfo.dayNumber} • </strong> : null}
-                            {log.completedAt || log.date}
-                          </span>
-                        </div>
-
-                        <h4 className="font-black text-stone-900 text-sm tracking-tight">{log.name}</h4>
-
-                        {log.portion && (
-                          <p className="text-xs text-stone-500 mt-0.5 font-medium">
-                            Portion: <strong className="text-stone-800 font-bold">{log.portion}</strong>
-                          </p>
-                        )}
-
-                        {log.notes && (
-                          <p className="text-xs text-stone-700 bg-orange-50/50 p-2.5 border border-orange-200/80 rounded-xl mt-2 font-medium">
-                            <strong className="text-orange-950 font-black">Note:</strong> "{log.notes}"
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Nutrition pills */}
-                    <div className="text-right shrink-0">
-                      <span className={`px-3.5 py-1.5 font-black text-xs rounded-xl inline-block font-mono shadow-xs ${
-                        isExtra 
-                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' 
-                          : 'bg-stone-900 text-white'
-                      }`}>
-                        {log.calories} kcal
-                      </span>
-                      <div className="flex items-center gap-2 text-[11px] text-stone-500 mt-1.5 justify-end font-medium">
-                        <span className="bg-emerald-50 px-1.5 py-0.5 rounded text-emerald-900 border border-emerald-200/60">P: <strong className="font-bold">{log.protein || 0}g</strong></span>
-                        <span className="bg-amber-50 px-1.5 py-0.5 rounded text-amber-900 border border-amber-200/60">C: <strong className="font-bold">{log.carbs || 0}g</strong></span>
-                        <span className="bg-rose-50 px-1.5 py-0.5 rounded text-rose-900 border border-rose-200/60">F: <strong className="font-bold">{log.fat || 0}g</strong></span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {/* (Health Overview 3-cards and Recorded Meals Scanned Food Logs have been removed per specifications) */}
 
       {/* ─── CHRONOLOGICAL DAILY ADHERENCE TREND CHART ────────────────────── */}
       <div className="bg-white p-6 md:p-8 border-2 border-orange-200/80 rounded-3xl shadow-sm">

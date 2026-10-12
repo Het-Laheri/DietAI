@@ -174,6 +174,15 @@ export default function Progress() {
     };
   }, [profile, todayStr]);
 
+  // Carousel auto-rotation timer (must be before any early returns to respect Rules of Hooks)
+  useEffect(() => {
+    if (isPaused) return;
+    const timer = setInterval(() => {
+      setActiveSlide(prev => (prev + 1) % 5);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, [isPaused]);
+
   if (loading) {
     return <div className="p-8 max-w-4xl mx-auto text-stone-500 font-medium">Loading your nutrition progress profile...</div>;
   }
@@ -442,14 +451,6 @@ export default function Progress() {
     touchStartX.current = null;
     touchEndX.current = null;
   };
-
-  useEffect(() => {
-    if (isPaused) return;
-    const timer = setInterval(() => {
-      setActiveSlide(prev => (prev + 1) % carouselSlides.length);
-    }, 4500);
-    return () => clearInterval(timer);
-  }, [isPaused, carouselSlides.length]);
 
   const currentSlide = carouselSlides[activeSlide];
   const ringRadius = 42;

@@ -1,101 +1,63 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { initializeFirestore, doc, getDoc, updateDoc, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
+import { guard, getAdminDb, parseBody, sendError, HttpError } from '../_lib/security.js';
 
-const firebaseConfig = {
-  projectId: 'careclarity-e67bb',
-  appId: '1:84746597643:web:cce300194b200eb5cbde0e',
-  apiKey: 'AIzaSyCuHfs4FyxUCMlAcZyT5tjsKr43BYba99M',
-  authDomain: 'careclarity-e67bb.firebaseapp.com',
-  storageBucket: 'careclarity-e67bb.firebasestorage.app',
-  messagingSenderId: '84746597643',
-};
+const ALLOWED_STATUSES = new Set(['pending', 'viewed', 'answered']);
 
-const app = getApps().some(a => a.name === 'admin_reply_backend')
-  ? getApps().find(a => a.name === 'admin_reply_backend')!
-  : initializeApp(firebaseConfig, 'admin_reply_backend');
-
-const auth = getAuth(app);
-const db = initializeFirestore(app, {}, 'ai-studio-3cc137c8-6ab4-4be2-ac21-f3bc2e0fcecf');
-
+// POST /api/queries/reply   (dietician only)
+// Body: { queryId, reply?, status?, action?: 'delete' }
 export default async function handler(req: any, res: any) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
-  }
+  const caller = await guard(req, res, { methods: ['POST'], roles: ['dietician'] });
+  if (!caller) return;
 
   try {
-    const { queryId, reply, status, action, patientId, patientName } = req.body || {};
+    const { queryId, reply, status, action } = parseBody(req);
+    if (!queryId || typeof queryId !== 'string') throw new HttpError(400, 'Missing queryId');
 
-    if (!queryId) {
-      return res.status(400).json({ error: 'Missing queryId' });
-    }
-
-    try {
-      await signInWithEmailAndPassword(auth, 'admin@aidiet.com', 'Admin123!');
-    } catch (authErr: any) {
-      console.warn('Auth note:', authErr?.message || authErr);
-    }
+    const db = getAdminDb();
+    const ref = db.collection('queries').doc(queryId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpError(404, 'Query not found');
 
     if (action === 'delete') {
-      await deleteDoc(doc(db, 'queries', queryId));
+      await ref.delete();
       return res.status(200).json({ success: true, message: 'Query deleted' });
     }
 
     const updates: Record<string, any> = {};
-    if (reply !== undefined) updates.reply = reply;
-    if (status !== undefined) updates.status = status;
+    if (reply !== undefined) {
+      if (typeof reply !== 'string' || reply.length > 8000) throw new HttpError(400, 'Invalid reply');
+      updates.reply = reply;
+      updates.repliedAt = FieldValue.serverTimestamp();
+    }
+    if (status !== undefined) {
+      if (!ALLOWED_STATUSES.has(status)) throw new HttpError(400, 'Invalid status');
+      updates.status = status;
+    }
+    if (!Object.keys(updates).length) throw new HttpError(400, 'Nothing to update');
+    await ref.update(updates);
 
-    await updateDoc(doc(db, 'queries', queryId), updates);
-
-    // Also notify patient in Firestore if this was a reply
-    if (reply) {
+    const targetPatientId = snap.get('patientId');
+    if (reply && targetPatientId) {
       try {
-        let targetPatientId = patientId;
-        let targetPatientName = patientName;
-        if (!targetPatientId) {
-          const qSnap = await getDoc(doc(db, 'queries', queryId));
-          if (qSnap.exists()) {
-            const qData = qSnap.data();
-            targetPatientId = qData?.patientId;
-            targetPatientName = qData?.patientName;
-          }
-        }
-        if (targetPatientId) {
-          await addDoc(collection(db, 'notifications'), {
-            recipientRole: 'patient',
-            recipientId: targetPatientId,
-            patientId: targetPatientId,
-            patientName: targetPatientName,
-            type: 'QUERY_ANSWERED',
-            title: 'Dietician Answered Your Query 🩺',
-            message: `Jyoti Ma'am replied: "${String(reply).slice(0, 80)}${String(reply).length > 80 ? '...' : ''}"`,
-            link: '/patient/inbox',
-            read: false,
-            createdAt: serverTimestamp()
-          });
-        }
-      } catch (notifErr) {
-        console.warn('Backend reply notification note:', notifErr);
+        await db.collection('notifications').add({
+          recipientRole: 'patient',
+          recipientId: targetPatientId,
+          patientId: targetPatientId,
+          patientName: snap.get('patientName') || '',
+          type: 'QUERY_ANSWERED',
+          title: 'Dietician Answered Your Query 🩺',
+          message: `Your dietician replied: "${String(reply).slice(0, 80)}${String(reply).length > 80 ? '...' : ''}"`,
+          link: '/patient/inbox',
+          read: false,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      } catch {
+        console.warn('[queries/reply] notification not created');
       }
     }
 
-    return res.status(200).json({
-      success: true,
-      message: 'Query updated successfully'
-    });
-  } catch (error: any) {
-    console.error('Error updating query:', error);
-    return res.status(500).json({
-      error: 'Failed to update query',
-      details: error?.message || String(error)
-    });
+    return res.status(200).json({ success: true, message: 'Query updated successfully' });
+  } catch (err) {
+    return sendError(res, err);
   }
 }

@@ -1,65 +1,220 @@
 rules_version = '2';
+
+// NutriSnap Firestore security rules.
+// Model:
+//   * A dietician (users/{uid}.role == 'dietician') can read and write all clinical data.
+//   * A patient can only read and write documents whose patientId is their own uid,
+//     and cannot change their role, subscription or complimentary-access flags.
+//   * Dietician accounts and complimentary access are granted from the Firebase console
+//     (or by an existing dietician), never by the client itself.
+//   * Subscriptions, payments and push subscriptions are written only by the server (Admin SDK).
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    function isAuthenticated() {
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    function signedIn() {
       return request.auth != null;
     }
 
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function isDietician() {
-      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'dietician';
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc().data.role == 'dietician';
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    // Existing document belongs to the caller.
+    function ownsExisting() {
+      return signedIn() && resource.data.get('patientId', null) == uid();
     }
 
+    // Document being written belongs to the caller.
+    function ownsIncoming() {
+      return signedIn() && request.resource.data.get('patientId', null) == uid();
+    }
+
+    // patientId cannot be moved to someone else on update.
+    function patientIdUnchanged() {
+      return request.resource.data.get('patientId', null) == resource.data.get('patientId', null);
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function onlyChanges(keys) {
+      return changedKeys().hasOnly(keys);
+    }
+
+    // Fields only a dietician or the server may set.
+    function privilegedFields() {
+      return ['role', 'subscription', 'isVip', 'isTestPatient', 'dieticianId'];
+    }
+
+    function noPrivilegedFieldsIn(data) {
+      return !data.keys().hasAny(['subscription', 'isVip', 'isTestPatient']);
+    }
+
+    // A patient-created notification must be about the patient and addressed to the dietician or themselves.
+    function validPatientNotification() {
+      return ownsIncoming()
+        && request.resource.data.get('recipientId', uid()) == uid()
+        && request.resource.data.get('recipientRole', 'dietician') in ['dietician', 'patient'];
+    }
+
+    // ── users ──────────────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if signedIn() && (userId == uid() || isDietician());
+
+      // Self-registration as a patient, or a dietician onboarding a patient.
+      allow create: if signedIn()
+        && request.resource.data.get('role', '') == 'patient'
+        && request.resource.data.get('uid', userId) == userId
+        && noPrivilegedFieldsIn(request.resource.data)
+        && (userId == uid() || isDietician());
+
+      // Users may edit their own profile but never role/subscription/access flags.
+      allow update: if signedIn() && (
+        (userId == uid() && !changedKeys().hasAny(privilegedFields()))
+        || (isDietician() && !changedKeys().hasAny(['role', 'subscription']))
+      );
+
+      allow delete: if isDietician();
     }
-    
+
+    // ── patient_profiles ──────────────────────────────────────────────────
     match /patient_profiles/{patientId} {
-      allow read, write: if true;
+      allow read: if signedIn() && (patientId == uid() || isDietician());
+
+      allow create: if signedIn() && (
+        (patientId == uid() && noPrivilegedFieldsIn(request.resource.data))
+        || (isDietician() && !request.resource.data.keys().hasAny(['subscription']))
+      );
+
+      allow update: if signedIn() && (
+        (patientId == uid() && !changedKeys().hasAny(privilegedFields()))
+        || (isDietician() && !changedKeys().hasAny(['subscription']))
+      );
+
+      allow delete: if isDietician();
     }
 
-    match /meal_plans/{planId} {
-      allow read, write: if true;
-    }
-
+    // ── Patient-owned clinical records ──────────────────────────────────────
+    // Patients read/write their own; dieticians read/write all.
     match /food_logs/{logId} {
-      allow read, write: if true;
+      allow read: if resource == null ? signedIn() : (isDietician() || ownsExisting());
+      allow create: if isDietician() || ownsIncoming();
+      allow update: if isDietician() || (ownsExisting() && patientIdUnchanged());
+      allow delete: if isDietician() || ownsExisting();
     }
 
     match /progress_records/{recordId} {
-      allow read, write: if true;
+      allow read: if resource == null ? signedIn() : (isDietician() || ownsExisting());
+      allow create: if isDietician() || ownsIncoming();
+      allow update: if isDietician() || (ownsExisting() && patientIdUnchanged());
+      allow delete: if isDietician() || ownsExisting();
     }
 
+    match /monthly_parameters/{recordId} {
+      allow read: if resource == null ? signedIn() : (isDietician() || ownsExisting());
+      allow create: if isDietician() || ownsIncoming();
+      allow update: if isDietician() || (ownsExisting() && patientIdUnchanged());
+      allow delete: if isDietician() || ownsExisting();
+    }
+
+    // ── Dietician-authored plans: patients read their own, may only mark them read ──
+    match /meal_plans/{planId} {
+      allow read: if resource == null ? signedIn() : (isDietician() || ownsExisting());
+      allow create, delete: if isDietician();
+      allow update: if isDietician() || (ownsExisting() && onlyChanges(['patientRead']));
+    }
+
+    match /patient_week_plans/{planId} {
+      allow read: if resource == null ? signedIn() : (isDietician() || ownsExisting());
+      allow create, delete: if isDietician();
+      allow update: if isDietician() || (ownsExisting() && onlyChanges(['patientRead']));
+    }
+
+    // ── Consultation queries ────────────────────────────────────────────────
     match /queries/{queryId} {
-      allow read, write: if true;
+      allow read: if resource == null ? signedIn() : (isDietician() || ownsExisting());
+      // Patients can only open a pending, unanswered query for themselves.
+      allow create: if isDietician()
+        || (ownsIncoming()
+            && request.resource.data.get('status', 'pending') == 'pending'
+            && !request.resource.data.keys().hasAny(['reply', 'repliedAt']));
+      allow update: if isDietician() || (ownsExisting() && onlyChanges(['patientRead']));
+      allow delete: if isDietician() || ownsExisting();
     }
 
-    match /dietician_notes/{noteId} {
-      allow read, write: if true;
+    // ── AI coach messages: patient asks, dietician approves ─────────────────
+    match /ai_coach_messages/{msgId} {
+      allow read: if resource == null ? signedIn() : (isDietician() || ownsExisting());
+      allow create: if isDietician()
+        || (ownsIncoming()
+            && request.resource.data.get('status', 'pending') == 'pending'
+            && request.resource.data.get('approvedAnswer', '') == '');
+      allow update, delete: if isDietician();
     }
-    
-    match /ai_conversations/{convId} {
-      allow read, write: if true;
+
+    // ── dietician_notes: clinical notes, in-app notifications, and the recipe knowledge base ──
+    match /dietician_notes/{noteId} {
+      allow read: if signedIn() && (
+        noteId == 'clinical_knowledge_base'
+        || resource == null
+        || isDietician()
+        || ownsExisting()
+        || resource.data.get('recipientId', null) == uid()
+      );
+      allow create: if isDietician()
+        || (request.resource.data.get('isNotification', false) == true && validPatientNotification());
+      allow update: if isDietician()
+        || (resource.data.get('isNotification', false) == true
+            && (ownsExisting() || resource.data.get('recipientId', null) == uid())
+            && onlyChanges(['read']));
+      allow delete: if isDietician()
+        || (resource.data.get('isNotification', false) == true
+            && (ownsExisting() || resource.data.get('recipientId', null) == uid()));
     }
 
     match /notifications/{notificationId} {
-      allow read, write: if true;
+      allow read: if signedIn() && (
+        resource == null
+        || isDietician()
+        || ownsExisting()
+        || resource.data.get('recipientId', null) == uid()
+      );
+      allow create: if isDietician() || validPatientNotification();
+      allow update: if isDietician()
+        || ((ownsExisting() || resource.data.get('recipientId', null) == uid()) && onlyChanges(['read']));
+      allow delete: if isDietician() || ownsExisting() || resource.data.get('recipientId', null) == uid();
     }
 
-    match /ai_coach_messages/{msgId} {
-      allow read, write: if true;
-    }
-
+    // ── Shared reference data ───────────────────────────────────────────────
     match /recipes_db/{recipeId} {
-      allow read, write: if true;
+      allow read: if signedIn();
+      allow write: if isDietician();
     }
 
+    // ── Server-only collections (Admin SDK bypasses these rules) ────────────
+    match /payments/{paymentId} {
+      allow read, write: if false;
+    }
+
+    match /push_subscriptions/{subId} {
+      allow read, write: if false;
+    }
+
+    // Everything else is closed by default.
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

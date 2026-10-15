@@ -382,13 +382,13 @@ export default function PatientDashboard() {
 
       {/* Mobile Fixed Bottom Nav with Elevated Center Scanner Action */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-orange-100/90 flex items-center justify-around pt-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] px-2 shadow-[0_-4px_20px_rgba(249,115,22,0.1)]">
-        {[
+        {([
           { name: 'Dashboard', path: '/patient', icon: Home, isCenter: false },
           { name: 'Meals', path: '/patient/meals', icon: ClipboardList, isCenter: false },
           { name: 'AI Scan', path: '/patient/scanner', icon: Camera, isCenter: true },
           { name: 'Progress', path: '/patient/progress', icon: Activity, isCenter: false },
           { name: 'Consult', path: '/patient/inbox', icon: MessageCircle, isCenter: false }
-        ].map(item => {
+        ] as Array<{ name: string; path: string; icon: React.ElementType; isCenter: boolean; locked?: boolean }>).map(item => {
           const active = location.pathname === item.path || (item.path === '/patient' && location.pathname === '/patient/overview');
           const Icon = item.icon;
 

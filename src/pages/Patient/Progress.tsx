@@ -321,7 +321,7 @@ export default function Progress() {
       return [
         {
           month: baselineMonth,
-          date: patientProfile?.startDate || todayStr,
+          date: todayStr,
           weight: startingWeight,
           inchLoss: 0,
           waist: patientProfile?.initialWaistCm || patientProfile?.waistCm || 82,

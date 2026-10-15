@@ -1,11 +1,12 @@
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyDjtTL_trmdMEEH-BINiIAZD1ktgZwY0CE';
+import { guard, parseBody, requireEnv } from '../_lib/security.js';
+const getGeminiKey = () => requireEnv('GEMINI_API_KEY');
 
 async function callGeminiApi(prompt: string, systemInstruction?: string): Promise<string> {
   const models = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
   
   for (const model of models) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${getGeminiKey()}`;
       const payload: any = {
         contents: [
           {
@@ -46,21 +47,11 @@ async function callGeminiApi(prompt: string, systemInstruction?: string): Promis
 }
 
 export default async function handler(req: any, res: any) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
-  }
+  const caller = await guard(req, res, { methods: ['POST'], roles: ['dietician'] });
+  if (!caller) return;
 
   try {
-    const { messages, context, role } = req.body || {};
+    const { messages, context, role } = parseBody(req);
 
     const systemInstruction = role === 'dietician'
       ? `You are an expert clinical nutrition AI assistant working alongside a licensed dietician.
@@ -91,7 +82,8 @@ Review the patient's exact question and clinical profile, and write a concise (2
     // Call real Gemini API
     let responseText = await callGeminiApi(userPrompt, systemInstruction);
 
-    // If API quota or network fails, provide smart contextual fallback
+    // If API quota or network fails, provide smart contextual fallback (flagged so the UI/tests can tell)
+    const fallback = !responseText;
     if (!responseText) {
       const q = String(context?.query || userPrompt).toLowerCase();
       if (q.includes('tea') || q.includes('coffee') || q.includes('caffeine')) {
@@ -107,12 +99,11 @@ Review the patient's exact question and clinical profile, and write a concise (2
       }
     }
 
-    return res.status(200).json({ text: responseText });
+    return res.status(200).json({ text: responseText, fallback });
   } catch (error: any) {
     console.error('Error in /api/ai/chat:', error);
     return res.status(500).json({
       error: 'Failed to process chat',
-      details: error?.message || String(error)
     });
   }
 }

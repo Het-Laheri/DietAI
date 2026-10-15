@@ -28,40 +28,13 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       setUser(firebaseUser);
       if (firebaseUser) {
         profileUnsubscribe = onSnapshot(doc(db, 'users', firebaseUser.uid), (docSnap) => {
-          if (docSnap.exists()) {
-            setProfile(docSnap.data() as User);
-          } else {
-            // Auto-heal fallback for demo / test accounts
-            const emailLower = (firebaseUser.email || '').toLowerCase();
-            if (emailLower.includes('testpatient') || emailLower === 'admin@aidiet.com') {
-              const isDietician = emailLower.includes('admin');
-              const fallbackUser: User = {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email || '',
-                role: isDietician ? 'dietician' : 'patient',
-                name: firebaseUser.displayName || (isDietician ? 'Lead Dietician' : 'Demo VIP Patient'),
-                createdAt: new Date()
-              };
-              setProfile(fallbackUser);
-            } else {
-              setProfile(null);
-            }
-          }
+          // Role comes only from the users/{uid} document, which users cannot change themselves (firestore.rules).
+          setProfile(docSnap.exists() ? (docSnap.data() as User) : null);
           clearTimeout(timeout);
           setLoading(false);
         }, (err) => {
-          console.error('Profile snapshot error:', err);
-          const emailLower = (firebaseUser.email || '').toLowerCase();
-          if (emailLower.includes('testpatient') || emailLower === 'admin@aidiet.com') {
-            const isDietician = emailLower.includes('admin');
-            setProfile({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              role: isDietician ? 'dietician' : 'patient',
-              name: firebaseUser.displayName || (isDietician ? 'Lead Dietician' : 'Demo VIP Patient'),
-              createdAt: new Date()
-            });
-          }
+          console.error('Profile snapshot error:', err?.code || err);
+          setProfile(null);
           clearTimeout(timeout);
           setLoading(false);
         });

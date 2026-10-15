@@ -19,8 +19,7 @@ import {
   Zap, 
   AlertCircle, 
   CheckCircle2, 
-  ArrowRight,
-  TestTube
+  ArrowRight
 } from 'lucide-react';
 
 export default function SubscriptionPage() {
@@ -84,46 +83,6 @@ export default function SubscriptionPage() {
         </div>
       )}
 
-      {/* Quick ₹1 Test Mode Section */}
-      <div className="mb-6 p-4 md:p-5 bg-orange-50/40 border border-orange-200/80 rounded-xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-            <TestTube className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-stone-900 text-xs md:text-sm">Razorpay Test Transaction (₹1.00)</h3>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-orange-100 text-orange-800">
-                100 Paise Minimum
-              </span>
-            </div>
-            <p className="text-xs text-stone-500 mt-0.5">
-              Verify order creation and HMAC-SHA256 signature verification instantly with the minimum ₹1 test payment.
-            </p>
-          </div>
-        </div>
-
-        <RazorpayCheckoutButton
-          amountInPaise={100}
-          currency="INR"
-          name="NutriSnap Test"
-          description="Razorpay Integration Verification (₹1.00)"
-          buttonText="Test Pay ₹1"
-          prefill={{
-            name: profile?.name || user?.displayName || 'Test Patient',
-            email: user?.email || 'patient@nutrisnap.com'
-          }}
-          onSuccess={(result) => {
-            setErrorMessage(null);
-            setSuccessMessage(`Payment verified successfully! Payment ID: ${result.razorpay_payment_id}`);
-          }}
-          onError={(err) => {
-            setSuccessMessage(null);
-            setErrorMessage(err);
-          }}
-        />
-      </div>
-
       {/* Full Subscription Plans Grid */}
       <div className="mb-6">
         <h2 className="text-base font-semibold text-stone-900 mb-3.5">Choose Your Membership Plan</h2>
@@ -165,6 +124,7 @@ export default function SubscriptionPage() {
               </div>
 
               <RazorpayCheckoutButton
+                planId={plan.id}
                 amountInPaise={plan.priceInPaise}
                 currency="INR"
                 name="NutriSnap"

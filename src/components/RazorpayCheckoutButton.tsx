@@ -3,7 +3,8 @@ import { CreditCard, Loader2, ArrowRight } from 'lucide-react';
 import { ensureRazorpayScriptLoaded } from '../services/subscription';
 
 export interface RazorpayCheckoutButtonProps {
-  amountInPaise: number; // e.g., 10000 = ₹100
+  planId: '1_month' | '2_months' | '3_months'; // server sets the price from this
+  amountInPaise: number; // display only; the server decides the charged amount
   currency?: string;     // defaults to 'INR'
   name?: string;         // Business/company name
   description?: string;  // Product/service description
@@ -29,6 +30,7 @@ export interface RazorpayCheckoutButtonProps {
 }
 
 export default function RazorpayCheckoutButton({
+  planId,
   amountInPaise,
   currency = 'INR',
   name = 'NutriSnap',
@@ -69,12 +71,7 @@ export default function RazorpayCheckoutButton({
       const createRes = await fetch('/api/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: Math.round(amountInPaise),
-          currency,
-          receipt: receipt || `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          notes: notes || {}
-        })
+        body: JSON.stringify({ planId })
       });
 
       if (!createRes.ok) {
@@ -83,7 +80,7 @@ export default function RazorpayCheckoutButton({
       }
 
       const orderData = await createRes.json();
-      const keyId = orderData.key_id || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_live_TgJehzpfLu7yQI';
+      const keyId = orderData.key_id;
 
       if (!keyId) {
         throw new Error('Razorpay Key ID missing. Set VITE_RAZORPAY_KEY_ID in .env.');

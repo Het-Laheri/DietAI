@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    name: Build & TypeScript Verification
+    name: Type check, security tests & build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -22,11 +22,23 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Setup Java (Firestore emulator)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
       - name: Install dependencies
         run: npm ci
 
-      - name: TypeScript Check
-        run: npx tsc --noEmit
+      - name: Dependency audit
+        run: npm audit --audit-level=high
 
-      - name: Production Build
+      - name: API & static security tests
+        run: npm test
+
+      - name: Firestore rules tests (emulator)
+        run: npm run test:rules
+
+      - name: Production build (includes tsc --noEmit)
         run: npm run build

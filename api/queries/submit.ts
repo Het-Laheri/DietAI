@@ -1,102 +1,54 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { initializeFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
+import { guard, getAdminDb, parseBody, sendError, HttpError } from '../_lib/security.js';
 
-const firebaseConfig = {
-  projectId: 'careclarity-e67bb',
-  appId: '1:84746597643:web:cce300194b200eb5cbde0e',
-  apiKey: 'AIzaSyCuHfs4FyxUCMlAcZyT5tjsKr43BYba99M',
-  authDomain: 'careclarity-e67bb.firebaseapp.com',
-  storageBucket: 'careclarity-e67bb.firebasestorage.app',
-  messagingSenderId: '84746597643',
-};
+const MAX_QUESTION_LENGTH = 4000;
 
-// Initialize dedicated backend app instance
-const app = getApps().some(a => a.name === 'admin_query_backend')
-  ? getApps().find(a => a.name === 'admin_query_backend')!
-  : initializeApp(firebaseConfig, 'admin_query_backend');
-
-const auth = getAuth(app);
-const db = initializeFirestore(app, {}, 'ai-studio-3cc137c8-6ab4-4be2-ac21-f3bc2e0fcecf');
-
+// POST /api/queries/submit
+// A patient submits a consultation query for themselves. A dietician may log one on a patient's behalf.
 export default async function handler(req: any, res: any) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
-  }
+  const caller = await guard(req, res, { methods: ['POST'] });
+  if (!caller) return;
 
   try {
-    let body = req.body;
-    if (typeof body === 'string') {
-      try { body = JSON.parse(body); } catch {}
-    } else if (Buffer.isBuffer(body)) {
-      try { body = JSON.parse(body.toString('utf-8')); } catch {}
-    }
+    const { patientId, patientName, question, source, date } = parseBody(req);
+    const text = typeof question === 'string' ? question.trim() : '';
+    if (!text) throw new HttpError(400, 'Question text is required');
+    if (text.length > MAX_QUESTION_LENGTH) throw new HttpError(400, 'Question is too long');
 
-    const { patientId, patientName, question, source, status, date } = body || {};
+    // Patients can only submit for themselves; the client-supplied patientId is ignored for them.
+    const finalPatientId = caller.role === 'patient' ? caller.uid : String(patientId || '');
+    if (!finalPatientId) throw new HttpError(400, 'patientId is required');
+    const finalPatientName = String(patientName || 'Patient').slice(0, 120);
 
-    if (!question || !question.trim()) {
-      return res.status(400).json({ error: 'Question text is required' });
-    }
-
-    const finalPatientId = patientId || 'demo_patient';
-    const finalPatientName = patientName || 'Patient';
-
-    // Authenticate as administrative dietician to ensure authorized Firestore write
-    try {
-      if (!auth.currentUser) {
-        await signInWithEmailAndPassword(auth, 'admin@aidiet.com', 'Admin123!');
-      }
-    } catch (authErr: any) {
-      console.warn('Auth note:', authErr?.message || authErr);
-    }
-
-    const docData = {
+    const db = getAdminDb();
+    const docRef = await db.collection('queries').add({
       patientId: finalPatientId,
       patientName: finalPatientName,
-      question: question.trim(),
-      source: source || 'app',
-      status: status || 'pending',
-      date: date || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      createdAt: serverTimestamp()
-    };
+      question: text,
+      source: typeof source === 'string' ? source.slice(0, 40) : 'app',
+      status: 'pending', // server-controlled; clients cannot pre-answer their own query
+      date: typeof date === 'string' ? date.slice(0, 40) : new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      createdAt: FieldValue.serverTimestamp(),
+    });
 
-    const docRef = await addDoc(collection(db, 'queries'), docData);
-
-    // Also persist dietician notification in Firestore with admin credentials
     try {
-      await addDoc(collection(db, 'notifications'), {
+      await db.collection('notifications').add({
         recipientRole: 'dietician',
         type: 'QUERY_SUBMITTED',
         title: 'New Patient Consultation Query 💬',
         patientId: finalPatientId,
         patientName: finalPatientName,
-        message: `${finalPatientName} asked: "${question.trim().slice(0, 90)}"`,
+        message: `${finalPatientName} asked: "${text.slice(0, 90)}"`,
         link: '/dietician/inbox',
         read: false,
-        createdAt: serverTimestamp()
+        createdAt: FieldValue.serverTimestamp(),
       });
     } catch (notifErr) {
-      console.warn('Backend notification creation note:', notifErr);
+      console.warn('[queries/submit] notification not created');
     }
 
-    return res.status(200).json({
-      success: true,
-      id: docRef.id,
-      message: 'Query successfully received by lead dietician'
-    });
-  } catch (error: any) {
-    console.error('Error submitting query:', error);
-    return res.status(500).json({
-      error: 'Failed to submit query',
-      details: error?.message || String(error)
-    });
+    return res.status(200).json({ success: true, id: docRef.id, message: 'Query successfully received by lead dietician' });
+  } catch (err) {
+    return sendError(res, err);
   }
 }

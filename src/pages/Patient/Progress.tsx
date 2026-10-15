@@ -188,10 +188,6 @@ export default function Progress() {
     };
   }, [profile, todayStr]);
 
-  if (loading) {
-    return <div className="p-8 max-w-4xl mx-auto text-stone-500 font-medium">Loading your nutrition progress profile...</div>;
-  }
-
   // ─── TARGET & COMPLIANCE CALCULATIONS ──────────────────────────────────────
   // 1. Prescribed / Assigned Meals planned for today
   const assignedPrescribedItems = todayChecklist.filter(i => !i.isExtra && !i.mealType?.toLowerCase().includes('extra'));
@@ -401,6 +397,10 @@ export default function Progress() {
       setSavingMonthly(false);
     }
   };
+
+  if (loading) {
+    return <div className="p-8 max-w-4xl mx-auto text-stone-500 font-medium">Loading your nutrition progress profile...</div>;
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto pb-24 md:pb-8">

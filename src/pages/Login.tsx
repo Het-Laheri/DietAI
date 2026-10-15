@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../services/firebase';
-import { registerPatient, createDietician, createNotification } from '../services/db';
-import { saveLocalSubscription } from '../services/subscription';
+import { registerPatient, getUserProfile, createNotification } from '../services/db';
 import { 
   Heart, 
   Dumbbell, 
@@ -194,103 +193,33 @@ export default function Login() {
     try {
       setLoading(true);
       setError('');
-      
-      const metaEnv = (import.meta as any).env || {};
-      const SPECIAL_ID = (metaEnv.VITE_DIETICIAN_EMAIL || 'admin@aidiet.com').toLowerCase();
-      const SPECIAL_PASS = metaEnv.VITE_DIETICIAN_PASSWORD || 'Admin123!';
-
-      const TEST_PATIENT_EMAIL = 'testpatient@nutrisnap.com';
-      const TEST_PATIENT_PASS = 'Patient123!';
-      const MEALS_TEST_EMAIL = 'mealstest@nutrisnap.com';
-      const MEALS_TEST_PASS = 'Meals123!';
-
-      if (email.toLowerCase() === SPECIAL_ID && password === SPECIAL_PASS) {
-        try {
-          await signInWithEmailAndPassword(auth, email, password);
-          navigate('/dietician');
-        } catch (authError: any) {
-          if (authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential') {
-            await createDietician(email, password, 'Lead Dietician');
-            navigate('/dietician');
-          } else {
-            throw authError;
-          }
-        }
-      } else if ((email.toLowerCase() === TEST_PATIENT_EMAIL && password === TEST_PATIENT_PASS) || (email.toLowerCase() === MEALS_TEST_EMAIL && password === MEALS_TEST_PASS)) {
-        try {
-          const userCred = await signInWithEmailAndPassword(auth, email, password);
-          saveLocalSubscription(userCred.user.uid, {
-            status: 'active',
-            planId: '3_months',
-            planName: '3 Months VIP Free Test Plan',
-            amount: 0,
-            startDate: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 365 * 86400000).toISOString()
-          });
-          navigate('/patient');
-        } catch (authError: any) {
-          if (authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential') {
-            const isMealsTest = email.toLowerCase() === MEALS_TEST_EMAIL;
-            const patientName = isMealsTest ? 'Meals Test Patient' : 'Demo VIP Patient';
-            const user = await registerPatient(email, password, patientName, {
-              gender: 'Female',
-              age: 29,
-              lifeStage: 'Adult',
-              heightCm: 165,
-              currentWeightKg: 68,
-              targetWeightKg: 60,
-              idealBodyWeightKg: 60,
-              bmi: 25.0,
-              bmiClassification: 'Overweight (25 - 29.9)',
-              weightManagement: {
-                primaryGoal: 'Weight Loss & Fat Reduction',
-                targetPace: 'Steady & Sustainable (0.5 kg / week)',
-                specificFocus: ['Visceral & Belly Fat Reduction', 'Preventing Weight Rebound (Anti-Yo-Yo)'],
-                targetDifferenceKg: 8
-              },
-              medicalHistory: ['None / Healthy'],
-              dietaryType: 'Vegetarian',
-              activityLevel: 'Moderate'
-            });
-
-            const vipSub = {
-              status: 'active' as const,
-              planId: '3_months' as const,
-              planName: '3 Months VIP Free Test Plan',
-              amount: 0,
-              startDate: new Date().toISOString(),
-              expiresAt: new Date(Date.now() + 365 * 86400000).toISOString()
-            };
-
-            saveLocalSubscription(user.uid, vipSub);
-            navigate('/patient');
-          } else {
-            throw authError;
-          }
-        }
-      } else {
-        const userCred = await signInWithEmailAndPassword(auth, email, password);
+      const userCred = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const userProfile = await getUserProfile(userCred.user.uid);
+      if (userProfile?.role === 'patient') {
         createNotification({
           type: 'PATIENT_LOGIN',
+          recipientRole: 'dietician',
           patientId: userCred.user.uid,
-          patientName: userCred.user.displayName || email,
-          message: `${userCred.user.displayName || email} just logged in.`,
+          patientName: userCred.user.displayName || userProfile.name || 'Patient',
+          message: `${userCred.user.displayName || userProfile.name || 'A patient'} signed in`,
           read: false
-        }).catch(e => console.error('Failed to notify login:', e));
-        navigate('/patient');
+        }).catch(() => {});
       }
+      if (!userProfile?.role) {
+        await auth.signOut();
+        setError('This account is not set up yet. Please contact your dietician.');
+        return;
+      }
+      // Role comes from Firestore (users/{uid}.role), which users cannot change themselves.
+      navigate(userProfile.role === 'dietician' ? '/dietician' : '/patient');
     } catch (e: any) {
-      console.error('Sign in error:', e);
-      if (e.code === 'auth/invalid-credential' || e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
-        const metaEnv = (import.meta as any).env || {};
-        const SPECIAL_ID = (metaEnv.VITE_DIETICIAN_EMAIL || 'admin@aidiet.com').toLowerCase();
-        if (email.toLowerCase() === SPECIAL_ID) {
-          setError('Invalid dietician credentials. Check password.');
-        } else {
-          setError('Invalid credentials. Please try again.');
-        }
+      console.error('Sign in error:', e?.code || e);
+      if (['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found', 'auth/invalid-email'].includes(e?.code)) {
+        setError('Invalid credentials. Please try again.');
+      } else if (e?.code === 'auth/too-many-requests') {
+        setError('Too many attempts. Please wait a few minutes and try again.');
       } else {
-        setError(`Error (${e.code}): ${e.message}`);
+        setError('Sign in failed. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -514,64 +443,6 @@ export default function Login() {
               {loading ? 'Signing In...' : 'Sign In to Portal'}
             </button>
 
-            {/* Quick Demo Access Box */}
-            <div className="mt-8 pt-6 border-t border-stone-200">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] uppercase tracking-wider font-extrabold text-stone-500">
-                  Quick Demo Testing Accounts
-                </span>
-                <span className="text-[10px] text-orange-600 font-bold">1-Click Auto Fill</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('testpatient@nutrisnap.com');
-                    setPassword('Patient123!');
-                  }}
-                  className="p-3.5 rounded-2xl border border-orange-200 bg-orange-50/70 hover:bg-orange-100/80 transition-all text-left flex flex-col justify-between shadow-xs group"
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-bold text-xs text-orange-950 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-orange-600" />
-                      Test Patient
-                    </span>
-                    <span className="text-[9px] font-black uppercase tracking-wider bg-orange-500 text-white px-1.5 py-0.5 rounded">
-                      VIP Unlocked
-                    </span>
-                  </div>
-                  <span className="text-[11px] font-mono font-medium text-stone-700 truncate">testpatient@nutrisnap.com</span>
-                  <span className="text-[10px] text-stone-500 mt-0.5">Pass: Patient123!</span>
-                  <span className="text-[10px] font-bold text-orange-600 mt-2 group-hover:underline">
-                    Auto-Fill & Sign In →
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('admin@aidiet.com');
-                    setPassword('Admin123!');
-                  }}
-                  className="p-3.5 rounded-2xl border border-stone-200 bg-stone-50 hover:bg-stone-100 transition-all text-left flex flex-col justify-between shadow-xs group"
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-bold text-xs text-stone-900 flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-stone-700" />
-                      Lead Dietician
-                    </span>
-                    <span className="text-[9px] font-black uppercase tracking-wider bg-stone-900 text-white px-1.5 py-0.5 rounded">
-                      Admin Portal
-                    </span>
-                  </div>
-                  <span className="text-[11px] font-mono font-medium text-stone-700 truncate">admin@aidiet.com</span>
-                  <span className="text-[10px] text-stone-500 mt-0.5">Pass: Admin123!</span>
-                  <span className="text-[10px] font-bold text-stone-700 mt-2 group-hover:underline">
-                    Auto-Fill & Sign In →
-                  </span>
-                </button>
-              </div>
-            </div>
           </form>
         )}
 

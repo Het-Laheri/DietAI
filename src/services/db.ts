@@ -13,6 +13,18 @@ export function getApiUrl(endpoint: string): string {
 
 export type Role = 'dietician' | 'patient';
 
+/**
+ * Builds a collection query that firestore.rules will accept for the given role.
+ * Patients may only read documents whose patientId is their own uid, so their queries
+ * must carry that filter; dieticians may read the whole collection.
+ */
+function roleScopedQuery(collectionName: string, role: Role | undefined, userId?: string) {
+  const base = collection(db, collectionName);
+  if (role === 'dietician') return query(base);
+  const uid = userId || auth.currentUser?.uid || '__no_user__';
+  return query(base, where('patientId', '==', uid));
+}
+
 export interface User {
   uid: string;
   email: string;
@@ -861,19 +873,8 @@ export async function ensureDieticianExists() {
   // but we can create the profile doc if they sign up. For this app, let's create a signup function for the dietician.
 }
 
-export async function createDietician(email: string, password: string, name: string) {
-  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-  await updateProfile(userCredential.user, { displayName: name });
-  const userDoc = {
-    uid: userCredential.user.uid,
-    email,
-    role: 'dietician' as Role,
-    name,
-    createdAt: serverTimestamp()
-  };
-  await setDoc(doc(db, 'users', userCredential.user.uid), userDoc);
-  return userCredential.user;
-}
+// Dietician accounts are provisioned by an administrator (Firebase console: create the Auth user,
+// then set users/{uid}.role = 'dietician'). Clients cannot grant themselves this role (firestore.rules).
 
 export interface ClinicalSummary {
   conditions?: string;
@@ -1818,7 +1819,7 @@ export async function getNotifications(role?: 'dietician' | 'patient', userId?: 
 
   // 1. Fetch live queries
   try {
-    const snap = await getDocs(collection(db, 'queries'));
+    const snap = await getDocs(roleScopedQuery('queries', role ?? 'dietician', userId));
     const queries = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
 
     if (!role || role === 'dietician') {
@@ -1870,7 +1871,7 @@ export async function getNotifications(role?: 'dietician' | 'patient', userId?: 
   // 2. Fetch live meal plans for patients
   if (!role || role === 'patient') {
     try {
-      const snap = await getDocs(collection(db, 'meal_plans'));
+      const snap = await getDocs(roleScopedQuery('meal_plans', role ?? 'dietician', userId));
       const plans = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
       plans
         .filter(p => (!userId || p.patientId === userId) && (p.status === 'published' || !p.status))
@@ -1898,7 +1899,7 @@ export async function getNotifications(role?: 'dietician' | 'patient', userId?: 
 
   // 3. Fetch notifications stored in dietician_notes
   try {
-    const snap = await getDocs(collection(db, 'dietician_notes'));
+    const snap = await getDocs(roleScopedQuery('dietician_notes', role ?? 'dietician', userId));
     snap.docs.forEach(d => {
       const data = d.data() as any;
       if (data && data.isNotification) {
@@ -2083,7 +2084,7 @@ export function subscribeToNotifications(
   // Listen to Firestore 'queries' (100% live and permitted!)
   let unsubQueries = () => {};
   try {
-    const qQueries = query(collection(db, 'queries'));
+    const qQueries = roleScopedQuery('queries', role, userId);
     unsubQueries = onSnapshot(qQueries, (snap) => {
       remoteQueries = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
       computeAndPublish();
@@ -2098,7 +2099,7 @@ export function subscribeToNotifications(
   let unsubMealPlans = () => {};
   if (role === 'patient') {
     try {
-      const qPlans = query(collection(db, 'meal_plans'));
+      const qPlans = roleScopedQuery('meal_plans', role, userId);
       unsubMealPlans = onSnapshot(qPlans, (snap) => {
         remoteMealPlans = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
         computeAndPublish();
@@ -2113,7 +2114,7 @@ export function subscribeToNotifications(
   // Listen to Firestore 'dietician_notes' (100% live and permitted!)
   let unsubNotes = () => {};
   try {
-    const qNotes = query(collection(db, 'dietician_notes'));
+    const qNotes = roleScopedQuery('dietician_notes', role, userId);
     unsubNotes = onSnapshot(qNotes, (snap) => {
       remoteNotes = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
       computeAndPublish();

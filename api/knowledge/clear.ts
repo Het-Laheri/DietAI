@@ -1,50 +1,21 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { initializeFirestore, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
+import { guard, getAdminDb, sendError } from '../_lib/security.js';
 
-const firebaseConfig = {
-  projectId: 'careclarity-e67bb',
-  appId: '1:84746597643:web:cce300194b200eb5cbde0e',
-  apiKey: 'AIzaSyCuHfs4FyxUCMlAcZyT5tjsKr43BYba99M',
-  authDomain: 'careclarity-e67bb.firebaseapp.com',
-  storageBucket: 'careclarity-e67bb.firebasestorage.app',
-  messagingSenderId: '84746597643',
-};
-
-const app = getApps().some(a => a.name === 'admin_knowledge_backend')
-  ? getApps().find(a => a.name === 'admin_knowledge_backend')!
-  : initializeApp(firebaseConfig, 'admin_knowledge_backend');
-
-const auth = getAuth(app);
-const db = initializeFirestore(app, {}, 'ai-studio-3cc137c8-6ab4-4be2-ac21-f3bc2e0fcecf');
-
+// DELETE (or POST) /api/knowledge/clear   (dietician only)
+// Empties the clinical recipe knowledge base.
 export default async function handler(req: any, res: any) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'DELETE, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  const caller = await guard(req, res, { methods: ['DELETE', 'POST'], roles: ['dietician'] });
+  if (!caller) return;
 
   try {
-    try {
-      if (!auth.currentUser) {
-        await signInWithEmailAndPassword(auth, 'admin@aidiet.com', 'Admin123!');
-      }
-    } catch (e) {
-      console.warn('Backend auth attempt notice:', e);
-    }
-
-    await setDoc(doc(db, 'dietician_notes', 'clinical_knowledge_base'), {
+    await getAdminDb().collection('dietician_notes').doc('clinical_knowledge_base').set({
       recipes: [],
       count: 0,
-      clearedAt: serverTimestamp()
+      clearedAt: FieldValue.serverTimestamp(),
+      clearedBy: caller.uid,
     });
-
     return res.status(200).json({ success: true, message: 'Knowledge base database cleared successfully.' });
-  } catch (error: any) {
-    console.error('Error clearing knowledge base:', error);
-    return res.status(500).json({ error: 'Failed to clear database', details: error.message });
+  } catch (err) {
+    return sendError(res, err);
   }
 }

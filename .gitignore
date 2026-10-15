@@ -9,3 +9,6 @@ coverage/
 
 .vercel
 SECRETS.txt
+
+# Audit evidence that may contain unredacted data
+audit-results/evidence/raw/

@@ -386,6 +386,7 @@ export default function MealNotepad() {
         deleteFoodLog(itemToRemove.logMealId).catch(console.warn);
       }
       window.dispatchEvent(new CustomEvent('nutrisnap:checklist_updated'));
+    }
   };
 
   // Swap Prescribed Meal
@@ -438,6 +439,8 @@ export default function MealNotepad() {
     setTimeout(() => setExtraSuccessToast(null), 4000);
   };
 
+  // Save Daily Notes
+  const handleSaveReflection = () => {
     if (!profile) return;
     localStorage.setItem(reflectionKey, patientReflection);
     setNotesSavedToast(true);

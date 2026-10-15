@@ -1,4 +1,4 @@
-import { RecipeDBItem } from './db';
+import type { RecipeDBItem } from './db';
 
 // Canonical 200 Clinical Exchange-List Recipes loaded directly from 200_Exchange_List_Based_Recipes.xlsx
 export const DEFAULT_CLINICAL_RECIPES: RecipeDBItem[] = [

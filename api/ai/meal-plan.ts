@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
+import { guard, parseBody, requireEnv } from '../_lib/security.js';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyDjtTL_trmdMEEH-BINiIAZD1ktgZwY0CE';
+const getGeminiKey = () => requireEnv('GEMINI_API_KEY');
 
 const DEFAULT_RECIPES = [
   {
@@ -136,21 +137,11 @@ const DEFAULT_RECIPES = [
 ];
 
 export default async function handler(req: any, res: any) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
-  }
+  const caller = await guard(req, res, { methods: ['POST'], roles: ['dietician'] });
+  if (!caller) return;
 
   try {
-    const { patientProfile, targets, instructions, availableRecipes } = req.body || {};
+    const { patientProfile, targets, instructions, availableRecipes } = parseBody(req);
 
     const recipePool = Array.isArray(availableRecipes) && availableRecipes.length > 0
       ? availableRecipes
@@ -260,7 +251,7 @@ export default async function handler(req: any, res: any) {
     let generatedPlan: any = null;
 
     try {
-      const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: getGeminiKey() });
       const prompt = `You are a licensed clinical dietician creating a 7-day meal plan.
 Patient: ${JSON.stringify(patientProfile || {})}
 Dietary Notes: ${instructions || 'None'}
@@ -449,6 +440,6 @@ JSON Array format:
     return res.status(200).json(generatedPlan);
   } catch (error: any) {
     console.error('Meal plan endpoint error:', error);
-    return res.status(500).json({ error: error.message || 'Internal server error' });
+    return res.status(500).json({ error: 'Meal plan generation failed' });
   }
 }

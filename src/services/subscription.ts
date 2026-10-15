@@ -1,5 +1,3 @@
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from './firebase';
 import { User, PatientProfile } from './db';
 
 export interface SubscriptionPlan {
@@ -114,28 +112,14 @@ export function isPatientSubscribed(profile?: User | null): boolean {
   // Dieticians never need to pay
   if (profile.role === 'dietician') return true;
 
-  // Test / VIP Demo Patient bypass - grant full unlocked access without paying
-  const emailLower = (profile.email || '').toLowerCase();
-  if (
-    emailLower === 'testpatient@nutrisnap.com' ||
-    emailLower === 'demo@nutrisnap.com' ||
-    emailLower === 'test@nutrisnap.com' ||
-    emailLower.startsWith('testpatient') ||
-    (profile as any).isTestPatient === true ||
-    (profile as any).isVip === true
-  ) {
+  // Complimentary access flags can only be set by a dietician (enforced by firestore.rules).
+  if ((profile as any).isTestPatient === true || (profile as any).isVip === true) {
     return true;
   }
 
   // 1. Check profile in Firestore state
   const subInProfile = (profile as any).subscription as ActiveSubscription | undefined;
   if (subInProfile?.status === 'active' && new Date(subInProfile.expiresAt).getTime() > Date.now()) {
-    return true;
-  }
-
-  // 2. Check persistent local storage cache
-  const localSub = getLocalSubscription(profile.uid);
-  if (localSub?.status === 'active' && new Date(localSub.expiresAt).getTime() > Date.now()) {
     return true;
   }
 
@@ -184,16 +168,7 @@ export async function initiateRazorpayPayment(params: {
     const res = await fetch('/api/create-order', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount: plan.priceInPaise,
-        currency: 'INR',
-        receipt: `rcpt_${user.uid.slice(0, 6)}_${Date.now()}`,
-        notes: {
-          planId: plan.id,
-          userId: user.uid,
-          userName: user.displayName || 'Patient'
-        }
-      })
+      body: JSON.stringify({ planId: plan.id })
     });
 
     if (!res.ok) {
@@ -202,7 +177,7 @@ export async function initiateRazorpayPayment(params: {
     }
 
     const orderData = await res.json();
-    const keyId = orderData.key_id || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_live_TgJehzpfLu7yQI';
+    const keyId = orderData.key_id;
 
     if (!keyId) {
       throw new Error('Razorpay Key ID is not configured. Please check VITE_RAZORPAY_KEY_ID in .env');
@@ -239,36 +214,9 @@ export async function initiateRazorpayPayment(params: {
             throw new Error(verifyData.error || 'Payment signature verification failed.');
           }
 
-          // 5. Calculate subscription expiry
-          const now = new Date();
-          const expires = new Date();
-          expires.setDate(now.getDate() + plan.durationDays);
-
-          const newSubscription: ActiveSubscription = {
-            status: 'active',
-            planId: plan.id,
-            planName: plan.name,
-            amount: plan.priceInInr,
-            startDate: now.toISOString(),
-            expiresAt: expires.toISOString(),
-            paymentId: response.razorpay_payment_id,
-            orderId: response.razorpay_order_id
-          };
-
-          // Save locally
-          saveLocalSubscription(user.uid, newSubscription);
-
-          // Update Firestore
-          try {
-            await updateDoc(doc(db, 'users', user.uid), {
-              subscription: newSubscription
-            });
-            await updateDoc(doc(db, 'patient_profiles', user.uid), {
-              subscription: newSubscription
-            });
-          } catch (dbErr) {
-            console.warn('Notice: Firestore subscription write note:', dbErr);
-          }
+          // 5. The server activated the subscription after verifying the payment.
+          const newSubscription: ActiveSubscription = verifyData.subscription;
+          saveLocalSubscription(user.uid, newSubscription); // display cache only; never trusted for access
 
           onSuccess(newSubscription);
         } catch (vErr: any) {

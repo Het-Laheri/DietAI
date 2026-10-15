@@ -5,6 +5,10 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import app from './server';
+import { installFakes } from './tests/helpers.js';
+
+// Use a fake signed-in patient session (no Firebase access); Gemini is called with GEMINI_API_KEY from .env.
+installFakes();
 import { 
   validateImageInput, 
   parseAndValidateFoodScanResponse, 
@@ -148,7 +152,7 @@ async function runTests() {
 
   async function fetchWithRetry(url: string, options: any, maxRetries = 2): Promise<{ status: number; data: any }> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const res = await fetch(url, options);
+      const res = await fetch(url, { ...options, headers: { ...(options?.headers || {}), Authorization: 'Bearer token-patient-a' } });
       const data = await res.json();
       if (res.status === 429 && attempt < maxRetries) {
         console.log(`   ⏳ Gemini API rate limit hit (429). Waiting 10s before retry ${attempt + 1}...`);

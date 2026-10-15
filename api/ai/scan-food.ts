@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
+import { guard, parseBody, requireEnv } from '../_lib/security.js';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyDjtTL_trmdMEEH-BINiIAZD1ktgZwY0CE';
+const getGeminiKey = () => requireEnv('GEMINI_API_KEY');
 
 interface FoodPlateItem {
   name: string;
@@ -252,20 +253,11 @@ function parseAndValidateFoodScanResponse(rawJsonOrText: string): FoodScanResult
 }
 
 export default async function handler(req: any, res: any) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
-  }
+  const caller = await guard(req, res, { methods: ['POST'] });
+  if (!caller) return;
 
   try {
-    const { image, mimeType, userNotes, patientProfile } = req.body || {};
+    const { image, mimeType, userNotes, patientProfile } = parseBody(req);
 
     const validation = validateImageInput(image);
     if (!validation.valid) {
@@ -355,7 +347,7 @@ CRITICAL INSTRUCTIONS:
 
 Return strictly a valid JSON object matching either format B or C without markdown ticks.`;
 
-    const aiClient = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    const aiClient = new GoogleGenAI({ apiKey: getGeminiKey() });
     // Prioritize ultra-fast (1.5s - 3s) multimodal models to prevent Vercel 10s execution timeouts
     const modelsToTry = [
       'gemini-flash-lite-latest',
@@ -431,8 +423,7 @@ Return strictly a valid JSON object matching either format B or C without markdo
       : (error.message || 'Failed to analyze food image with AI');
 
     return res.status(statusCode).json({
-      error: userMessage,
-      details: msg
+      error: statusCode === 500 ? 'Food scan failed. Please try again.' : userMessage
     });
   }
 }

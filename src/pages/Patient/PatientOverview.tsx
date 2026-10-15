@@ -49,8 +49,10 @@ import {
   Check,
   TrendingUp,
   Zap,
-  Calendar
+  Calendar,
+  HeartPulse
 } from 'lucide-react';
+import PhysiotherapistModal from '../../components/PhysiotherapistModal';
 
 export default function PatientOverview() {
   const { profile } = useAuth();
@@ -62,6 +64,7 @@ export default function PatientOverview() {
   const [recentQuery, setRecentQuery] = useState<Query | null>(null);
   const [weekPlan, setWeekPlan] = useState<PatientWeekPlan | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPhysioModalOpen, setIsPhysioModalOpen] = useState(false);
 
   const isLocalUpdating = React.useRef(false);
 
@@ -1083,6 +1086,50 @@ export default function PatientOverview() {
         <YogaPoseCard date={todayStr} />
       </div>
 
+      {/* Partner Physiotherapy Clinic Card */}
+      <div 
+        onClick={() => setIsPhysioModalOpen(true)}
+        className="bg-gradient-to-r from-sky-500/10 via-cyan-500/10 to-teal-500/10 border border-sky-200/90 hover:border-sky-400 rounded-3xl p-5 sm:p-6 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-600 to-cyan-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-sky-600/20 group-hover:scale-105 transition-transform">
+              <HeartPulse className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className="text-[10px] font-black uppercase tracking-wider bg-sky-100 text-sky-800 px-2.5 py-0.5 rounded-full border border-sky-200">
+                  Clinical Partner
+                </span>
+                <span className="text-xs font-bold text-stone-500">
+                  Thane West & Goregaon East, Mumbai
+                </span>
+              </div>
+              <h3 className="font-serif font-black text-stone-900 text-base sm:text-lg group-hover:text-sky-700 transition-colors">
+                Dr. Namrata's Physio Plus
+              </h3>
+              <p className="text-xs text-stone-600 font-medium mt-0.5">
+                Dr. Namrata Bhatt (Oza) &bull; B.P.T / C.M.M.T / M.I.A.P &bull; Manual Therapy, Spine & Sports Rehab
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPhysioModalOpen(true);
+              }}
+              className="py-2.5 px-4 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-xl shadow-md shadow-sky-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <HeartPulse className="w-3.5 h-3.5" />
+              <span>View Visiting Card & Contact</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* 5. AI Food Scanner Feature Highlight Banner */}
       <div className="bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-700 text-white rounded-3xl p-6 md:p-8 shadow-xl shadow-purple-500/25 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
         {/* Glow orb */}
@@ -1125,6 +1172,12 @@ export default function PatientOverview() {
           <ArrowRight className="w-4 h-4 text-stone-900" />
         </Link>
       </div>
+
+      {/* Physiotherapist Details & Card Modal */}
+      <PhysiotherapistModal
+        isOpen={isPhysioModalOpen}
+        onClose={() => setIsPhysioModalOpen(false)}
+      />
     </div>
   );
 }

@@ -44,6 +44,7 @@ export interface PatientProfile {
   dob: string;
   gender: string;
   age?: number;
+  startDate?: string;
   lifeStage?: 'Adult' | 'Geriatric' | 'Gynaec' | 'Pediatrics' | string;
   heightCm: number;
   currentWeightKg: number;

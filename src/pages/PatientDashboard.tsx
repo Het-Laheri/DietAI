@@ -19,7 +19,8 @@ import {
   Sparkles,
   Clock,
   X,
-  ChevronRight
+  ChevronRight,
+  HeartPulse
 } from 'lucide-react';
 import { isPatientSubscribed } from '../services/subscription';
 import { Notification } from '../services/db';
@@ -33,6 +34,7 @@ import Inbox from './Patient/Inbox';
 import SubscriptionPage from './Patient/SubscriptionPage';
 import PatientProfileModal from '../components/PatientProfileModal';
 import NotificationPermissionBanner from '../components/NotificationPermissionBanner';
+import PhysiotherapistModal from '../components/PhysiotherapistModal';
 import { mobileNotificationService } from '../services/mobileNotificationService';
 
 function formatRelativeTime(createdAt: any): string {
@@ -65,6 +67,7 @@ export default function PatientDashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifTab, setNotifTab] = useState<'unread' | 'all'>('unread');
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isPhysioModalOpen, setIsPhysioModalOpen] = useState(false);
 
   useEffect(() => {
     setIsSubscribed(isPatientSubscribed(profile));
@@ -193,6 +196,16 @@ export default function PatientDashboard() {
               </span>
             )}
           </Link>
+          
+          {/* Mobile Physio Quick Button */}
+          <button
+            onClick={() => setIsPhysioModalOpen(true)}
+            className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200/80 px-2 py-0.5 rounded-full shadow-2xs transition-colors cursor-pointer"
+            title="Dr. Namrata's Physio Plus Details"
+          >
+            <HeartPulse className="w-3 h-3 text-sky-600" />
+            <span>Physio</span>
+          </button>
           {/* Mobile Bell Button */}
           <button
             onClick={() => setShowNotifications(!showNotifications)}
@@ -284,6 +297,30 @@ export default function PatientDashboard() {
               <span className="w-2 h-2 rounded-full bg-stone-200" />
             )}
           </button>
+
+          {/* Desktop Sidebar Physiotherapist Button */}
+          <div className="pt-2 mt-2 border-t border-stone-100">
+            <button
+              onClick={() => setIsPhysioModalOpen(true)}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-bold text-stone-600 hover:text-sky-700 hover:bg-sky-50/80 transition-all text-left group cursor-pointer"
+              title="Click to view Dr. Namrata's Physio Plus details & card"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0 group-hover:bg-sky-100 transition-colors">
+                  <HeartPulse className="w-4 h-4 text-sky-600 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="truncate">
+                  <span className="block text-xs font-black text-stone-800 group-hover:text-sky-800 truncate">Physiotherapist</span>
+                  <span className="text-[10px] text-stone-400 font-semibold group-hover:text-sky-600 truncate block">
+                    Dr. Namrata's Physio Plus
+                  </span>
+                </div>
+              </div>
+              <span className="px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-sky-100 text-sky-700 rounded-md shrink-0">
+                Card
+              </span>
+            </button>
+          </div>
         </nav>
 
         <div className="p-6 border-t border-stone-100">
@@ -346,6 +383,12 @@ export default function PatientDashboard() {
           patientId={profile.uid}
         />
       )}
+
+      {/* Physiotherapist Details & Card Modal */}
+      <PhysiotherapistModal
+        isOpen={isPhysioModalOpen}
+        onClose={() => setIsPhysioModalOpen(false)}
+      />
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto pb-28 md:pb-8 bg-gradient-to-br from-amber-50/40 via-slate-50 to-orange-50/30 relative">

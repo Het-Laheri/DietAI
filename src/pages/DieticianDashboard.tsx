@@ -22,7 +22,8 @@ import {
   Utensils,
   CreditCard,
   Sparkles,
-  Clock
+  Clock,
+  HeartPulse
 } from 'lucide-react';
 import { useEffect } from 'react';
 import Overview from './Dietician/Overview';
@@ -34,6 +35,7 @@ import AiAssistant from './Dietician/AiAssistant';
 import KnowledgeBase from './Dietician/KnowledgeBase';
 import MealPlanGenerator from './Dietician/MealPlanGenerator';
 import NotificationPermissionBanner from '../components/NotificationPermissionBanner';
+import PhysiotherapistModal from '../components/PhysiotherapistModal';
 import { mobileNotificationService } from '../services/mobileNotificationService';
 
 function formatRelativeTime(createdAt: any): string {
@@ -66,6 +68,7 @@ export default function DieticianDashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifTab, setNotifTab] = useState<'unread' | 'all'>('unread');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isPhysioModalOpen, setIsPhysioModalOpen] = useState(false);
 
   // Live real-time listener on queries collection for consultation badge
   useEffect(() => {
@@ -172,6 +175,34 @@ export default function DieticianDashboard() {
               </Link>
             );
           })}
+
+          {/* Physiotherapist Details (Directly below AI Clinical Assistant) */}
+          <div className="pt-2 mt-2 border-t border-stone-100">
+            <button
+              type="button"
+              onClick={() => {
+                setIsPhysioModalOpen(true);
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all border border-transparent text-stone-600 hover:text-sky-700 hover:bg-sky-50/80 hover:border-sky-200 group text-left cursor-pointer"
+              title="Click to view Dr. Namrata's Physio Plus card & details"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0 group-hover:bg-sky-100 transition-colors">
+                  <HeartPulse className="w-4 h-4 text-sky-600 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="truncate">
+                  <span className="block truncate font-bold text-stone-800 group-hover:text-sky-800">Physiotherapist</span>
+                  <span className="text-[10px] text-stone-400 font-semibold group-hover:text-sky-600 truncate block">
+                    Dr. Namrata's Physio Plus
+                  </span>
+                </div>
+              </div>
+              <span className="px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-sky-100 text-sky-700 rounded-md shrink-0">
+                Card
+              </span>
+            </button>
+          </div>
         </nav>
 
         <div className="p-5 border-t border-stone-100 bg-stone-50/50">
@@ -424,6 +455,12 @@ export default function DieticianDashboard() {
           </ErrorBoundary>
         </div>
       </main>
+
+      {/* Physiotherapist Details & Card Modal */}
+      <PhysiotherapistModal
+        isOpen={isPhysioModalOpen}
+        onClose={() => setIsPhysioModalOpen(false)}
+      />
     </div>
   );
 }

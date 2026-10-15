@@ -37,8 +37,43 @@ export default function Inbox() {
     const refreshMergedQueries = (remoteItems: Query[] = []) => {
       const localItems = getLocalQueries(patientUid);
       const map = new Map<string, Query>();
-      remoteItems.forEach(item => { if (item.id) map.set(item.id, item); });
-      localItems.forEach(item => { if (item.id && !map.has(item.id)) map.set(item.id, item); });
+
+      // 1. Add remote items first (remote is authoritative)
+      remoteItems.forEach(item => {
+        if (item.id) map.set(item.id, item);
+      });
+
+      // 2. Build set of remote question keys to prune temporary duplicates
+      const remoteKeys = new Set(
+        remoteItems.map(r => `${r.patientId}_${(r.question || '').trim().toLowerCase()}`)
+      );
+
+      const cleanedLocalItems: Query[] = [];
+
+      // 3. Merge local items, discarding temporary duplicates of remote queries
+      localItems.forEach(item => {
+        if (!item.id) return;
+        const key = `${item.patientId}_${(item.question || '').trim().toLowerCase()}`;
+        const isTemporary = item.id.startsWith('temp_') || item.id.startsWith('query_');
+        
+        if (map.has(item.id) || (isTemporary && remoteKeys.has(key))) {
+          // Already in remote queries; skip and prune from local cache
+          return;
+        }
+
+        map.set(item.id, item);
+        cleanedLocalItems.push(item);
+      });
+
+      // Synchronize pruned local cache if any duplicates were cleaned up
+      if (cleanedLocalItems.length !== localItems.length) {
+        try {
+          const allLocal = getLocalQueries();
+          const otherPatientsLocal = allLocal.filter(q => q.patientId !== patientUid);
+          localStorage.setItem('nutrisnap_cached_queries', JSON.stringify([...cleanedLocalItems, ...otherPatientsLocal]));
+        } catch {}
+      }
+
       const combined = Array.from(map.values()).sort((a, b) => {
         return parseTime(b.createdAt) - parseTime(a.createdAt);
       });
@@ -98,7 +133,7 @@ export default function Inbox() {
       question: questionText,
       source: 'app',
       status: 'pending',
-      date: 'Today',
+      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       createdAt: new Date()
     };
 
@@ -107,30 +142,12 @@ export default function Inbox() {
     setQuestion('');
 
     try {
-      const realId = await submitQuery({
-        patientId: patientUid,
-        patientName: patientName,
-        question: questionText,
-        source: 'app',
-        status: 'pending',
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      });
+      // Pass optimistic query with tempId so local cache and state share the identical ID
+      const realId = await submitQuery(optimisticQuery);
 
-      if (realId) {
+      if (realId && realId !== tempId) {
         setQueries(prev => prev.map(q => q.id === tempId ? { ...q, id: realId } : q));
       }
-
-      // Notify dietician of new clinical question
-      createNotification({
-        recipientRole: 'dietician',
-        type: 'QUERY_SUBMITTED',
-        title: 'New Patient Inquiry 💬',
-        patientId: patientUid,
-        patientName: patientName,
-        message: `${patientName} asked: "${questionText.slice(0, 65)}${questionText.length > 65 ? '...' : ''}"`,
-        link: '/dietician/inbox',
-        read: false
-      }).catch(console.warn);
 
       setSuccessToast(true);
       setTimeout(() => setSuccessToast(false), 3500);

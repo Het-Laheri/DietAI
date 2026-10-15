@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getMealPlans } from '../../services/db';
 import { 
@@ -75,7 +75,7 @@ export interface ClinicalBadge {
   reason?: string;
 }
 
-// ΓöÇΓöÇΓöÇ CLINICAL EVALUATION ENGINE FOR INDIVIDUAL FOOD ITEMS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --------- CLINICAL EVALUATION ENGINE FOR INDIVIDUAL FOOD ITEMS ---------------------------------------------------------------------------
 export function evaluateFoodItemForPatient(
   item: {
     name: string;
@@ -166,7 +166,7 @@ export function evaluateFoodItemForPatient(
     } else if (item.carbs > 35) {
       badges.push({ type: 'warning', text: 'High Carb (>35g)', reason: 'High single-dish carb load may cause glucose spike' });
     } else if (item.carbs <= 15 && (item.fibre || 0) >= 2.5) {
-      badges.push({ type: 'success', text: 'Γ£ô Low GI / Safe', reason: 'High fiber with controlled carbohydrate load' });
+      badges.push({ type: 'success', text: '✓ Low GI / Safe', reason: 'High fiber with controlled carbohydrate load' });
     }
   }
 
@@ -178,7 +178,7 @@ export function evaluateFoodItemForPatient(
     } else if ((item.sodium || 0) > 300) {
       badges.push({ type: 'warning', text: 'Sodium > 300mg', reason: 'Monitor sodium portion for hypertension target' });
     } else if ((item.sodium || 0) <= 80) {
-      badges.push({ type: 'success', text: 'Γ£ô Low Sodium (DASH)', reason: 'Ideal low-sodium food for blood pressure control' });
+      badges.push({ type: 'success', text: '✓ Low Sodium (DASH)', reason: 'Ideal low-sodium food for blood pressure control' });
     }
   }
 
@@ -190,7 +190,7 @@ export function evaluateFoodItemForPatient(
     } else if (item.fat > 8) {
       badges.push({ type: 'warning', text: 'Fat > 8g', reason: 'Elevated lipid content per serving' });
     } else if (item.fat <= 3 && (item.fibre || 0) >= 2) {
-      badges.push({ type: 'success', text: 'Γ£ô Hepatic Safe', reason: 'Low fat, rich in antioxidants and fibre' });
+      badges.push({ type: 'success', text: '✓ Hepatic Safe', reason: 'Low fat, rich in antioxidants and fibre' });
     }
   }
 
@@ -200,7 +200,7 @@ export function evaluateFoodItemForPatient(
     if ((item.potassium || 0) > 280) {
       badges.push({ type: 'warning', text: 'Potassium > 280mg', reason: 'Monitor for renal potassium clearance' });
     } else if ((item.potassium || 0) <= 150) {
-      badges.push({ type: 'success', text: 'Γ£ô Renal Safe Potassium', reason: 'Safe potassium level for kidney management' });
+      badges.push({ type: 'success', text: '✓ Renal Safe Potassium', reason: 'Safe potassium level for kidney management' });
     }
   }
 
@@ -840,7 +840,7 @@ export default function MealPlanGenerator() {
       if (dailyTotals.carbs > targets.carbs + 20) {
         diabetesStatus = `Carbs elevated (${dailyTotals.carbs}g / ${targets.carbs}g)`;
       } else {
-        diabetesStatus = `Balanced (${dailyTotals.carbs}g / ${targets.carbs}g) ΓÇó Low GI spread`;
+        diabetesStatus = `Balanced (${dailyTotals.carbs}g / ${targets.carbs}g) • Low GI spread`;
       }
     }
 
@@ -928,7 +928,7 @@ export default function MealPlanGenerator() {
     }));
 
     if (dangerBadge) {
-      showToast(`Added ${recipe.name} (ΓÜá∩╕Å Notice: ${dangerBadge.text})`);
+      showToast(`Added ${recipe.name} (⚠️ Notice: ${dangerBadge.text})`);
     } else {
       showToast(`Added ${recipe.name} to ${targetSlot?.title}!`);
     }
@@ -1066,7 +1066,7 @@ export default function MealPlanGenerator() {
         recipeId: it.id,
         recipeName: it.name,
         portion: it.portion,
-        notes: `Prescribed ${it.portion} ΓÇó ${it.calories} kcal`
+        notes: `Prescribed ${it.portion} • ${it.calories} kcal`
       })));
 
       await savePatientWeekPlan({
@@ -1083,7 +1083,7 @@ export default function MealPlanGenerator() {
           recipientId: pid,
           patientId: pid,
           type: 'MEAL_PLAN_PUBLISHED',
-          title: 'New Clinical Meal Plan Published! ≡ƒôï',
+          title: 'New Clinical Meal Plan Published! 📋',
           message: `Your lead dietician has prepared your fresh ${targets.calories} kcal nutrition plan for ${selectedDate.toLocaleDateString()}.`,
           link: '/patient/plate',
           read: false
@@ -1160,7 +1160,7 @@ export default function MealPlanGenerator() {
         </div>
       )}
 
-      {/* ΓöÇΓöÇΓöÇ TOP STEPPER & ACTION HEADER ΓöÇΓöÇΓöÇ */}
+      {/* --------- TOP STEPPER & ACTION HEADER --------- */}
       <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-5 shadow-xs flex flex-col lg:flex-row items-center justify-between gap-4">
         {/* Stepper */}
         <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto w-full lg:w-auto pb-1 lg:pb-0">
@@ -1188,11 +1188,11 @@ export default function MealPlanGenerator() {
                   <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
                     isActive ? 'bg-white text-blue-600 font-black' : isDone ? 'bg-emerald-600 text-white font-black' : 'bg-stone-200 text-stone-600'
                   }`}>
-                    {isDone ? 'Γ£ô' : s.num}
+                    {isDone ? '✓' : s.num}
                   </span>
                   <span>{s.label}</span>
                 </button>
-                {s.num < 4 && <span className="text-stone-300 hidden sm:inline">ΓÇöΓÇöΓÇö</span>}
+                {s.num < 4 && <ChevronRight className="w-3.5 h-3.5 text-stone-300 hidden sm:inline" />}
               </div>
             );
           })}
@@ -1231,7 +1231,7 @@ export default function MealPlanGenerator() {
         </div>
       </div>
 
-      {/* ΓöÇΓöÇΓöÇ MAIN 3-COLUMN CLINICAL LAYOUT ΓöÇΓöÇΓöÇ */}
+      {/* --------- MAIN 3-COLUMN CLINICAL LAYOUT --------- */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-5 items-start">
         {/* ======================================================== */}
         {/* COLUMN 1 (LEFT, 3 COLS): CLIENT PROFILE & PRESCRIPTION */}
@@ -1331,7 +1331,7 @@ export default function MealPlanGenerator() {
                       className="text-stone-400 hover:text-rose-600 font-bold leading-none text-xs"
                       title="Remove condition"
                     >
-                      ├ù
+                      ×
                     </button>
                   </span>
                 ))}
@@ -1358,7 +1358,7 @@ export default function MealPlanGenerator() {
                           : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
                       }`}
                     >
-                      {isSelected ? 'Γ£ô ' : '+ '}
+                      {isSelected ? '✓ ' : '+ '}
                       {preset}
                     </button>
                   );
@@ -1381,7 +1381,7 @@ export default function MealPlanGenerator() {
                         : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
                     }`}
                   >
-                    {clientProfile.dietPreference === diet && 'Γ£ô '}
+                    {clientProfile.dietPreference === diet && '✓ '}
                     {diet}
                   </button>
                 ))}
@@ -1421,7 +1421,7 @@ export default function MealPlanGenerator() {
               <div className="space-y-1 text-[11px] text-stone-600">
                 {clientProfile.lifestyle.map((ls, idx) => (
                   <div key={idx} className="flex items-center gap-1.5">
-                    <span className="text-stone-400">ΓÇó</span>
+                    <span className="text-stone-400">•</span>
                     <span>{ls}</span>
                   </div>
                 ))}
@@ -1613,7 +1613,7 @@ export default function MealPlanGenerator() {
             </button>
           </div>
 
-          {/* ΓöÇΓöÇΓöÇ ACTIVE CLINICAL GUARDIANS STRIP (LIVE PATIENT CONSTRAINTS AUDIT) ΓöÇΓöÇΓöÇ */}
+          {/* --------- ACTIVE CLINICAL GUARDIANS STRIP (LIVE PATIENT CONSTRAINTS AUDIT) --------- */}
           <div className="p-3.5 bg-gradient-to-r from-stone-900 via-stone-800 to-stone-900 text-white rounded-2xl shadow-xs space-y-2.5 border border-stone-700">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -1626,7 +1626,7 @@ export default function MealPlanGenerator() {
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                     : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                 }`}>
-                  {overallClinicalAudit.totalIssues === 0 ? 'Γ£ô 100% Patient Compliant' : `ΓÜá∩╕Å ${overallClinicalAudit.totalIssues} Constraint Flag${overallClinicalAudit.totalIssues > 1 ? 's' : ''}`}
+                  {overallClinicalAudit.totalIssues === 0 ? '✓ 100% Patient Compliant' : `⚠️ ${overallClinicalAudit.totalIssues} Constraint Flag${overallClinicalAudit.totalIssues > 1 ? 's' : ''}`}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -1799,7 +1799,7 @@ export default function MealPlanGenerator() {
                                         : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                                     }`}
                                   >
-                                    <span>{b.type === 'danger' ? '≡ƒÜ¿' : b.type === 'warning' ? 'ΓÜá∩╕Å' : 'Γ£ô'}</span>
+                                    <span>{b.type === 'danger' ? '🚨' : b.type === 'warning' ? '⚠️' : '✓'}</span>
                                     <span>{b.text}</span>
                                   </span>
                                 ))}
@@ -1898,7 +1898,7 @@ export default function MealPlanGenerator() {
                 <span>AI Clinical Filter: {clientProfile.name}</span>
               </div>
               <p className="text-[11px] text-blue-800 leading-tight">
-                Filtered strictly for {clientProfile.conditions.join(', ')} ΓÇó 0 allergen triggers ΓÇó Vegetarian safe.
+                Filtered strictly for {clientProfile.conditions.join(', ')} • 0 allergen triggers • Vegetarian safe.
               </p>
             </div>
           )}
@@ -1969,15 +1969,15 @@ export default function MealPlanGenerator() {
                         {/* Clinical indicator on recipe */}
                         {dangerBadge ? (
                           <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-0.5">
-                            ≡ƒÜ¿ {dangerBadge.text}
+                            🚨 {dangerBadge.text}
                           </span>
                         ) : warningBadge ? (
                           <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-0.5">
-                            ΓÜá∩╕Å {warningBadge.text}
+                            ⚠️ {warningBadge.text}
                           </span>
                         ) : (
                           <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-0.5">
-                            Γ£ô Safe for Patient
+                            ✓ Safe for Patient
                           </span>
                         )}
                       </div>
@@ -1998,11 +1998,11 @@ export default function MealPlanGenerator() {
                     <span className="font-medium">{rec.portion}</span>
                     <div className="flex items-center gap-1.5 font-semibold text-stone-700">
                       <strong className="text-stone-900">{rec.calories} kcal</strong>
-                      <span>ΓÇó</span>
+                      <span>•</span>
                       <span>P {rec.protein}g</span>
-                      <span>ΓÇó</span>
+                      <span>•</span>
                       <span>C {rec.carbs}g</span>
-                      <span>ΓÇó</span>
+                      <span>•</span>
                       <span>F {rec.fat}g</span>
                     </div>
                   </div>
@@ -2017,14 +2017,14 @@ export default function MealPlanGenerator() {
               onClick={() => showToast('Displaying all 657 Indian & clinical dishes.')}
               className="text-xs font-bold text-blue-600 hover:text-blue-800"
             >
-              View More Results ΓåÆ
+              View More Results →
             </button>
           </div>
         </div>
       </div>
 
       {/* ======================================================== */}
-      {/* ΓöÇΓöÇΓöÇ BOTTOM PANEL: DAILY NUTRIENT SUMMARY & REAL-TIME AUDITING ΓöÇΓöÇΓöÇ */}
+      {/* --------- BOTTOM PANEL: DAILY NUTRIENT SUMMARY & REAL-TIME AUDITING --------- */}
       {/* ======================================================== */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2032,7 +2032,7 @@ export default function MealPlanGenerator() {
             Daily Nutrient Summary & Clinical Safety Audit
           </h3>
           <span className="text-xs text-stone-500 font-medium">
-            Prescription Envelope: {targets.calories} kcal ΓÇó {targets.protein}g P ΓÇó {targets.carbs}g C ΓÇó {targets.fat}g F
+            Prescription Envelope: {targets.calories} kcal • {targets.protein}g P • {targets.carbs}g C • {targets.fat}g F
           </span>
         </div>
 
@@ -2118,42 +2118,42 @@ export default function MealPlanGenerator() {
                 onClick={() => showToast('Smart swap activated: Scanning clinical matches for lunch...')}
                 className="p-2 bg-white hover:bg-stone-100 border border-stone-200 rounded-lg text-stone-700 flex items-center gap-1.5 transition-colors"
               >
-                <span>≡ƒöÇ</span> Smart Swap
+                <span>🔀</span> Smart Swap
               </button>
               <button
                 type="button"
                 onClick={handleFixMyPlan}
                 className="p-2 bg-white hover:bg-stone-100 border border-stone-200 rounded-lg text-stone-700 flex items-center gap-1.5 transition-colors"
               >
-                <span>≡ƒôë</span> Low Potassium
+                <span>📉</span> Low Potassium
               </button>
               <button
                 type="button"
                 onClick={() => showToast('Generated balanced variation for remaining week days.')}
                 className="p-2 bg-white hover:bg-stone-100 border border-stone-200 rounded-lg text-stone-700 flex items-center gap-1.5 transition-colors"
               >
-                <span>ΓÜí</span> Similar Plan
+                <span>⚡</span> Similar Plan
               </button>
               <button
                 type="button"
                 onClick={() => showToast('Template saved as "Priya Sharma Balanced Diabetic Week".')}
                 className="p-2 bg-white hover:bg-stone-100 border border-stone-200 rounded-lg text-stone-700 flex items-center gap-1.5 transition-colors"
               >
-                <span>≡ƒÆ╛</span> Save Template
+                <span>💾</span> Save Template
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ΓöÇΓöÇΓöÇ PREVIEW MODAL ΓöÇΓöÇΓöÇ */}
+      {/* --------- PREVIEW MODAL --------- */}
       {previewModalOpen && (
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-stone-200 my-8 space-y-4">
             <div className="flex justify-between items-center pb-3 border-b border-stone-100">
               <div>
                 <h3 className="font-serif font-bold text-lg text-stone-900">Patient Diet Plan Summary Preview</h3>
-                <p className="text-xs text-stone-500">Clinical prescription preview for {clientProfile.name} ΓÇó {formattedDateString}</p>
+                <p className="text-xs text-stone-500">Clinical prescription preview for {clientProfile.name} • {formattedDateString}</p>
               </div>
               <button
                 type="button"
@@ -2166,7 +2166,7 @@ export default function MealPlanGenerator() {
 
             <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 flex justify-between items-center text-xs">
               <div>
-                <strong>Prescription:</strong> {targets.calories} kcal ΓÇó {targets.protein}g Protein ΓÇó {targets.carbs}g Carbs ΓÇó {targets.fat}g Fat
+                <strong>Prescription:</strong> {targets.calories} kcal • {targets.protein}g Protein • {targets.carbs}g Carbs • {targets.fat}g Fat
               </div>
               <span className="font-bold text-emerald-700">Planned: {dailyTotals.calories} kcal</span>
             </div>
@@ -2181,7 +2181,7 @@ export default function MealPlanGenerator() {
                   <div className="flex-1 space-y-1">
                     {m.items.map(it => (
                       <div key={it.id} className="flex justify-between text-stone-700">
-                        <span>ΓÇó {it.name} ({it.portion})</span>
+                        <span>• {it.name} ({it.portion})</span>
                         <span className="font-medium text-stone-500">{it.calories} kcal</span>
                       </div>
                     ))}

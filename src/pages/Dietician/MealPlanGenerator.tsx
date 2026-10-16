@@ -12,6 +12,7 @@ import {
 } from '../../services/db';
 import { PLATE_FOODS, PlateFoodItem } from '../../data/plateFoods';
 import { DEFAULT_CLINICAL_RECIPES } from '../../services/defaultRecipes';
+import { MASTER_FOODS } from '../../data/masterFoods';
 import { 
   Check, 
   Search, 
@@ -695,7 +696,7 @@ export default function MealPlanGenerator() {
     }
   };
 
-  // Recipe catalog combined from PLATE_FOODS (457) and DEFAULT_CLINICAL_RECIPES (200)
+  // Recipe catalog combined from PLATE_FOODS (457), DEFAULT_CLINICAL_RECIPES (200) and MASTER_FOODS (73)
   const recipeDatabase = useMemo(() => {
     const list = [
       ...PLATE_FOODS.map(pf => ({
@@ -733,6 +734,26 @@ export default function MealPlanGenerator() {
           cr.carbs > 25 ? 'Cereal' : 'Vegetable',
           cr.protein >= 8 ? 'Protein Rich' : null,
           (cr.fiber || 0) >= 4 ? 'Fibre Rich' : null
+        ].filter(Boolean) as string[]
+      }))
+   ,
+      ...MASTER_FOODS.map(mf => ({
+        id: mf.id || `mf_${mf.name}`,
+        name: mf.name,
+        portion: mf.portionSize || '1 serving',
+        calories: Math.round(mf.calories),
+        protein: mf.protein,
+        carbs: mf.carbs,
+        fat: mf.fat,
+        fibre: mf.fiber || 0,
+        sodium: mf.sodium || 0,
+        potassium: mf.potassium || 0,
+        region: mf.clinicalFocus || 'Master Food List',
+        tags: [
+          mf.carbs > 25 ? 'Cereal' : 'Vegetable',
+          mf.protein >= 6 ? 'Protein Rich' : null,
+          (mf.fiber || 0) >= 3 ? 'Fibre Rich' : null,
+          (mf.potassium || 0) < 200 ? 'Low Potassium' : 'Potassium Rich'
         ].filter(Boolean) as string[]
       }))
     ];

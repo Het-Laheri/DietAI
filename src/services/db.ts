@@ -2513,6 +2513,7 @@ export function isRecipeDietaryCompatible(recipeDiet?: string, patientDiet?: str
 }
 
 import { PLATE_FOODS } from '../data/plateFoods';
+import { MASTER_FOODS } from '../data/masterFoods';
 
 // Convert PLATE_FOODS (457 items) to RecipeDBItem structure
 const PLATE_FOODS_AS_RECIPES: RecipeDBItem[] = PLATE_FOODS.map(pf => {
@@ -2578,12 +2579,14 @@ const PLATE_FOODS_AS_RECIPES: RecipeDBItem[] = PLATE_FOODS.map(pf => {
   };
 });
 
-// Master baseline combining 200 Exchange recipes and 457 Plate foods
+// Master baseline combining 200 Exchange recipes, 457 Plate foods and 73 master-list foods
 const ALL_BASELINE_RECIPES: RecipeDBItem[] = [
   ...DEFAULT_CLINICAL_RECIPES,
   ...PLATE_FOODS_AS_RECIPES.filter(pf => 
     !DEFAULT_CLINICAL_RECIPES.some(dr => dr.name.toLowerCase() === pf.name.toLowerCase())
-  )
+  ),
+  // 73 extra foods from Indian_Foods_With_Bedtime_Turmeric_Milk.xlsx (names already unique vs the lists above)
+  ...MASTER_FOODS
 ];
 
 export async function getStoredRecipesFromDB(

@@ -1,6 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { 
+  signInWithEmailAndPassword, 
+  sendSignInLinkToEmail, 
+  isSignInWithEmailLink, 
+  signInWithEmailLink 
+} from 'firebase/auth';
 import { auth } from '../services/firebase';
 import { registerPatient, getUserProfile, createNotification } from '../services/db';
 import { 
@@ -25,7 +30,12 @@ import {
   Clock,
   ChevronRight,
   Flame,
-  Info
+  Info,
+  Mail,
+  KeyRound,
+  Send,
+  CheckCircle2,
+  Loader2
 } from 'lucide-react';
 
 const LIFE_STAGES = [
@@ -103,6 +113,12 @@ const OCCUPATIONS = [
 export default function Login() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [signUpStep, setSignUpStep] = useState(1); // 1 to 5
+
+  // Authentication Method & Validation
+  const [signInMethod, setSignInMethod] = useState<'magic-link' | 'password'>('magic-link');
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [magicLinkCooldown, setMagicLinkCooldown] = useState(0);
+  const [isVerifyingLink, setIsVerifyingLink] = useState(false);
 
   // Step 1: Account & Core Identity
   const [name, setName] = useState('');
@@ -188,36 +204,129 @@ export default function Login() {
     );
   };
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Handle email magic link verification on redirect
+  useEffect(() => {
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      setIsVerifyingLink(true);
+      setLoading(true);
+      setError('');
+
+      let emailForSignIn = window.localStorage.getItem('emailForSignIn') || '';
+      if (!emailForSignIn) {
+        emailForSignIn = window.prompt('Please confirm your email address to complete sign in') || '';
+      }
+
+      if (!emailForSignIn.trim()) {
+        setError('Email address is required to complete sign-in. Please try again.');
+        setIsVerifyingLink(false);
+        setLoading(false);
+        return;
+      }
+
+      signInWithEmailLink(auth, emailForSignIn.trim(), window.location.href)
+        .then(async (userCred) => {
+          window.localStorage.removeItem('emailForSignIn');
+          await postAuthRedirect(userCred);
+        })
+        .catch((err: any) => {
+          console.error('Magic link verification error:', err);
+          setError('This sign-in link is invalid or has expired. Please request a new link.');
+          setIsVerifyingLink(false);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  }, []);
+
+  // Cooldown countdown for resending magic link
+  useEffect(() => {
+    if (magicLinkCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setMagicLinkCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [magicLinkCooldown]);
+
+  const postAuthRedirect = async (userCred: any) => {
+    const userProfile = await getUserProfile(userCred.user.uid);
+    if (userProfile?.role === 'patient') {
+      createNotification({
+        type: 'PATIENT_LOGIN',
+        recipientRole: 'dietician',
+        patientId: userCred.user.uid,
+        patientName: userCred.user.displayName || userProfile.name || 'Patient',
+        message: `${userCred.user.displayName || userProfile.name || 'A patient'} signed in`,
+        read: false
+      }).catch(() => {});
+    }
+    if (!userProfile?.role) {
+      await auth.signOut();
+      setError('This account is not set up yet. Please contact your dietician.');
+      return;
+    }
+    navigate(userProfile.role === 'dietician' ? '/dietician' : '/patient');
+  };
+
+  const handleSendMagicLink = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setError('Please enter your email address.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setError('Please enter a valid email address (e.g. name@example.com).');
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
-      const userCred = await signInWithEmailAndPassword(auth, email.trim(), password);
-      const userProfile = await getUserProfile(userCred.user.uid);
-      if (userProfile?.role === 'patient') {
-        createNotification({
-          type: 'PATIENT_LOGIN',
-          recipientRole: 'dietician',
-          patientId: userCred.user.uid,
-          patientName: userCred.user.displayName || userProfile.name || 'Patient',
-          message: `${userCred.user.displayName || userProfile.name || 'A patient'} signed in`,
-          read: false
-        }).catch(() => {});
+      const actionCodeSettings = {
+        url: window.location.origin + '/login',
+        handleCodeInApp: true,
+      };
+      await sendSignInLinkToEmail(auth, trimmed, actionCodeSettings);
+      window.localStorage.setItem('emailForSignIn', trimmed);
+      setMagicLinkSent(true);
+      setMagicLinkCooldown(60);
+    } catch (err: any) {
+      console.error('Send magic link error:', err?.code || err);
+      if (err?.code === 'auth/invalid-email') {
+        setError('Please enter a valid email address.');
+      } else if (err?.code === 'auth/too-many-requests') {
+        setError('Too many requests. Please wait a minute before requesting another link.');
+      } else {
+        setError('Unable to send sign-in link. Please check your connection or sign in with your password.');
       }
-      if (!userProfile?.role) {
-        await auth.signOut();
-        setError('This account is not set up yet. Please contact your dietician.');
-        return;
-      }
-      // Role comes from Firestore (users/{uid}.role), which users cannot change themselves.
-      navigate(userProfile.role === 'dietician' ? '/dietician' : '/patient');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = email.trim();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+    try {
+      setLoading(true);
+      setError('');
+      const userCred = await signInWithEmailAndPassword(auth, trimmed, password);
+      await postAuthRedirect(userCred);
     } catch (e: any) {
       console.error('Sign in error:', e?.code || e);
       if (['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found', 'auth/invalid-email'].includes(e?.code)) {
-        setError('Invalid credentials. Please try again.');
+        setError('Invalid credentials. Please try again or use the Email Magic Link.');
       } else if (e?.code === 'auth/too-many-requests') {
-        setError('Too many attempts. Please wait a few minutes and try again.');
+        setError('Too many failed attempts. Please wait a few minutes and try again.');
       } else {
         setError('Sign in failed. Please try again.');
       }
@@ -233,12 +342,17 @@ export default function Login() {
       setError('Please enter your full name');
       return;
     }
-    if (!email.trim() || !password.trim()) {
-      setError('Email and password are required');
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError('Please enter a valid email address');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (!password.trim() || password.length < 8) {
+      setError('Password must be at least 8 characters long');
+      return;
+    }
+    if (mobile.trim() && !/^[0-9+\s-]{8,15}$/.test(mobile.trim())) {
+      setError('Please enter a valid mobile number or leave it blank');
       return;
     }
     if (!age || Number(age) < 10 || Number(age) > 120) {
@@ -399,51 +513,185 @@ export default function Login() {
 
         {/* ─── SIGN IN VIEW ────────────────────────────────────────────── */}
         {!isSignUp && (
-          <form onSubmit={handleSignIn} className="space-y-5 max-w-md mx-auto">
-            <div>
-              <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
-                Email Address
-              </label>
-              <input 
-                type="email" 
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all text-sm"
-                placeholder="patient@example.com"
-              />
-            </div>
-            <div>
-              <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
-                Password
-              </label>
-              <div className="relative">
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 pr-11 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all text-sm"
-                  placeholder="••••••••"
-                />
-                <button 
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 focus:outline-none"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+          <div className="max-w-md mx-auto space-y-5">
+            {isVerifyingLink ? (
+              <div className="p-8 bg-stone-50 border border-stone-200 rounded-2xl text-center space-y-3">
+                <Loader2 className="w-8 h-8 text-orange-600 animate-spin mx-auto" />
+                <h3 className="text-sm font-bold text-stone-900">Verifying Sign-In Link...</h3>
+                <p className="text-xs text-stone-500">Authenticating your secure session. You'll be redirected in a moment.</p>
               </div>
-            </div>
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full py-3.5 mt-2 bg-stone-900 hover:bg-black text-white text-xs uppercase tracking-widest font-black rounded-xl shadow-md shadow-stone-900/10 transition-all disabled:opacity-50"
-            >
-              {loading ? 'Signing In...' : 'Sign In to Portal'}
-            </button>
+            ) : (
+              <>
+                {/* Method Switcher */}
+                <div className="flex p-1 bg-stone-100/80 border border-stone-200/60 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => { setSignInMethod('magic-link'); setError(''); }}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                      signInMethod === 'magic-link'
+                        ? 'bg-white text-stone-900 shadow-sm'
+                        : 'text-stone-500 hover:text-stone-800'
+                    }`}
+                  >
+                    <Mail className="w-3.5 h-3.5 text-orange-600" />
+                    <span>Email Magic Link</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setSignInMethod('password'); setError(''); }}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                      signInMethod === 'password'
+                        ? 'bg-white text-stone-900 shadow-sm'
+                        : 'text-stone-500 hover:text-stone-800'
+                    }`}
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-stone-600" />
+                    <span>Password</span>
+                  </button>
+                </div>
 
-          </form>
+                {/* Email Magic Link (Passwordless) Form */}
+                {signInMethod === 'magic-link' && (
+                  magicLinkSent ? (
+                    <div className="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-6 text-center space-y-3.5">
+                      <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                        <CheckCircle2 className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-stone-900 text-sm">Check your inbox!</h3>
+                        <p className="text-xs text-stone-600 mt-1 leading-relaxed">
+                          We sent a secure, one-click sign-in link to <strong className="text-stone-900">{email}</strong>.
+                        </p>
+                      </div>
+                      <div className="text-[11px] text-stone-500 bg-white/70 border border-stone-200/60 rounded-xl p-3">
+                        Click the link in your email to sign in instantly. Don't see it? Check your spam or promotions folder.
+                      </div>
+                      <div className="pt-2 flex flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSendMagicLink()}
+                          disabled={magicLinkCooldown > 0 || loading}
+                          className="text-xs font-bold text-orange-600 hover:text-orange-700 disabled:opacity-50 transition-colors"
+                        >
+                          {magicLinkCooldown > 0 ? `Resend link in ${magicLinkCooldown}s` : 'Resend sign-in link'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setMagicLinkSent(false); setSignInMethod('password'); }}
+                          className="text-xs text-stone-500 hover:text-stone-700 underline underline-offset-2"
+                        >
+                          Sign in with password instead
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSendMagicLink} className="space-y-4">
+                      <div>
+                        <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
+                          Email Address
+                        </label>
+                        <div className="relative">
+                          <input 
+                            type="email" 
+                            required
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all text-sm"
+                            placeholder="patient@example.com"
+                          />
+                          <Mail className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        </div>
+                        <p className="text-[11px] text-stone-500 mt-1.5 leading-relaxed">
+                          Enter your email and we'll send you an instant, password-free login link.
+                        </p>
+                      </div>
+                      <button 
+                        type="submit" 
+                        disabled={loading || !email.trim()}
+                        className="w-full py-3.5 mt-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white text-xs uppercase tracking-widest font-black rounded-xl shadow-md shadow-orange-600/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {loading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Sending Link...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4" />
+                            <span>Send Magic Sign-In Link</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  )
+                )}
+
+                {/* Password Form */}
+                {signInMethod === 'password' && (
+                  <form onSubmit={handleSignIn} className="space-y-4">
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600 mb-1.5">
+                        Email Address
+                      </label>
+                      <input 
+                        type="email" 
+                        required
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all text-sm"
+                        placeholder="patient@example.com"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <label className="block text-xs uppercase tracking-wider font-extrabold text-stone-600">
+                          Password
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => { setSignInMethod('magic-link'); setError(''); }}
+                          className="text-[11px] font-bold text-orange-600 hover:text-orange-700"
+                        >
+                          Forgot password? Use Magic Link
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <input 
+                          type={showPassword ? "text" : "password"} 
+                          required
+                          value={password}
+                          onChange={e => setPassword(e.target.value)}
+                          className="w-full px-4 py-3 pr-11 rounded-xl border border-stone-200 bg-stone-50/70 focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all text-sm"
+                          placeholder="••••••••"
+                        />
+                        <button 
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 focus:outline-none"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <button 
+                      type="submit" 
+                      disabled={loading}
+                      className="w-full py-3.5 mt-2 bg-stone-900 hover:bg-black text-white text-xs uppercase tracking-widest font-black rounded-xl shadow-md shadow-stone-900/10 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Signing In...</span>
+                        </>
+                      ) : (
+                        <span>Sign In to Portal</span>
+                      )}
+                    </button>
+                  </form>
+                )}
+              </>
+            )}
+          </div>
         )}
 
         {/* ─── ONBOARDING STEP 1: Core Identity & Life Stage ───────────── */}

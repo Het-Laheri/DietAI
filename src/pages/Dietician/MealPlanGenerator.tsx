@@ -21,6 +21,7 @@ import {
 } from '../../services/db';
 import { PLATE_FOODS } from '../../data/plateFoods';
 import { DEFAULT_CLINICAL_RECIPES } from '../../services/defaultRecipes';
+import { MASTER_FOODS } from '../../data/masterFoods';
 import {
   Search,
   Plus,
@@ -1339,7 +1340,7 @@ export default function MealPlanGenerator() {
     }
   };
 
-  // Recipe catalog combined from PLATE_FOODS (457) and DEFAULT_CLINICAL_RECIPES (200)
+  // Recipe catalog combined from PLATE_FOODS (457), DEFAULT_CLINICAL_RECIPES (200) and MASTER_FOODS (73)
   const recipeDatabase = useMemo(() => {
     const list = [
       ...PLATE_FOODS.map(pf => ({
@@ -1381,6 +1382,28 @@ export default function MealPlanGenerator() {
           (cr.fiber || 0) >= 4 ? 'Fibre Rich' : null,
           /dal|moong|chana|rajma|sprout|lentil/i.test(cr.name) ? 'Pulses / Dal' : null,
           /milk|curd|paneer|chaas|buttermilk|yogurt/i.test(cr.name) ? 'Milk & Milk Products' : null
+        ].filter(Boolean) as string[]
+      }))
+   ,
+      ...MASTER_FOODS.map(mf => ({
+        id: mf.id || `mf_${mf.name}`,
+        name: mf.name,
+        portion: mf.portionSize || '1 serving',
+        calories: Math.round(mf.calories),
+        protein: mf.protein,
+        carbs: mf.carbs,
+        fat: mf.fat,
+        fibre: mf.fiber || 0,
+        sodium: mf.sodium || 0,
+        potassium: mf.potassium || 0,
+        region: mf.clinicalFocus || 'Master Food List',
+        tags: [
+          mf.carbs > 25 ? 'Cereal / Grains' : 'Vegetable',
+          mf.protein >= 6 ? 'Protein Rich' : null,
+          (mf.fiber || 0) >= 3 ? 'Fibre Rich' : null,
+          (mf.potassium || 0) < 200 ? 'Low Potassium' : 'Potassium Rich',
+          /dal|moong|chana|rajma|sprout|lentil/i.test(mf.name) ? 'Pulses / Dal' : null,
+          /milk|curd|paneer|chaas|buttermilk|yogurt|lassi/i.test(mf.name) ? 'Milk & Milk Products' : null
         ].filter(Boolean) as string[]
       }))
     ];

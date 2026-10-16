@@ -60,7 +60,7 @@ export default function PatientsList() {
 
     if (!matchesSearch) return false;
 
-    const adh = p.adherencePercentage ?? (p.needsAttention ? 48 : 84);
+    const adh = p.adherencePercentage ?? (p.needsAttention ? 48 : 0);
 
     if (filterCategory === 'active') return p.status === 'active';
     if (filterCategory === 'attention') return adh < 70 || p.needsAttention;
@@ -71,7 +71,7 @@ export default function PatientsList() {
   });
 
   const activeCount = patients.filter(p => p.status === 'active').length;
-  const attentionCount = patients.filter(p => (p.adherencePercentage ?? (p.needsAttention ? 48 : 84)) < 70 || p.needsAttention).length;
+  const attentionCount = patients.filter(p => (p.adherencePercentage ?? (p.needsAttention ? 48 : 0)) < 70 || p.needsAttention).length;
 
   return (
     <div className="p-5 md:p-8 max-w-7xl mx-auto space-y-5 font-sans">
@@ -152,7 +152,7 @@ export default function PatientsList() {
             <tbody className="divide-y divide-stone-100 text-xs">
               {filtered.map(p => {
                 const timeline = calculatePatientProgramTimeline(p);
-                const adh = timeline.overallAdherence > 0 ? timeline.overallAdherence : (p.adherencePercentage ?? (p.needsAttention ? 48 : 84));
+                const adh = timeline.overallAdherence > 0 ? timeline.overallAdherence : (p.adherencePercentage ?? (p.needsAttention ? 48 : 0));
                 const heightM = (p.heightCm || 170) / 100;
                 const currentW = p.currentWeightKg || 70;
                 const bmi = (currentW / (heightM * heightM)).toFixed(1);

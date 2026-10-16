@@ -547,7 +547,7 @@ export default function MealNotepad() {
       <div className="bg-gradient-to-br from-white via-stone-50/20 to-orange-50/15 rounded-3xl border-2 border-orange-200/90 shadow-xl relative overflow-hidden transition-all">
         
         {/* Header Bar */}
-        <div className="bg-gradient-to-r from-stone-900 via-stone-850 to-orange-950 text-stone-200 px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-orange-900/30">
+        <div className="bg-gradient-to-r from-stone-900 via-stone-800 to-orange-950 text-stone-200 px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-orange-900/30">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-orange-500/25">
               <CheckSquare className="w-5 h-5" />
@@ -975,7 +975,7 @@ export default function MealNotepad() {
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm">Log Extra Food or Treat</h3>
+                  <h3 className="font-bold text-sm text-white">Log Extra Food or Treat</h3>
                   <p className="text-[10px] text-stone-400">AI-Powered Nutrition Estimation</p>
                 </div>
               </div>
@@ -1007,13 +1007,13 @@ export default function MealNotepad() {
                     required
                     value={extraFoodName}
                     onChange={(e) => setExtraFoodName(e.target.value)}
-                    placeholder="e.g. Brownie cake, Bagel with cream cheese, Latte"
+                    placeholder="e.g. Masala Chai with 2 biscuits, Samosa, Roasted Makhana"
                     className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white"
                   />
                   
                   {/* Quick suggestion tags */}
                   <div className="flex flex-wrap gap-1.5 mt-2">
-                    {['Brownie cake', '1 Bagel with cream cheese', 'Chocolate chip cookie', 'Vanilla oat latte', 'Handful of almonds'].map((suggestion) => (
+                    {['Masala Chai & 2 Marie Biscuits', '1 Samosa', 'Roasted Makhana (1 cup)', 'Bhel Puri (1 bowl)', 'Handful of soaked almonds'].map((suggestion) => (
                       <button
                         key={suggestion}
                         type="button"

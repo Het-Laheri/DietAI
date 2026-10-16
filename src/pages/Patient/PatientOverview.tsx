@@ -279,12 +279,12 @@ export default function PatientOverview() {
     const loggedDays = days.filter(d => d.completed > 0);
     const avgAdherence = loggedDays.length > 0 
       ? Math.round(days.reduce((sum, d) => sum + d.percent, 0) / days.length)
-      : (todayDay.percent > 0 ? todayDay.percent : 85);
+      : (todayDay.percent > 0 ? todayDay.percent : 0);
 
     return {
       days,
       currentStreak: activeStreak,
-      avgAdherence: Math.max(20, Math.min(100, avgAdherence)),
+      avgAdherence: Math.min(100, Math.max(0, avgAdherence)),
       completedDaysCount: loggedDays.length
     };
   }, [completedChecklist.length, totalAssignedMeals, historyEatingLogs, profile?.uid, patientData]);
@@ -413,7 +413,7 @@ export default function PatientOverview() {
       ringColor: '#8b5cf6',
       ringTrack: 'rgba(139, 92, 246, 0.16)',
       titleColor: 'text-purple-950',
-      subColor: 'text-purple-850',
+      subColor: 'text-purple-900',
       badgeBg: 'bg-purple-100 text-purple-800 border-purple-200',
       btnBg: 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-600/20',
       activeTabBg: 'bg-purple-600 text-white shadow-purple-600/20',
@@ -437,7 +437,7 @@ export default function PatientOverview() {
       ringColor: '#f59e0b',
       ringTrack: 'rgba(245, 158, 11, 0.16)',
       titleColor: 'text-amber-950',
-      subColor: 'text-amber-850',
+      subColor: 'text-amber-900',
       badgeBg: 'bg-amber-100 text-amber-800 border-amber-200',
       btnBg: 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20',
       activeTabBg: 'bg-amber-600 text-white shadow-amber-600/20',
@@ -461,7 +461,7 @@ export default function PatientOverview() {
       ringColor: '#ec4899',
       ringTrack: 'rgba(236, 72, 153, 0.16)',
       titleColor: 'text-rose-950',
-      subColor: 'text-rose-850',
+      subColor: 'text-rose-900',
       badgeBg: 'bg-rose-100 text-rose-800 border-rose-200',
       btnBg: 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20',
       activeTabBg: 'bg-rose-600 text-white shadow-rose-600/20',

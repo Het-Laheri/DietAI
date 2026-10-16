@@ -434,9 +434,6 @@ export default function DieticianDashboard() {
         </header>
 
         <div className="flex-1 overflow-auto">
-          <div className="p-4 sm:p-6 pb-0 max-w-7xl mx-auto">
-            <NotificationPermissionBanner userRole="dietician" userName={profile?.name} className="mb-2" />
-          </div>
           <ErrorBoundary fallbackTitle="Could not load dietician view">
             <Routes>
               <Route path="/" element={<Overview />} />

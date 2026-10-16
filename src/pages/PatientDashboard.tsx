@@ -339,7 +339,7 @@ export default function PatientDashboard() {
       </aside>
 
       {/* Patient Profile & Health Details Modal */}
-      {profile?.uid && (
+      {profile?.uid && isProfileModalOpen && (
         <PatientProfileModal
           isOpen={isProfileModalOpen}
           onClose={() => setIsProfileModalOpen(false)}

@@ -174,24 +174,24 @@ export default function PatientDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50/30 via-slate-50 to-orange-50/20 flex flex-col md:flex-row font-sans">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-gradient-to-br from-amber-50/30 via-slate-50 to-orange-50/20 flex flex-col md:flex-row font-sans">
       {/* Mobile Top Header */}
-      <header className="md:hidden bg-white/90 backdrop-blur-md border-b border-orange-100 px-4 py-3 flex items-center justify-between sticky top-0 z-30 shadow-xs">
-        <Link to="/patient" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-orange-500 via-rose-500 to-pink-500 p-0.5 shadow-sm flex items-center justify-center">
+      <header className="md:hidden bg-white/90 backdrop-blur-md border-b border-orange-100 px-2.5 sm:px-4 py-2.5 flex items-center justify-between gap-1.5 sticky top-0 z-30 shadow-xs w-full max-w-full">
+        <Link to="/patient" className="flex items-center gap-1.5 min-w-0 shrink">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-tr from-orange-500 via-rose-500 to-pink-500 p-0.5 shadow-sm flex items-center justify-center shrink-0">
             <img src="/logo.jpg" alt="NutriSnap" className="h-full w-full object-cover rounded-[6px]" />
           </div>
-          <h2 className="text-lg font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-rose-500 to-pink-500">NutriSnap</h2>
+          <h2 className="text-base sm:text-lg font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-rose-500 to-pink-500 truncate">NutriSnap</h2>
         </Link>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <Link to="/patient/subscription">
             {isSubscribed ? (
-              <span className="text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
-                ★ Premium
+              <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-xs">
+                ★ <span className="hidden xs:inline">Premium</span><span className="xs:hidden">Pro</span>
               </span>
             ) : (
-              <span className="text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-orange-500 text-white px-2.5 py-0.5 rounded-full shadow-xs">
+              <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-orange-500 text-white px-2 py-0.5 rounded-full shadow-xs">
                 Upgrade
               </span>
             )}
@@ -200,21 +200,21 @@ export default function PatientDashboard() {
           {/* Mobile Physio Quick Button */}
           <button
             onClick={() => setIsPhysioModalOpen(true)}
-            className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200/80 px-2 py-0.5 rounded-full shadow-2xs transition-colors cursor-pointer"
+            className="flex items-center gap-1 text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200/80 px-1.5 sm:px-2 py-0.5 rounded-full shadow-2xs transition-colors cursor-pointer"
             title="Dr. Namrata's Physio Plus Details"
           >
-            <HeartPulse className="w-3 h-3 text-sky-600" />
-            <span>Physio</span>
+            <HeartPulse className="w-3 h-3 text-sky-600 shrink-0" />
+            <span className="hidden sm:inline">Physio</span>
           </button>
           {/* Mobile Bell Button */}
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-1.5 text-stone-600 hover:text-orange-500 hover:bg-orange-50/60 rounded-lg transition-colors focus:outline-none"
+            className="relative p-1 text-stone-600 hover:text-orange-500 hover:bg-orange-50/60 rounded-lg transition-colors focus:outline-none"
             aria-label="Notifications"
           >
-            <Bell className="w-5 h-5" />
+            <Bell className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 bg-gradient-to-r from-orange-500 to-pink-500 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white shadow-xs">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 bg-gradient-to-r from-orange-500 to-pink-500 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white shadow-xs">
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
@@ -223,14 +223,14 @@ export default function PatientDashboard() {
           <button
             onClick={() => setIsProfileModalOpen(true)}
             title="Edit Health Profile & Metrics"
-            className="w-7 h-7 rounded-full bg-gradient-to-br from-orange-400 via-rose-400 to-pink-500 flex items-center justify-center text-white font-bold text-xs shadow-sm hover:scale-105 transition-transform cursor-pointer"
+            className="w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-full bg-gradient-to-br from-orange-400 via-rose-400 to-pink-500 flex items-center justify-center text-white font-bold text-xs shadow-sm hover:scale-105 transition-transform cursor-pointer"
           >
             {profile?.name?.charAt(0) || 'P'}
           </button>
           <button
             onClick={handleLogout}
             title="Sign Out"
-            className="p-1.5 text-stone-500 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition-colors"
+            className="p-1 text-stone-500 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition-colors"
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -391,15 +391,11 @@ export default function PatientDashboard() {
       />
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto pb-28 md:pb-8 bg-gradient-to-br from-amber-50/40 via-slate-50 to-orange-50/30 relative">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden pb-28 md:pb-8 bg-gradient-to-br from-amber-50/40 via-slate-50 to-orange-50/30 relative">
         {/* Ambient atmospheric color glows */}
         <div className="fixed top-0 right-0 w-[450px] h-[450px] bg-gradient-to-bl from-orange-300/20 via-pink-300/15 to-transparent rounded-full blur-3xl pointer-events-none -z-0" />
         <div className="fixed bottom-0 left-64 w-[450px] h-[450px] bg-gradient-to-tr from-emerald-300/20 via-teal-300/15 to-transparent rounded-full blur-3xl pointer-events-none -z-0" />
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-gradient-to-r from-sky-300/10 via-violet-300/10 to-transparent rounded-full blur-3xl pointer-events-none -z-0" />
-
-        <div className="relative z-10 p-4 md:p-6 pb-0">
-          <NotificationPermissionBanner userRole="patient" userName={profile?.name} className="mb-4" />
-        </div>
 
         <div className="relative z-10">
           <ErrorBoundary fallbackTitle="Could not load patient screen">

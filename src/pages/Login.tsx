@@ -250,16 +250,6 @@ export default function Login() {
 
   const postAuthRedirect = async (userCred: any) => {
     const userProfile = await getUserProfile(userCred.user.uid);
-    if (userProfile?.role === 'patient') {
-      createNotification({
-        type: 'PATIENT_LOGIN',
-        recipientRole: 'dietician',
-        patientId: userCred.user.uid,
-        patientName: userCred.user.displayName || userProfile.name || 'Patient',
-        message: `${userCred.user.displayName || userProfile.name || 'A patient'} signed in`,
-        read: false
-      }).catch(() => {});
-    }
     if (!userProfile?.role) {
       await auth.signOut();
       setError('This account is not set up yet. Please contact your dietician.');

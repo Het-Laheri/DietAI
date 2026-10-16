@@ -90,11 +90,11 @@ export default function Overview() {
     ? Math.round(
         patients.reduce((acc, p) => {
           const t = calculatePatientProgramTimeline(p);
-          const val = t.overallAdherence > 0 ? t.overallAdherence : (p.adherencePercentage ?? (p.needsAttention ? 50 : 85));
+          const val = t.overallAdherence > 0 ? t.overallAdherence : (p.adherencePercentage ?? 0);
           return acc + val;
         }, 0) / patients.length
       )
-    : 80;
+    : 0;
 
   const todayStr = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -107,7 +107,7 @@ export default function Overview() {
     <div className="p-5 md:p-8 max-w-7xl mx-auto space-y-8 font-sans">
       
       {/* ─── COMMAND CENTER TOP BAR (ELEVATED AESTHETIC) ────────────────── */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-stone-900 via-stone-850 to-stone-900 text-white rounded-3xl p-6 md:p-8 shadow-xl border border-stone-800">
+      <div className="relative overflow-hidden bg-gradient-to-r from-stone-900 via-stone-800 to-stone-900 text-white rounded-3xl p-6 md:p-8 shadow-xl border border-stone-800">
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-80 h-80 rounded-full bg-teal-500/10 blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 -mb-20 w-80 h-80 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
 
@@ -249,7 +249,7 @@ export default function Overview() {
                 Dietician Action Recommendation:
               </span>
               <p className="text-stone-300 leading-relaxed">
-                Utilize the <strong>Meal Swap Engine</strong> to prescribe low-GI complex carbohydrate substitutions (e.g. Oats $\rightarrow$ Paneer Moong Toast) and incorporate morning protein isolates to stabilize satiety and insulin response.
+                Utilize the <strong>Meal Swap Engine</strong> to prescribe low-GI complex carbohydrate substitutions (e.g. Oats → Paneer Moong Toast) and incorporate morning protein isolates to stabilize satiety and insulin response.
               </p>
             </div>
 

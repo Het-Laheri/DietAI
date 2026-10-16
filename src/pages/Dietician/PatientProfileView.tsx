@@ -427,7 +427,7 @@ export default function PatientProfileView() {
   const timeline = calculatePatientProgramTimeline(profile, activePlan, combinedEatingLogs);
   const adherence = timeline.overallAdherence > 0
     ? timeline.overallAdherence
-    : (profile.adherencePercentage ?? (profile.needsAttention ? 52 : 84));
+    : (profile.adherencePercentage ?? (profile.needsAttention ? 52 : 0));
 
   // Height & Clinical Anthropometrics
   const heightM = (profile.heightCm || 170) / 100;
@@ -489,19 +489,6 @@ export default function PatientProfileView() {
         patientId: targetPatientId,
         patientName: targetPatientName
       });
-      if (targetPatientId) {
-        createNotification({
-          recipientRole: 'patient',
-          recipientId: targetPatientId,
-          patientId: targetPatientId,
-          patientName: targetPatientName,
-          type: 'QUERY_ANSWERED',
-          title: 'Dietician Answered Your Query 🩺',
-          message: `Jyoti Ma'am replied: "${text.slice(0, 75)}${text.length > 75 ? '...' : ''}"`,
-          link: '/patient/inbox',
-          read: false
-        }).catch(console.warn);
-      }
       setQueries(prev => prev.map(q => q.id === queryId ? { ...q, reply: text, status: 'answered' } : q));
       setReplyDrafts(prev => ({ ...prev, [queryId]: '' }));
     } catch (e) {
@@ -589,9 +576,9 @@ export default function PatientProfileView() {
     setMealPlans(updated);
     setEditingMeal(null);
 
-    // Notify patient's phone of meal modification
+    // Notify patient's phone of meal modification if plan was draft (published plans already notify via saveMealPlan)
     const patientTargetId = profile?.uid || profile?.id || id;
-    if (patientTargetId) {
+    if (patientTargetId && updatedPlan.status !== 'published') {
       createNotification({
         recipientRole: 'patient',
         recipientId: patientTargetId,
@@ -611,22 +598,6 @@ export default function PatientProfileView() {
     await saveMealPlan(published, 'dietician');
     const updated = await getMealPlans(profile?.id || id!);
     setMealPlans(updated);
-
-    // Notify patient's phone that complete meal plan was published
-    const patientTargetId = profile?.uid || profile?.id || id;
-    if (patientTargetId) {
-      createNotification({
-        recipientRole: 'patient',
-        recipientId: patientTargetId,
-        patientId: patientTargetId,
-        patientName: profile?.name || 'Patient',
-        type: 'MEAL_PLAN_PUBLISHED',
-        title: 'New Meal Plan Assigned! 🥗',
-        message: `Your dietician has published a personalized clinical meal plan for you (${published.title || 'Weekly Plan'}). Check today's meals!`,
-        link: '/patient/meals',
-        read: false
-      }).catch(console.warn);
-    }
   };
 
   const handleSaveLabs = async (e: React.FormEvent) => {
@@ -638,6 +609,7 @@ export default function PatientProfileView() {
       const updatedProfile: PatientProfile = {
         ...profile,
         labBiomarkers: {
+          ...DEFAULT_SAMPLE_LABS,
           ...profile.labBiomarkers,
           ...labFormValues,
           testDate: labFormValues.testDate || new Date().toISOString().split('T')[0]
@@ -654,7 +626,7 @@ export default function PatientProfileView() {
   };
 
   const openLabEditModal = () => {
-    const currentLabs = profile?.labBiomarkers || DEFAULT_SAMPLE_LABS;
+    const currentLabs = { ...DEFAULT_SAMPLE_LABS, ...(profile?.labBiomarkers || {}) };
     setLabFormValues({ ...currentLabs });
     setEditingLabsModal(true);
   };
@@ -662,7 +634,7 @@ export default function PatientProfileView() {
   const renderMacroProgressChartWithInterpretation = () => {
     if (!profile) return null;
 
-    const currentLabs = profile.labBiomarkers || DEFAULT_SAMPLE_LABS;
+    const currentLabs = { ...DEFAULT_SAMPLE_LABS, ...(profile.labBiomarkers || {}) };
     const condStr = typeof profile.clinicalSummary === 'object' ? profile.clinicalSummary?.conditions : (profile.clinicalSummary || profile.healthInfo?.conditions || '');
     const isDiabetic = (condStr || '').toLowerCase().includes('diabet');
 
@@ -969,7 +941,7 @@ export default function PatientProfileView() {
                 Dietary Fat & Lipid Metabolism ({avgFat}g vs {targetFat}g target)
               </span>
               <p className="text-stone-700 text-[11px] leading-relaxed">
-                Daily fat intake averages <strong className="text-stone-900">{avgFat}g ({fatPercent}% of energy)</strong> vs target {targetFat}g. Correlating with serum Triglycerides ({currentLabs.triglycerides ?? 184} mg/dL) and LDL ({currentLabs.ldl ?? 137} mg/dL): strictly cap saturated fats (ghee/butter) to &lt;7% of calories. Favor cold-pressed mustard oil, walnuts, and flaxseeds to reduce atherogenic risk and liver fat accumulation.
+                Daily fat intake averages <strong className="text-stone-900">{avgFat}g ({fatPercent}% of energy)</strong> vs target {targetFat}g. {currentLabs.triglycerides ? `Correlating with serum Triglycerides (${currentLabs.triglycerides} mg/dL)${currentLabs.ldl ? ` and LDL (${currentLabs.ldl} mg/dL)` : ''}: ` : ''}Strictly cap saturated fats (ghee/butter) to &lt;7% of calories. Favor cold-pressed mustard oil, walnuts, and flaxseeds to reduce atherogenic risk and liver fat accumulation.
               </p>
             </div>
 
@@ -980,7 +952,7 @@ export default function PatientProfileView() {
                 Protein Satiety & Renal Clearance ({avgProtein}g, ~{proteinGPerKg} g/kg IBW)
               </span>
               <p className="text-stone-700 text-[11px] leading-relaxed">
-                Protein intake averages <strong className="text-emerald-800">{avgProtein}g/day</strong> (~{proteinGPerKg} g/kg ideal body weight). Glomerular markers (Creatinine: {currentLabs.creatinine ?? 0.88} mg/dL, BUN: {currentLabs.bun ?? 15} mg/dL) confirm healthy renal nitrogenous filtration. Supports lean muscle preservation and post-meal thermogenesis without renal strain.
+                Protein intake averages <strong className="text-emerald-800">{avgProtein}g/day</strong> (~{proteinGPerKg} g/kg ideal body weight). {currentLabs.creatinine ? `Glomerular markers (Creatinine: ${currentLabs.creatinine} mg/dL${currentLabs.bun ? `, BUN: ${currentLabs.bun} mg/dL` : ''}) confirm healthy renal nitrogenous filtration. ` : ''}Supports lean muscle preservation and post-meal thermogenesis without renal strain.
               </p>
             </div>
 
@@ -1003,15 +975,20 @@ export default function PatientProfileView() {
   const renderBiomarkerProgressChartWithInterpretation = () => {
     if (!profile) return null;
 
-    const currentLabs = profile.labBiomarkers || DEFAULT_SAMPLE_LABS;
+    const currentLabs = (profile.labBiomarkers && Object.keys(profile.labBiomarkers).length > 0)
+      ? { ...DEFAULT_SAMPLE_LABS, ...profile.labBiomarkers }
+      : DEFAULT_SAMPLE_LABS;
     const evaluatedBiomarkers = evaluateLabBiomarkers(currentLabs, profile.gender || 'Female');
-    const patientConditions = typeof profile.clinicalSummary === 'object' 
-      ? (profile.clinicalSummary?.conditions || profile.healthInfo?.conditions || '') 
-      : (profile.clinicalSummary || profile.healthInfo?.conditions || '');
+    const patientConditions = [
+      ...(profile.medicalHistory || []),
+      typeof profile.clinicalSummary === 'object' ? (profile.clinicalSummary?.conditions || '') : (profile.clinicalSummary || ''),
+      profile.healthInfo?.conditions || '',
+      profile.diagnosisOrProcedure || ''
+    ].filter(Boolean).join(', ');
 
     const relevantBiomarkers = evaluatedBiomarkers.filter(b => {
       const rel = isBiomarkerRelevantForConditions(b.key, patientConditions);
-      return rel.isRelevant;
+      return rel.isRelevant || b.status !== 'optimal';
     });
 
     const displayedBiomarkers = (labChartFilter === 'relevant' && relevantBiomarkers.length > 0)
@@ -1019,16 +996,22 @@ export default function PatientProfileView() {
       : evaluatedBiomarkers;
 
     // Ratios for clinical interpretation
-    const tgHdlRatio = ((currentLabs.triglycerides ?? 184) / (currentLabs.hdl ?? 44)).toFixed(2);
-    const sgptVal = currentLabs.sgpt ?? 48;
-    const sgotVal = currentLabs.sgot ?? 35;
-    const altAstRatio = (sgptVal / (sgotVal || 1)).toFixed(2);
-    const bunVal = currentLabs.bun ?? 15;
-    const creatVal = currentLabs.creatinine ?? 0.88;
-    const bunCreatRatio = (bunVal / (creatVal || 1)).toFixed(1);
-    const uricAcidVal = currentLabs.uricAcid ?? 6.6;
-    const naVal = currentLabs.sodium ?? 141;
-    const kVal = currentLabs.potassium ?? 4.3;
+    const tgHdlRatio = (currentLabs.triglycerides && currentLabs.hdl)
+      ? (currentLabs.triglycerides / currentLabs.hdl).toFixed(2)
+      : 'N/A';
+    const sgptVal = currentLabs.sgpt ?? '--';
+    const sgotVal = currentLabs.sgot ?? '--';
+    const altAstRatio = (currentLabs.sgpt && currentLabs.sgot)
+      ? (currentLabs.sgpt / currentLabs.sgot).toFixed(2)
+      : 'N/A';
+    const bunVal = currentLabs.bun ?? '--';
+    const creatVal = currentLabs.creatinine ?? '--';
+    const bunCreatRatio = (currentLabs.bun && currentLabs.creatinine)
+      ? (currentLabs.bun / currentLabs.creatinine).toFixed(1)
+      : 'N/A';
+    const uricAcidVal = currentLabs.uricAcid ?? '--';
+    const naVal = currentLabs.sodium ?? '--';
+    const kVal = currentLabs.potassium ?? '--';
 
     // Chart dataset: map parameters with deviation status score
     const chartData = displayedBiomarkers.map(b => {
@@ -1245,15 +1228,20 @@ export default function PatientProfileView() {
 
   const renderBiomarkersPanel = () => {
     if (!profile) return null;
-    const currentLabs = profile.labBiomarkers || DEFAULT_SAMPLE_LABS;
+    const currentLabs = (profile.labBiomarkers && Object.keys(profile.labBiomarkers).length > 0)
+      ? { ...DEFAULT_SAMPLE_LABS, ...profile.labBiomarkers }
+      : DEFAULT_SAMPLE_LABS;
     const evaluatedBiomarkers = evaluateLabBiomarkers(currentLabs, profile.gender || 'Female');
-    const patientConditions = typeof profile.clinicalSummary === 'object' 
-      ? (profile.clinicalSummary?.conditions || profile.healthInfo?.conditions || '') 
-      : (profile.clinicalSummary || profile.healthInfo?.conditions || '');
+    const patientConditions = [
+      ...(profile.medicalHistory || []),
+      typeof profile.clinicalSummary === 'object' ? (profile.clinicalSummary?.conditions || '') : (profile.clinicalSummary || ''),
+      profile.healthInfo?.conditions || '',
+      profile.diagnosisOrProcedure || ''
+    ].filter(Boolean).join(', ');
 
     const relevantBiomarkers = evaluatedBiomarkers.filter(b => {
       const rel = isBiomarkerRelevantForConditions(b.key, patientConditions);
-      return rel.isRelevant;
+      return rel.isRelevant || b.status !== 'optimal';
     });
 
     const displayedBiomarkers = (biomarkerFilterMode === 'relevant' && relevantBiomarkers.length > 0)
@@ -1497,30 +1485,30 @@ export default function PatientProfileView() {
                       <div className="flex items-center gap-1.5 pl-2 border-l border-stone-200">
                         <span className="text-stone-400 font-medium">Waist / Inch Loss: </span>
                         <span className="font-bold text-stone-900">
-                          {latestMonth?.waistCm ? `${latestMonth.waistCm} cm` : (profile.waistCm ? `${profile.waistCm} cm` : 'Logged')}
+                          {latestMonth?.waistCm ? `${latestMonth.waistCm} cm` : (profile.waistCm ? `${profile.waistCm} cm` : '--')}
                         </span>
-                        {(latestMonth?.inchLoss || profile.inchLoss) && (
+                        {(latestMonth?.inchLoss || profile.inchLoss) ? (
                           <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded text-[10px]">
                             -{latestMonth?.inchLoss || profile.inchLoss}"
                           </span>
-                        )}
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="text-stone-400 font-medium">Blood Pressure: </span>
                         <span className="font-bold text-stone-900">
-                          {latestMonth?.bloodPressureSystolic ? `${latestMonth.bloodPressureSystolic}/${latestMonth.bloodPressureDiastolic || 80} mmHg` : '120/80 mmHg'}
+                          {latestMonth?.bloodPressureSystolic ? `${latestMonth.bloodPressureSystolic}/${latestMonth.bloodPressureDiastolic || 80} mmHg` : '--'}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="text-stone-400 font-medium">Fasting Sugar: </span>
                         <span className="font-bold text-stone-900">
-                          {latestMonth?.fastingSugar ? `${latestMonth.fastingSugar} mg/dL` : '95 mg/dL'}
+                          {latestMonth?.fastingSugar ? `${latestMonth.fastingSugar} mg/dL` : '--'}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="text-stone-400 font-medium">HbA1c: </span>
                         <span className="font-bold text-purple-700">
-                          {latestMonth?.hba1c ? `${latestMonth.hba1c}%` : (profile.labBiomarkers?.hba1c ? `${profile.labBiomarkers.hba1c}%` : '5.6%')}
+                          {latestMonth?.hba1c ? `${latestMonth.hba1c}%` : (profile.labBiomarkers?.hba1c ? `${profile.labBiomarkers.hba1c}%` : '--')}
                         </span>
                       </div>
                     </>

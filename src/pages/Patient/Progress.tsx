@@ -331,31 +331,7 @@ export default function Progress() {
     };
 
     if (!monthlyParams || monthlyParams.length === 0) {
-      const baselineMonth = parseBaselineMonth(patientProfile?.createdAt);
-      return [
-        {
-          month: baselineMonth,
-          date: todayStr,
-          weight: startingWeight,
-          inchLoss: 0,
-          waist: patientProfile?.initialWaistCm || patientProfile?.waistCm || 82,
-          systolic: 120,
-          diastolic: 80,
-          fastingSugar: 95,
-          hba1c: 5.6
-        },
-        {
-          month: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-          date: todayStr,
-          weight: currentWeight,
-          inchLoss: displayedInchLoss,
-          waist: patientProfile?.waistCm || 80,
-          systolic: 118,
-          diastolic: 78,
-          fastingSugar: 92,
-          hba1c: 5.5
-        }
-      ];
+      return [];
     }
 
     // Sort ascending chronologically for charts
@@ -686,7 +662,13 @@ export default function Progress() {
           </div>
 
           <div className="h-56 w-full min-w-0 overflow-hidden" style={{ width: '100%', height: 224, minHeight: 224, minWidth: 0 }}>
-            {chartsMounted ? (
+            {monthlyChartData.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-stone-50/50 rounded-xl border border-dashed border-stone-200">
+                <Activity className="w-8 h-8 text-stone-300 mb-2" />
+                <p className="text-xs font-bold text-stone-700">No monthly biometric records logged yet</p>
+                <p className="text-[11px] text-stone-400 mt-0.5">Click "Log New Parameters" below to record your weight, inch loss, blood pressure, and sugar trends.</p>
+              </div>
+            ) : chartsMounted ? (
               <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
                 <LineChart data={monthlyChartData} margin={{ top: 10, right: 20, bottom: 5, left: -10 }}>
                   <CartesianGrid stroke="#f1f5f9" strokeDasharray="5 5" vertical={false} />
@@ -785,7 +767,13 @@ export default function Progress() {
           </div>
 
           <div className="h-48 w-full min-w-0 overflow-hidden" style={{ width: '100%', height: 192, minHeight: 192, minWidth: 0 }}>
-            {chartsMounted ? (
+            {monthlyChartData.filter(d => d.systolic || d.fastingSugar || d.hba1c).length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-stone-50/50 rounded-xl border border-dashed border-stone-200">
+                <Heart className="w-8 h-8 text-stone-300 mb-2" />
+                <p className="text-xs font-bold text-stone-700">No blood pressure or fasting sugar entries recorded yet</p>
+                <p className="text-[11px] text-stone-400 mt-0.5">Your clinical trajectory will chart here once you log health checks with your dietician.</p>
+              </div>
+            ) : chartsMounted ? (
               <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
                 <LineChart data={monthlyChartData} margin={{ top: 10, right: 20, bottom: 5, left: -10 }}>
                   <CartesianGrid stroke="#f1f5f9" strokeDasharray="5 5" vertical={false} />

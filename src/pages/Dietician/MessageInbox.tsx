@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Check, X, Clock, RefreshCw, Search, Trash2, 
@@ -63,6 +63,8 @@ export default function MessageInbox() {
   const [searchQuery, setSearchQuery] = useState('');
   const [processing, setProcessing] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [editingAnsweredId, setEditingAnsweredId] = useState<string | null>(null);
+  const draftedIdsRef = useRef<Set<string>>(new Set());
 
   // Manual Template Input & Quick Presets State
   const [manualTemplateInputs, setManualTemplateInputs] = useState<Record<string, string>>({});
@@ -94,15 +96,41 @@ export default function MessageInbox() {
     const refreshMergedQueries = (remoteItems: PatientQuery[] = []) => {
       const localItems = getLocalQueries() as PatientQuery[];
       const map = new Map<string, PatientQuery>();
-      remoteItems.forEach(item => { if (item.id) map.set(item.id, item); });
-      localItems.forEach(item => { if (item.id && !map.has(item.id)) map.set(item.id, item); });
+      const remoteKeys = new Set<string>();
+
+      remoteItems.forEach(item => {
+        if (item.id) {
+          map.set(item.id, item);
+          const key = `${item.patientId}_${(item.question || '').trim().toLowerCase()}`;
+          remoteKeys.add(key);
+        }
+      });
+
+      const cleanedLocalItems: PatientQuery[] = [];
+      localItems.forEach(item => {
+        if (!item.id) return;
+        const key = `${item.patientId}_${(item.question || '').trim().toLowerCase()}`;
+        const isTemporary = item.id.startsWith('temp_') || item.id.startsWith('query_');
+        if (map.has(item.id) || (isTemporary && remoteKeys.has(key))) {
+          return;
+        }
+        map.set(item.id, item);
+        cleanedLocalItems.push(item);
+      });
+
+      if (cleanedLocalItems.length !== localItems.length && remoteItems.length > 0) {
+        try {
+          localStorage.setItem('nutrisnap_cached_queries', JSON.stringify(cleanedLocalItems));
+        } catch {}
+      }
+
       const combined = Array.from(map.values()).sort((a, b) => {
         return parseTime(b.createdAt) - parseTime(a.createdAt);
       });
       setQueries(combined);
 
       combined.forEach(item => {
-        if (item.id && item.status === 'pending' && !aiDrafts[item.id]) {
+        if (item.id && (item.status === 'pending' || item.status === 'viewed') && !draftedIdsRef.current.has(item.id)) {
           generateDraftForQuery(item);
         }
       });
@@ -142,6 +170,9 @@ export default function MessageInbox() {
   // Generate an AI clinical draft for a patient query
   const generateDraftForQuery = async (q: PatientQuery) => {
     if (!q.id) return;
+    if (draftedIdsRef.current.has(q.id)) return;
+    draftedIdsRef.current.add(q.id);
+
     setGeneratingAi(prev => ({ ...prev, [q.id!]: true }));
 
     try {
@@ -167,12 +198,13 @@ export default function MessageInbox() {
         draft = generateFallbackDraft(q.question);
       }
       setAiDrafts(prev => ({ ...prev, [q.id!]: draft }));
-      setEditReplies(prev => ({ ...prev, [q.id!]: draft }));
+      // Only set editReplies if user hasn't already modified or typed in it
+      setEditReplies(prev => (prev[q.id!] !== undefined ? prev : { ...prev, [q.id!]: draft }));
     } catch (e) {
       console.warn('AI endpoint unavailable, using smart clinical heuristic draft:', e);
       const fallback = generateFallbackDraft(q.question);
       setAiDrafts(prev => ({ ...prev, [q.id!]: fallback }));
-      setEditReplies(prev => ({ ...prev, [q.id!]: fallback }));
+      setEditReplies(prev => (prev[q.id!] !== undefined ? prev : { ...prev, [q.id!]: fallback }));
     } finally {
       setGeneratingAi(prev => ({ ...prev, [q.id!]: false }));
     }
@@ -247,7 +279,7 @@ export default function MessageInbox() {
 
   const handleApproveAndSend = async (q: PatientQuery) => {
     if (!q.id) return;
-    const finalAnswer = (editReplies[q.id] || aiDrafts[q.id] || '').trim();
+    const finalAnswer = (editReplies[q.id] || aiDrafts[q.id] || q.reply || '').trim();
     if (!finalAnswer) {
       showToast('Please provide an answer before approving.');
       return;
@@ -255,30 +287,23 @@ export default function MessageInbox() {
 
     setProcessing(q.id);
     try {
+      // Optimistically update query state immediately
+      setQueries(prev => prev.map(item => item.id === q.id ? { ...item, reply: finalAnswer, status: 'answered' } : item));
+
       await updateQuery(q.id, {
         reply: finalAnswer,
-        status: 'answered'
+        status: 'answered',
+        patientId: q.patientId,
+        patientName: q.patientName
       });
 
-      // Notify the patient that their inquiry was answered
-      if (q.patientId) {
-        createNotification({
-          recipientRole: 'patient',
-          recipientId: q.patientId,
-          patientId: q.patientId,
-          patientName: q.patientName,
-          type: 'QUERY_ANSWERED',
-          title: 'Dietician Answered Your Query 🩺',
-          message: `Your dietician answered: "${finalAnswer.slice(0, 65)}${finalAnswer.length > 65 ? '...' : ''}"`,
-          link: '/patient/inbox',
-          read: false
-        }).catch(console.warn);
-      }
-
-      showToast(`Answer approved and sent directly to ${q.patientName}!`);
+      setEditingAnsweredId(null);
+      showToast(`Answer approved and sent directly to ${q.patientName || 'patient'}!`);
     } catch (e) {
       console.error('Failed to send reply:', e);
       showToast('Error sending reply. Please try again.');
+      // Revert status on failure
+      setQueries(prev => prev.map(item => item.id === q.id ? { ...item, status: q.status } : item));
     } finally {
       setProcessing(null);
     }
@@ -287,6 +312,7 @@ export default function MessageInbox() {
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Delete query from ${name}?`)) return;
     try {
+      setQueries(prev => prev.filter(q => q.id !== id));
       await deleteQuery(id);
       showToast('Query deleted.');
     } catch (e) {
@@ -295,7 +321,7 @@ export default function MessageInbox() {
     }
   };
 
-  const pendingCount = queries.filter(q => q.status === 'pending').length;
+  const pendingCount = queries.filter(q => q.status === 'pending' || q.status === 'viewed').length;
   const answeredCount = queries.filter(q => q.status === 'answered').length;
 
   const filtered = queries.filter(q => {
@@ -451,7 +477,7 @@ export default function MessageInbox() {
         <div className="space-y-5">
           {filtered.map(q => {
             const patient = patients.find(p => p.id === q.patientId);
-            const isPending = q.status === 'pending';
+            const isPending = q.status === 'pending' || q.status === 'viewed';
             const isProcessing = processing === q.id;
             const isGenerating = generatingAi[q.id!];
 
@@ -940,13 +966,57 @@ export default function MessageInbox() {
                         </div>
                       </div>
                     ) : (
-                      <div className="p-3.5 bg-emerald-50/50 border border-emerald-200/70 rounded-lg text-xs md:text-sm text-stone-800 leading-relaxed font-sans">
-                        <p className="whitespace-pre-wrap">{q.reply}</p>
-                        <div className="mt-2.5 flex items-center gap-1.5 text-[10px] text-emerald-800 font-bold uppercase tracking-wider">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Authorized by Lead Dietician • Visible on Patient's Screen
+                      editingAnsweredId === q.id ? (
+                        <div className="space-y-3">
+                          <textarea
+                            rows={4}
+                            value={editReplies[q.id!] ?? q.reply ?? ''}
+                            onChange={e => q.id && setEditReplies(p => ({ ...p, [q.id!]: e.target.value }))}
+                            placeholder="Edit the clinical answer..."
+                            className="w-full p-3.5 bg-white border border-stone-300 rounded-lg text-xs md:text-sm text-stone-900 focus:outline-none focus:ring-1 focus:ring-orange-500 font-sans leading-relaxed resize-y shadow-2xs"
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleApproveAndSend(q)}
+                              disabled={isProcessing}
+                              className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md text-xs font-semibold flex items-center gap-1 shadow-2xs disabled:opacity-50"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              {isProcessing ? 'Updating...' : 'Save & Update Answer'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingAnsweredId(null)}
+                              className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-md text-xs font-semibold"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="p-3.5 bg-emerald-50/50 border border-emerald-200/70 rounded-lg text-xs md:text-sm text-stone-800 leading-relaxed font-sans">
+                          <p className="whitespace-pre-wrap">{q.reply}</p>
+                          <div className="mt-2.5 flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 text-[10px] text-emerald-800 font-bold uppercase tracking-wider">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Authorized by Lead Dietician • Visible on Patient's Screen
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (q.id) {
+                                  setEditReplies(p => ({ ...p, [q.id!]: q.reply || '' }));
+                                  setEditingAnsweredId(q.id);
+                                }
+                              }}
+                              className="text-[11px] text-emerald-800 hover:text-emerald-950 underline font-semibold"
+                            >
+                              Edit Answer
+                            </button>
+                          </div>
+                        </div>
+                      )
                     )}
                   </div>
                 </div>

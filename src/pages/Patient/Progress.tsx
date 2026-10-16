@@ -51,7 +51,6 @@ export default function Progress() {
   const { profile } = useAuth();
   const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
   const [mealPlan, setMealPlan] = useState<MealPlan | null>(null);
-  const [, setWeekPlan] = useState<PatientWeekPlan | null>(null);
   const [todayChecklist, setTodayChecklist] = useState<ChecklistMealItem[]>([]);
   const [eatingLogs, setEatingLogs] = useState<PatientEatingLogEntry[]>([]);
   const [progressRecords, setProgressRecords] = useState<ProgressRecord[]>([]);
@@ -59,6 +58,7 @@ export default function Progress() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAddMonthlyModalOpen, setIsAddMonthlyModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [chartsMounted, setChartsMounted] = useState(false);
 
   // Monthly parameter form state
   const [monthFormDate, setMonthFormDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -72,23 +72,31 @@ export default function Progress() {
   const [monthFormNotes, setMonthFormNotes] = useState('');
   const [savingMonthly, setSavingMonthly] = useState(false);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = React.useMemo(() => new Date().toISOString().split('T')[0], []);
+  const patientUid = profile?.uid;
 
   useEffect(() => {
-    if (!profile?.uid) return;
+    setChartsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!patientUid) {
+      setLoading(false);
+      return;
+    }
 
     let isMounted = true;
 
     async function loadData() {
       try {
-        const [pData, plansData, wpData, checklistData, allLogs, progData, mParams] = await Promise.all([
-          getPatientProfile(profile!.uid),
-          getMealPlans(profile!.uid),
-          getPatientWeekPlan(profile!.uid),
-          getPatientChecklist(profile!.uid, todayStr),
-          getAllPatientEatingLogs(profile!.uid),
-          getProgressRecords(profile!.uid),
-          getMonthlyParameters(profile!.uid)
+        const [pData, plansData, , checklistData, allLogs, progData, mParams] = await Promise.all([
+          getPatientProfile(patientUid!),
+          getMealPlans(patientUid!),
+          getPatientWeekPlan(patientUid!),
+          getPatientChecklist(patientUid!, todayStr),
+          getAllPatientEatingLogs(patientUid!),
+          getProgressRecords(patientUid!),
+          getMonthlyParameters(patientUid!)
         ]);
 
         if (!isMounted) return;
@@ -96,7 +104,6 @@ export default function Progress() {
         setPatientProfile(pData);
         const activePlan = plansData.find(p => p.status === 'published') || plansData[0] || null;
         setMealPlan(activePlan);
-        setWeekPlan(wpData);
         setTodayChecklist(checklistData || []);
         setEatingLogs(allLogs || []);
         setProgressRecords(progData || []);
@@ -111,22 +118,22 @@ export default function Progress() {
     loadData();
 
     // 1. Real-time Firestore listener for today's checklist doc
-    const checklistRef = doc(db, 'food_logs', `checklist_${profile.uid}_${todayStr}`);
+    const checklistRef = doc(db, 'food_logs', `checklist_${patientUid}_${todayStr}`);
     const unsubChecklist = onSnapshot(checklistRef, (docSnap) => {
       if (docSnap.exists()) {
         const raw = docSnap.data().items;
         const items = (Array.isArray(raw) ? raw : Object.values(raw || {})) as ChecklistMealItem[];
         setTodayChecklist(items);
-        getAllPatientEatingLogs(profile.uid).then(logs => {
+        getAllPatientEatingLogs(patientUid).then(logs => {
           if (isMounted) setEatingLogs(logs);
-        });
+        }).catch(() => {});
       }
     }, (err) => {
       console.warn('Real-time checklist listener note:', err);
     });
 
     // 2. Real-time patient profile listener
-    const profileRef = doc(db, 'patient_profiles', profile.uid);
+    const profileRef = doc(db, 'patient_profiles', patientUid);
     const unsubProfile = onSnapshot(profileRef, (docSnap) => {
       if (docSnap.exists() && isMounted) {
         setPatientProfile(docSnap.data() as PatientProfile);
@@ -136,7 +143,7 @@ export default function Progress() {
     });
 
     // 3. Real-time progress records listener
-    const progQuery = query(collection(db, 'progress_records'), where('patientId', '==', profile.uid));
+    const progQuery = query(collection(db, 'progress_records'), where('patientId', '==', patientUid));
     const unsubProg = onSnapshot(progQuery, (snap) => {
       if (isMounted) {
         const records = snap.docs
@@ -150,27 +157,27 @@ export default function Progress() {
 
     // 4. Custom window events from MealNotepad and Profile Modal
     const handleChecklistUpdated = () => {
-      getPatientChecklist(profile.uid, todayStr).then(items => {
+      getPatientChecklist(patientUid, todayStr).then(items => {
         if (isMounted) setTodayChecklist(items);
-      });
-      getAllPatientEatingLogs(profile.uid).then(logs => {
+      }).catch(() => {});
+      getAllPatientEatingLogs(patientUid).then(logs => {
         if (isMounted) setEatingLogs(logs);
-      });
+      }).catch(() => {});
     };
 
     const handleProfileUpdated = () => {
-      getPatientProfile(profile.uid).then(p => {
+      getPatientProfile(patientUid).then(p => {
         if (isMounted && p) setPatientProfile(p);
-      });
+      }).catch(() => {});
     };
 
     const handleProgUpdated = () => {
-      getProgressRecords(profile.uid).then(records => {
+      getProgressRecords(patientUid).then(records => {
         if (isMounted) setProgressRecords(records);
-      });
-      getMonthlyParameters(profile.uid).then(records => {
+      }).catch(() => {});
+      getMonthlyParameters(patientUid).then(records => {
         if (isMounted) setMonthlyParams(records);
-      });
+      }).catch(() => {});
     };
 
     window.addEventListener('nutrisnap:checklist_updated', handleChecklistUpdated);
@@ -186,11 +193,7 @@ export default function Progress() {
       window.removeEventListener('nutrisnap:profile_updated', handleProfileUpdated);
       window.removeEventListener('nutrisnap:progress_record_updated', handleProgUpdated);
     };
-  }, [profile, todayStr]);
-
-  if (loading) {
-    return <div className="p-8 max-w-4xl mx-auto text-stone-500 font-medium">Loading your nutrition progress profile...</div>;
-  }
+  }, [patientUid, todayStr]);
 
   // ─── TARGET & COMPLIANCE CALCULATIONS ──────────────────────────────────────
   // 1. Prescribed / Assigned Meals planned for today
@@ -313,11 +316,22 @@ export default function Progress() {
 
   // Build Monthly Progression Data for Charts
   const monthlyChartData = React.useMemo(() => {
+    const parseBaselineMonth = (createdAt: any) => {
+      if (!createdAt) return 'Baseline';
+      if (typeof createdAt?.toDate === 'function') {
+        const d = createdAt.toDate();
+        return isNaN(d.getTime()) ? 'Baseline' : d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      }
+      if (createdAt?.seconds) {
+        const d = new Date(createdAt.seconds * 1000);
+        return isNaN(d.getTime()) ? 'Baseline' : d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      }
+      const d = new Date(createdAt);
+      return isNaN(d.getTime()) ? 'Baseline' : d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    };
+
     if (!monthlyParams || monthlyParams.length === 0) {
-      // Seed with current profile as Month 1 baseline if none recorded yet
-      const baselineMonth = patientProfile?.createdAt 
-        ? new Date(patientProfile.createdAt.toDate ? patientProfile.createdAt.toDate() : patientProfile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-        : 'Baseline';
+      const baselineMonth = parseBaselineMonth(patientProfile?.createdAt);
       return [
         {
           month: baselineMonth,
@@ -349,19 +363,19 @@ export default function Progress() {
     return sorted.map(m => ({
       month: m.month || m.date,
       date: m.date,
-      weight: m.weightKg,
-      inchLoss: m.inchLoss || 0,
-      waist: m.waistCm,
-      systolic: m.bloodPressureSystolic,
-      diastolic: m.bloodPressureDiastolic,
-      fastingSugar: m.fastingSugar,
-      hba1c: m.hba1c
+      weight: Number(m.weightKg) || 0,
+      inchLoss: Number(m.inchLoss) || 0,
+      waist: m.waistCm ? Number(m.waistCm) : undefined,
+      systolic: m.bloodPressureSystolic ? Number(m.bloodPressureSystolic) : undefined,
+      diastolic: m.bloodPressureDiastolic ? Number(m.bloodPressureDiastolic) : undefined,
+      fastingSugar: m.fastingSugar ? Number(m.fastingSugar) : undefined,
+      hba1c: m.hba1c ? Number(m.hba1c) : undefined
     }));
-  }, [monthlyParams, patientProfile, startingWeight, currentWeight, displayedInchLoss, todayStr]);
+  }, [monthlyParams, patientProfile?.createdAt, patientProfile?.initialWaistCm, patientProfile?.waistCm, startingWeight, currentWeight, displayedInchLoss, todayStr]);
 
   const handleSaveMonthly = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile?.uid || !monthFormWeight) return;
+    if (!patientUid || !monthFormWeight) return;
 
     setSavingMonthly(true);
     try {
@@ -369,7 +383,7 @@ export default function Progress() {
       const monthLabel = selectedDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
       
       const newRec: Omit<MonthlyParameterRecord, 'id'> = {
-        patientId: profile.uid,
+        patientId: patientUid,
         date: monthFormDate,
         month: monthLabel,
         weightKg: parseFloat(monthFormWeight),
@@ -382,8 +396,8 @@ export default function Progress() {
         notes: monthFormNotes || undefined
       };
 
-      await saveMonthlyParameter(profile.uid, newRec);
-      const updated = await getMonthlyParameters(profile.uid);
+      await saveMonthlyParameter(patientUid, newRec);
+      const updated = await getMonthlyParameters(patientUid);
       setMonthlyParams(updated);
       setIsAddMonthlyModalOpen(false);
       // Reset form
@@ -404,6 +418,14 @@ export default function Progress() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto pb-24 md:pb-8">
+      {/* Synchronization State Banner (non-blocking) */}
+      {loading && (
+        <div className="mb-6 p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200/80 text-teal-900 text-xs font-semibold flex items-center gap-2 shadow-2xs">
+          <Activity className="w-4 h-4 animate-spin text-teal-600 shrink-0" />
+          <span>Synchronizing latest clinical parameters and intake records...</span>
+        </div>
+      )}
+
       {/* Page Title */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
@@ -663,81 +685,85 @@ export default function Progress() {
             </div>
           </div>
 
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyChartData} margin={{ top: 10, right: 20, bottom: 5, left: -10 }}>
-                <CartesianGrid stroke="#f1f5f9" strokeDasharray="5 5" vertical={false} />
-                <XAxis 
-                  dataKey="month" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#64748b', fontSize: 11 }} 
-                />
-                <YAxis 
-                  yAxisId="weight"
-                  domain={['auto', 'auto']}
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#0d9488', fontSize: 11 }} 
-                  unit="kg"
-                />
-                <YAxis 
-                  yAxisId="inches"
-                  orientation="right"
-                  domain={[0, 'auto']}
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#10b981', fontSize: 11 }} 
-                  unit='"'
-                />
-                <Tooltip 
-                  cursor={{ stroke: '#cbd5e1', strokeWidth: 1.5, strokeDasharray: '3 3' }} 
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-white p-3 rounded-lg border border-stone-200 shadow-md text-xs">
-                          <p className="font-bold text-stone-900">{data.month} ({data.date})</p>
-                          <div className="mt-1.5 space-y-1">
-                            <p className="text-teal-700 font-bold">
-                              Weight: <span className="font-mono">{data.weight} kg</span>
-                            </p>
-                            {data.waist && (
-                              <p className="text-stone-600">
-                                Waist: <span className="font-mono">{data.waist} cm</span>
+          <div className="h-56 w-full min-w-0 overflow-hidden" style={{ width: '100%', height: 224, minHeight: 224, minWidth: 0 }}>
+            {chartsMounted ? (
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
+                <LineChart data={monthlyChartData} margin={{ top: 10, right: 20, bottom: 5, left: -10 }}>
+                  <CartesianGrid stroke="#f1f5f9" strokeDasharray="5 5" vertical={false} />
+                  <XAxis 
+                    dataKey="month" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fill: '#64748b', fontSize: 11 }} 
+                  />
+                  <YAxis 
+                    yAxisId="weight"
+                    domain={['auto', 'auto']}
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fill: '#0d9488', fontSize: 11 }} 
+                    unit="kg"
+                  />
+                  <YAxis 
+                    yAxisId="inches"
+                    orientation="right"
+                    domain={[0, 'auto']}
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fill: '#10b981', fontSize: 11 }} 
+                    unit='"'
+                  />
+                  <Tooltip 
+                    cursor={{ stroke: '#cbd5e1', strokeWidth: 1.5, strokeDasharray: '3 3' }} 
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-white p-3 rounded-lg border border-stone-200 shadow-md text-xs">
+                            <p className="font-bold text-stone-900">{data.month} ({data.date})</p>
+                            <div className="mt-1.5 space-y-1">
+                              <p className="text-teal-700 font-bold">
+                                Weight: <span className="font-mono">{data.weight} kg</span>
                               </p>
-                            )}
-                            <p className="text-emerald-700 font-bold">
-                              Inch Loss: <span className="font-mono">{data.inchLoss}"</span>
-                            </p>
+                              {data.waist && (
+                                <p className="text-stone-600">
+                                  Waist: <span className="font-mono">{data.waist} cm</span>
+                                </p>
+                              )}
+                              <p className="text-emerald-700 font-bold">
+                                Inch Loss: <span className="font-mono">{data.inchLoss}"</span>
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Line 
-                  yAxisId="weight"
-                  type="monotone" 
-                  dataKey="weight" 
-                  stroke="#0d9488" 
-                  strokeWidth={2.5} 
-                  dot={{ r: 4, fill: '#0d9488' }}
-                  activeDot={{ r: 6, fill: '#0f766e' }} 
-                />
-                <Line 
-                  yAxisId="inches"
-                  type="monotone" 
-                  dataKey="inchLoss" 
-                  stroke="#10b981" 
-                  strokeWidth={2} 
-                  strokeDasharray="4 4"
-                  dot={{ r: 3, fill: '#10b981' }}
-                  activeDot={{ r: 5, fill: '#047857' }} 
-                />
-              </LineChart>
-            </ResponsiveContainer>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Line 
+                    yAxisId="weight"
+                    type="monotone" 
+                    dataKey="weight" 
+                    stroke="#0d9488" 
+                    strokeWidth={2.5} 
+                    dot={{ r: 4, fill: '#0d9488' }}
+                    activeDot={{ r: 6, fill: '#0f766e' }} 
+                  />
+                  <Line 
+                    yAxisId="inches"
+                    type="monotone" 
+                    dataKey="inchLoss" 
+                    stroke="#10b981" 
+                    strokeWidth={2} 
+                    strokeDasharray="4 4"
+                    dot={{ r: 3, fill: '#10b981' }}
+                    activeDot={{ r: 5, fill: '#047857' }} 
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="w-full h-full bg-stone-50 rounded-xl" />
+            )}
           </div>
         </div>
 
@@ -758,69 +784,73 @@ export default function Progress() {
             </div>
           </div>
 
-          <div className="h-48 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyChartData} margin={{ top: 10, right: 20, bottom: 5, left: -10 }}>
-                <CartesianGrid stroke="#f1f5f9" strokeDasharray="5 5" vertical={false} />
-                <XAxis 
-                  dataKey="month" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#64748b', fontSize: 11 }} 
-                />
-                <YAxis 
-                  domain={[60, 160]} 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#e11d48', fontSize: 11 }} 
-                />
-                <Tooltip 
-                  cursor={{ stroke: '#cbd5e1', strokeWidth: 1.5, strokeDasharray: '3 3' }} 
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-white p-3 rounded-lg border border-stone-200 shadow-md text-xs">
-                          <p className="font-bold text-stone-900">{data.month} ({data.date})</p>
-                          <div className="mt-1.5 space-y-1">
-                            {data.systolic && (
-                              <p className="text-rose-700 font-bold">
-                                BP: <span className="font-mono">{data.systolic}/{data.diastolic || 80} mmHg</span>
-                              </p>
-                            )}
-                            {data.fastingSugar && (
-                              <p className="text-amber-700 font-bold">
-                                Fasting Sugar: <span className="font-mono">{data.fastingSugar} mg/dL</span>
-                              </p>
-                            )}
-                            {data.hba1c && (
-                              <p className="text-purple-700 font-bold">
-                                HbA1c: <span className="font-mono">{data.hba1c}%</span>
-                              </p>
-                            )}
+          <div className="h-48 w-full min-w-0 overflow-hidden" style={{ width: '100%', height: 192, minHeight: 192, minWidth: 0 }}>
+            {chartsMounted ? (
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
+                <LineChart data={monthlyChartData} margin={{ top: 10, right: 20, bottom: 5, left: -10 }}>
+                  <CartesianGrid stroke="#f1f5f9" strokeDasharray="5 5" vertical={false} />
+                  <XAxis 
+                    dataKey="month" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fill: '#64748b', fontSize: 11 }} 
+                  />
+                  <YAxis 
+                    domain={[60, 160]} 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fill: '#e11d48', fontSize: 11 }} 
+                  />
+                  <Tooltip 
+                    cursor={{ stroke: '#cbd5e1', strokeWidth: 1.5, strokeDasharray: '3 3' }} 
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-white p-3 rounded-lg border border-stone-200 shadow-md text-xs">
+                            <p className="font-bold text-stone-900">{data.month} ({data.date})</p>
+                            <div className="mt-1.5 space-y-1">
+                              {data.systolic && (
+                                <p className="text-rose-700 font-bold">
+                                  BP: <span className="font-mono">{data.systolic}/{data.diastolic || 80} mmHg</span>
+                                </p>
+                              )}
+                              {data.fastingSugar && (
+                                <p className="text-amber-700 font-bold">
+                                  Fasting Sugar: <span className="font-mono">{data.fastingSugar} mg/dL</span>
+                                </p>
+                              )}
+                              {data.hba1c && (
+                                <p className="text-purple-700 font-bold">
+                                  HbA1c: <span className="font-mono">{data.hba1c}%</span>
+                                </p>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="systolic" 
-                  stroke="#f43f5e" 
-                  strokeWidth={2.5} 
-                  dot={{ r: 4, fill: '#f43f5e' }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="fastingSugar" 
-                  stroke="#f59e0b" 
-                  strokeWidth={2} 
-                  dot={{ r: 3, fill: '#f59e0b' }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="systolic" 
+                    stroke="#f43f5e" 
+                    strokeWidth={2.5} 
+                    dot={{ r: 4, fill: '#f43f5e' }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="fastingSugar" 
+                    stroke="#f59e0b" 
+                    strokeWidth={2} 
+                    dot={{ r: 3, fill: '#f59e0b' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="w-full h-full bg-stone-50 rounded-xl" />
+            )}
           </div>
         </div>
 
@@ -1027,11 +1057,11 @@ export default function Progress() {
       )}
 
       {/* Patient Profile & Health Details Modal */}
-      {profile?.uid && (
+      {patientUid && isProfileModalOpen && (
         <PatientProfileModal
           isOpen={isProfileModalOpen}
           onClose={() => setIsProfileModalOpen(false)}
-          patientId={profile.uid}
+          patientId={patientUid}
         />
       )}
     </div>

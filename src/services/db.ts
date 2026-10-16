@@ -1505,8 +1505,12 @@ export async function submitQuery(queryData: Query): Promise<string> {
   // 2. Direct Firestore fallback
   if (savedId === local.id!) {
     try {
-      const sanitized = cleanFirestoreData(queryData);
-      const docRef = await addDoc(collection(db, 'queries'), { ...sanitized, createdAt: serverTimestamp() });
+      const { id: _, ...sanitizedWithoutId } = cleanFirestoreData(queryData);
+      const docRef = await addDoc(collection(db, 'queries'), {
+        ...sanitizedWithoutId,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
       if (docRef.id) {
         updateLocalQuery(local.id!, { id: docRef.id });
         savedId = docRef.id;
@@ -1574,7 +1578,13 @@ export async function getQueries(dieticianId?: string, patientId?: string): Prom
 }
 
 export async function updateQuery(id: string, updates: Partial<Query>) {
-  updateLocalQuery(id, updates);
+  const answeredAt = new Date().toISOString();
+  const enrichedUpdates = {
+    ...updates,
+    ...(updates.reply ? { repliedAt: new Date(), answeredAt } : {})
+  };
+
+  updateLocalQuery(id, enrichedUpdates);
 
   // If this update provides an answer or sets answered status, notify the patient!
   if (updates.reply && (updates.status === 'answered' || updates.status === 'viewed' || !updates.status)) {
@@ -1617,8 +1627,11 @@ export async function updateQuery(id: string, updates: Partial<Query>) {
 
   // 1. Direct Firestore update
   try {
-    const sanitized = cleanFirestoreData(updates);
-    await updateDoc(doc(db, 'queries', id), sanitized);
+    const { id: _, ...sanitized } = cleanFirestoreData(enrichedUpdates);
+    await updateDoc(doc(db, 'queries', id), {
+      ...sanitized,
+      ...(updates.reply ? { repliedAt: serverTimestamp() } : {})
+    });
     window.dispatchEvent(new CustomEvent('nutrisnap:query_change'));
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {

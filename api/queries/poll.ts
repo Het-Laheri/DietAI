@@ -1,3 +1,4 @@
+import type { QuerySnapshot } from 'firebase-admin/firestore';
 import { guard, getAdminDb, sendError } from '../_lib/security.js';
 
 const MAX_DOCS = 300;
@@ -11,7 +12,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const db = getAdminDb();
-    const toList = (snap: FirebaseFirestore.QuerySnapshot) => snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    const toList = (snap: QuerySnapshot) => snap.docs.map(d => ({ ...d.data(), id: d.id }));
 
     let queries: any[];
     let notes: any[];

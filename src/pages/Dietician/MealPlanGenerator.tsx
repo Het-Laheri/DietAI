@@ -1206,9 +1206,11 @@ export default function MealPlanGenerator() {
       const k = Math.round(Number(m.potassium) || 180);
       const portion = m.portion || '1 serving';
 
+      const dishName = (m.name || m.recipeName || m.dish || m.title || m.description || 'Prescribed Dish').trim();
+
       const studioItem: PlanFoodItem = scaleFoodItem({
         id: `saved_${idx}_${Date.now()}`,
-        name: m.name || 'Prescribed Dish',
+        name: dishName,
         portion,
         basePortion: portion,
         quantity: 1,
@@ -1324,7 +1326,47 @@ export default function MealPlanGenerator() {
             rebuiltWeek[dayName] = mapSavedMealsToStudioSlots(daySource.meals);
           });
           setWeeklyMeals(rebuiltWeek);
+        } else if (weekPlan && Array.isArray(weekPlan.entries) && weekPlan.entries.length > 0) {
+          const rebuiltWeek: Record<WeekDay, MealSlotSection[]> = {} as any;
+          WEEK_DAYS.forEach(dayName => {
+            const dayEntries = weekPlan.entries.filter(e => e.day === dayName);
+            const sourceEntries = dayEntries.length > 0 ? dayEntries : weekPlan.entries.filter(e => e.day === 'Monday');
+            rebuiltWeek[dayName] = mapSavedMealsToStudioSlots(sourceEntries.map(e => ({
+              type: e.mealSlot,
+              name: e.recipeName,
+              portion: e.portion,
+              calories: e.calories,
+              protein: e.protein,
+              carbs: e.carbs,
+              fat: e.fat,
+              fibre: e.fibre,
+              sodium: e.sodium,
+              potassium: e.potassium,
+              notes: e.notes
+            })));
+          });
+          setWeeklyMeals(rebuiltWeek);
         }
+      } else if (weekPlan && Array.isArray(weekPlan.entries) && weekPlan.entries.length > 0) {
+        const rebuiltWeek: Record<WeekDay, MealSlotSection[]> = {} as any;
+        WEEK_DAYS.forEach(dayName => {
+          const dayEntries = weekPlan.entries.filter(e => e.day === dayName);
+          const sourceEntries = dayEntries.length > 0 ? dayEntries : weekPlan.entries.filter(e => e.day === 'Monday');
+          rebuiltWeek[dayName] = mapSavedMealsToStudioSlots(sourceEntries.map(e => ({
+            type: e.mealSlot,
+            name: e.recipeName,
+            portion: e.portion,
+            calories: e.calories,
+            protein: e.protein,
+            carbs: e.carbs,
+            fat: e.fat,
+            fibre: e.fibre,
+            sodium: e.sodium,
+            potassium: e.potassium,
+            notes: e.notes
+          })));
+        });
+        setWeeklyMeals(rebuiltWeek);
       }
     } catch (err) {
       console.warn('Could not load existing meal plan for patient:', err);
@@ -3120,25 +3162,8 @@ export default function MealPlanGenerator() {
                       </div>
                     )}
 
-                    {/* Column Headers for Food Items */}
-                    {slot.items.length > 0 && (
-                      <div className="px-3.5 pt-2.5 pb-0.5 hidden sm:flex items-center justify-between gap-2 text-[9px] uppercase font-bold text-stone-400 tracking-wider">
-                        <div className="flex-1">Dish / Food Item</div>
-                        <div className="w-24 text-center">Qty (Servings)</div>
-                        <div className="w-28">Portion Size</div>
-                        <div className="flex items-center gap-2 text-right">
-                          <span className="w-11">Cal</span>
-                          <span className="w-8">P(g)</span>
-                          <span className="w-8">C(g)</span>
-                          <span className="w-8">F(g)</span>
-                          <span className="w-8">Fib</span>
-                        </div>
-                        <div className="w-16 text-right">Actions</div>
-                      </div>
-                    )}
-
                     {/* Food Items Table inside slot */}
-                    <div className="p-3.5 space-y-2">
+                    <div className="p-3.5 space-y-2.5">
                       {slot.items.length === 0 ? (
                         <div className="py-4 text-center text-xs text-stone-400 italic">
                           No foods added to {slot.title}. Click "+ Add Food" or select from the Recipe Database on the right.
@@ -3156,7 +3181,7 @@ export default function MealPlanGenerator() {
                             <div
                               key={item.id}
                               onClick={e => e.stopPropagation()}
-                              className={`p-2.5 rounded-xl border transition-colors text-xs space-y-1.5 ${
+                              className={`p-3 rounded-xl border transition-colors text-xs space-y-2 ${
                                 hasDanger
                                   ? 'bg-rose-50/80 border-rose-300'
                                   : hasWarning
@@ -3164,62 +3189,17 @@ export default function MealPlanGenerator() {
                                   : 'bg-stone-50/80 hover:bg-stone-100 border-stone-200/80'
                               }`}
                             >
-                              <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
-                                {/* Dish Name */}
+                              {/* Top Row: Dish Name (always full-width & visible) + Item Action Buttons */}
+                              <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0 flex-1">
-                                  <span className="font-bold text-stone-900 block truncate">{item.name}</span>
+                                  <div className="font-bold text-stone-900 text-xs sm:text-[13px] leading-snug break-words">
+                                    {item.name || 'Custom Food Item'}
+                                  </div>
                                   {item.notes && !isEditingThisItemNote && (
-                                    <span className="text-[10px] text-blue-700 font-medium italic block truncate">
+                                    <span className="text-[10px] text-blue-700 font-medium italic block mt-0.5 break-words">
                                       Note: {item.notes}
                                     </span>
                                   )}
-                                </div>
-
-                                {/* Quantity Stepper (- / qty / +) — scales macros & portion live */}
-                                <div className="flex items-center bg-white border border-stone-300 rounded-lg overflow-hidden shrink-0" title="Adjust quantity multiplier (automatically shifts calories & macros)">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUpdateQuantity(slot.id, item.id, Math.max(0.25, Math.round((qty - 0.5) * 100) / 100))}
-                                    className="px-1.5 py-1 text-stone-600 hover:bg-stone-100 font-bold cursor-pointer"
-                                  >
-                                    <Minus className="w-3 h-3" />
-                                  </button>
-                                  <input
-                                    type="number"
-                                    step="0.25"
-                                    min="0.25"
-                                    max="20"
-                                    value={qty}
-                                    onChange={e => handleUpdateQuantity(slot.id, item.id, parseFloat(e.target.value) || 1)}
-                                    className="w-11 text-center text-[11px] font-black text-blue-700 bg-transparent focus:outline-none"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUpdateQuantity(slot.id, item.id, Math.round((qty + 0.5) * 100) / 100)}
-                                    className="px-1.5 py-1 text-stone-600 hover:bg-stone-100 font-bold cursor-pointer"
-                                  >
-                                    <Plus className="w-3 h-3" />
-                                  </button>
-                                </div>
-
-                                {/* Editable Portion Text (typing e.g. "2 bowls" or "300 g" also shifts values!) */}
-                                <div className="w-28 shrink-0">
-                                  <input
-                                    type="text"
-                                    value={item.portion}
-                                    onChange={e => handleUpdatePortion(slot.id, item.id, e.target.value)}
-                                    title="Edit portion (changing numbers/grams automatically recalculates macros)"
-                                    className="w-full text-[11px] bg-white border border-stone-300 rounded-lg px-2 py-1 text-stone-800 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                  />
-                                </div>
-
-                                {/* Macros strip: Cal, P, C, F, Fib */}
-                                <div className="flex items-center gap-2 shrink-0 text-[11px] text-stone-600 text-right font-mono">
-                                  <span className="w-11 font-black text-stone-900">{item.calories}</span>
-                                  <span className="w-8 text-sky-800 font-semibold">{item.protein}</span>
-                                  <span className="w-8 text-emerald-800 font-semibold">{item.carbs}</span>
-                                  <span className="w-8 text-amber-800 font-semibold">{item.fat}</span>
-                                  <span className="w-8 text-teal-800">{item.fibre}</span>
                                 </div>
 
                                 {/* Item Action Buttons: Note, Swap, Delete */}
@@ -3253,6 +3233,68 @@ export default function MealPlanGenerator() {
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
+                                </div>
+                              </div>
+
+                              {/* Second Row: Quantity Stepper + Editable Portion + Labeled Macros */}
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {/* Quantity Stepper (- / qty / +) — scales macros & portion live */}
+                                  <div className="flex items-center bg-white border border-stone-300 rounded-lg overflow-hidden shrink-0" title="Adjust quantity multiplier (automatically shifts calories & macros)">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateQuantity(slot.id, item.id, Math.max(0.25, Math.round((qty - 0.5) * 100) / 100))}
+                                      className="px-1.5 py-1 text-stone-600 hover:bg-stone-100 font-bold cursor-pointer"
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </button>
+                                    <input
+                                      type="number"
+                                      step="0.25"
+                                      min="0.25"
+                                      max="20"
+                                      value={qty}
+                                      onChange={e => handleUpdateQuantity(slot.id, item.id, parseFloat(e.target.value) || 1)}
+                                      className="w-10 text-center text-[11px] font-black text-blue-700 bg-transparent focus:outline-none"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateQuantity(slot.id, item.id, Math.round((qty + 0.5) * 100) / 100)}
+                                      className="px-1.5 py-1 text-stone-600 hover:bg-stone-100 font-bold cursor-pointer"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </button>
+                                  </div>
+
+                                  {/* Editable Portion Text (typing e.g. "2 bowls" or "300 g" also shifts values!) */}
+                                  <div className="w-28 sm:w-32 shrink-0">
+                                    <input
+                                      type="text"
+                                      value={item.portion}
+                                      onChange={e => handleUpdatePortion(slot.id, item.id, e.target.value)}
+                                      title="Edit portion (changing numbers/grams automatically recalculates macros)"
+                                      className="w-full text-[11px] bg-white border border-stone-300 rounded-lg px-2 py-1 text-stone-800 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Labeled Macros strip: Cal, P, C, F, Fib */}
+                                <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 text-[11px] text-stone-600 font-mono bg-white/80 px-2.5 py-1 rounded-lg border border-stone-200/80">
+                                  <span className="font-black text-stone-900" title="Calories">
+                                    {item.calories} <span className="text-[9px] font-sans font-bold text-stone-500">kcal</span>
+                                  </span>
+                                  <span className="text-sky-800 font-semibold" title="Protein (g)">
+                                    <span className="text-[9px] font-sans font-bold text-sky-600/80 mr-0.5">P</span>{item.protein}g
+                                  </span>
+                                  <span className="text-emerald-800 font-semibold" title="Carbohydrates (g)">
+                                    <span className="text-[9px] font-sans font-bold text-emerald-600/80 mr-0.5">C</span>{item.carbs}g
+                                  </span>
+                                  <span className="text-amber-800 font-semibold" title="Fat (g)">
+                                    <span className="text-[9px] font-sans font-bold text-amber-600/80 mr-0.5">F</span>{item.fat}g
+                                  </span>
+                                  <span className="text-teal-800" title="Dietary Fibre (g)">
+                                    <span className="text-[9px] font-sans font-bold text-teal-600/80 mr-0.5">Fib</span>{item.fibre}g
+                                  </span>
                                 </div>
                               </div>
 
@@ -3300,7 +3342,7 @@ export default function MealPlanGenerator() {
                                       }`}
                                     >
                                       <span>{b.type === 'danger' ? '🚨' : b.type === 'warning' ? '⚠️' : '✓'}</span>
-                                      <span>{b.text}</span>
+                                      <span>{b.text.replace(/^✓\s*/, '')}</span>
                                     </span>
                                   ))}
                                 </div>
@@ -3441,8 +3483,8 @@ export default function MealPlanGenerator() {
                                   <span className="text-[10px] italic text-stone-400">Empty</span>
                                 ) : (
                                   slot.items.map(it => (
-                                    <div key={it.id} className="flex items-center justify-between gap-1 text-[10.5px]">
-                                      <span className="truncate">• {it.name} ({it.portion})</span>
+                                    <div key={it.id} className="flex items-start justify-between gap-1 text-[10.5px]">
+                                      <span className="min-w-0 flex-1 break-words font-medium text-stone-800">• {it.name} <span className="text-stone-500 font-normal">({it.portion})</span></span>
                                       <button
                                         type="button"
                                         onClick={() => {

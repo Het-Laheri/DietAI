@@ -12,7 +12,7 @@
 
 NutriSnap has been audited, hardened, cleaned up, and verified for production handover across all seven engineering objectives:
 
-1. **Test Account & Orphaned Record Cleanup (Objective 1):** Audited all Firebase Authentication accounts and both Firestore databases (`(default)` and `ai-studio-3cc137c8-6ab4-4be2-ac21-f3bc2e0fcecf`). Created a full reversible snapshot prior to cleanup, preserved the Lead Dietician (`admin@aidiet.com`, UID `Qw9mhpOd32TpKdEHWE1M4OOTUyw1`), preserved all genuine client accounts and the clinical recipe knowledge base (`dietician_notes/clinical_knowledge_base`), removed **26 confirmed obsolete test/dummy accounts** (`13` NutriSnap test accounts + `13` unreferenced Auth-only test accounts), and cleaned up orphaned test records.
+1. **Test Account & Orphaned Record Cleanup (Objective 1):** Audited all Firebase Authentication accounts and both Firestore databases (`(default)` and `ai-studio-3cc137c8-6ab4-4be2-ac21-f3bc2e0fcecf`). Created a full reversible snapshot prior to cleanup, preserved the Lead Dietician (`NutriSnap2003@gmail.com`, UID `Qw9mhpOd32TpKdEHWE1M4OOTUyw1`), preserved all genuine client accounts and the clinical recipe knowledge base (`dietician_notes/clinical_knowledge_base`), removed **26 confirmed obsolete test/dummy accounts** (`13` NutriSnap test accounts + `13` unreferenced Auth-only test accounts), and cleaned up orphaned test records.
 2. **Authenticated Change Password Flow (Objective 2):** Implemented end-to-end authenticated password change on both the server ([`api/auth/change-password.ts`](file:///c:/Users/Het%20Laheri/Desktop/AIDIET/api/auth/change-password.ts) and [`server.ts`](file:///c:/Users/Het%20Laheri/Desktop/AIDIET/server.ts)) and client ([`src/components/ChangePasswordModal.tsx`](file:///c:/Users/Het%20Laheri/Desktop/AIDIET/src/components/ChangePasswordModal.tsx)), accessible from the Patient Sidebar ([`src/pages/PatientDashboard.tsx`](file:///c:/Users/Het%20Laheri/Desktop/AIDIET/src/pages/PatientDashboard.tsx)), Patient Profile Modal ([`src/components/PatientProfileModal.tsx`](file:///c:/Users/Het%20Laheri/Desktop/AIDIET/src/components/PatientProfileModal.tsx)), and Dietician Workspace Sidebar ([`src/pages/DieticianDashboard.tsx`](file:///c:/Users/Het%20Laheri/Desktop/AIDIET/src/pages/DieticianDashboard.tsx)).
 3. **Dedicated Client Demo Accounts (Objective 3):** Provisioned exactly two dedicated client demonstration accounts via [`scripts/handover-accounts-and-seed.ts`](file:///c:/Users/Het%20Laheri/Desktop/AIDIET/scripts/handover-accounts-and-seed.ts):
    - **Account A — VIP Demo Client:** `vip.demo@nutrisnap.co.in` (UID `LUXRdws06Jf52OLhtl59R6S7KQg1`, *"Aarav Sharma (VIP Demo)"*) with full server-enforced VIP entitlement (`isVip: true` and active 3-month subscription record).
@@ -44,7 +44,7 @@ NutriSnap has been audited, hardened, cleaned up, and verified for production ha
 | **Firebase Auth Accounts (Total Project)** | 56 | -26 | +2 | **32** |
 | **NutriSnap `users` Collection** | 28 | -13 | +2 | **17** |
 | **NutriSnap `patient_profiles` Collection** | 26 | -12 | +2 | **16** |
-| **Lead Dietician (`admin@aidiet.com`)** | 1 (Active) | 0 | 0 | **1 (Active, Untouched)** |
+| **Lead Dietician (`NutriSnap2003@gmail.com`)** | 1 (Active) | 0 | 0 | **1 (Active, Untouched)** |
 | **Designated Handover Demo Accounts** | 0 | 0 | +2 | **2 (`vip.demo` & `basic.demo`)** |
 | **Orphaned Test Query / Note Documents** | 3 | -3 | 0 | **0** |
 | **Clinical Recipe Knowledge Base (`clinical_knowledge_base`)** | 1 (1,210 recipes) | 0 | 0 | **1 (Preserved Untouched)** |
@@ -54,7 +54,7 @@ NutriSnap has been audited, hardened, cleaned up, and verified for production ha
 ## 4. Accounts Preserved vs Deleted vs Flagged for Manual Review
 
 ### 4.1 Lead Dietician Account (Preserved Untouched)
-- **UID:** `Qw9mhpOd32TpKdEHWE1M4OOTUyw1` (`admin@aidiet.com`, Role: `dietician`, Name: `Lead Dietician`).
+- **UID:** `Qw9mhpOd32TpKdEHWE1M4OOTUyw1` (`NutriSnap2003@gmail.com`, Role: `dietician`, Name: `Lead Dietician`).
 - Identity, credentials, role, permissions, and associated clinical records were verified before and after cleanup and remained completely untouched.
 
 ### 4.2 Confirmed Obsolete Test Accounts Deleted (26 Total)

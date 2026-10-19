@@ -33,7 +33,7 @@ import type {
 
 export const NUTRISNAP_DB_ID = 'ai-studio-3cc137c8-6ab4-4be2-ac21-f3bc2e0fcecf';
 export const LEAD_DIETICIAN_UID = 'Qw9mhpOd32TpKdEHWE1M4OOTUyw1';
-export const LEAD_DIETICIAN_EMAIL = 'admin@aidiet.com';
+export const LEAD_DIETICIAN_EMAIL = 'Nutrisnap2003@gmail.com';
 
 export const VIP_DEMO_EMAIL = 'vip.demo@nutrisnap.co.in';
 export const BASIC_DEMO_EMAIL = 'basic.demo@nutrisnap.co.in';

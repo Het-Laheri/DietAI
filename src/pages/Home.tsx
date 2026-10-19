@@ -50,7 +50,7 @@ const FEATURES = [
 
 const BLOGS = [
   {
-    image: '/blog-nutrition.jpg',
+    image: '/blog-heart-health.jpg',
     source: 'The Quint Fit',
     tag: 'Heart Health',
     title: 'World Heart Day: 5 Heart-Healthy Foods You Must Add to Your Daily Plate',
@@ -60,7 +60,7 @@ const BLOGS = [
     url: 'https://fit.thequint.com/hindi/heart-news/heart-healthy-foods?utm_source=WhatsApp_mWEB&utm_medium=Social&utm_campaign=socialsharebuttons&utm_content=c6d299e3-b37e-4c00-a380-057a7c594314_1601383016895'
   },
   {
-    image: '/blog-nutrition.jpg',
+    image: '/blog-immunity-diet.jpg',
     source: 'NDTV Food',
     tag: 'Immunity & Seasonal Diet',
     title: '10 Diet Mistakes You Must Avoid During Season Change to Build Immunity',
@@ -70,7 +70,7 @@ const BLOGS = [
     url: 'https://food.ndtv.com/food-drinks/immunity-10-diet-mistakes-you-must-avoid-during-season-change-to-build-immunity-2305929'
   },
   {
-    image: '/blog-nutrition.jpg',
+    image: '/blog-immunity-diet.jpg',
     source: 'NDTV Food (Hindi)',
     tag: 'रोग प्रतिरोधक क्षमता',
     title: 'मौसम बदलने पर खान-पान में न करें ये 10 गलतियां, जानिए इम्युनिटी बढ़ाने के सही टिप्स',
@@ -80,7 +80,7 @@ const BLOGS = [
     url: 'https://food.ndtv.com/hindi/you-must-avoid-these-10-mistakes-during-season-change-2306581'
   },
   {
-    image: '/blog-nutrition.jpg',
+    image: '/blog-garlic.jpg',
     source: 'NDTV Food',
     tag: 'Hypertension Management',
     title: 'Garlic for Hypertension: Why and 6 Effective Ways to Eat Garlic for High BP',
@@ -90,7 +90,7 @@ const BLOGS = [
     url: 'https://food.ndtv.com/health/garlic-for-hypertension-why-should-you-eat-garlic-to-manage-high-bp-6-ways-to-have-garlic-2307588'
   },
   {
-    image: '/blog-nutrition.jpg',
+    image: '/blog-pcos.jpg',
     source: 'NDTV Food',
     tag: 'PCOS & Hormonal Health',
     title: 'PCOS Diet: 5 Low Glycaemic Foods You Should Add to Your Routine',
@@ -100,7 +100,7 @@ const BLOGS = [
     url: 'https://food.ndtv.com/health/pcos-5-low-glycaemic-foods-you-should-add-to-your-pcos-diet-2307730'
   },
   {
-    image: '/blog-nutrition.jpg',
+    image: '/blog-suji-diabetes.jpg',
     source: 'NDTV Food',
     tag: 'Diabetes Diet',
     title: 'Diabetes Diet: Is Rava / Suji Safe for Diabetics? 4 Nutritious Recipes That Help',
@@ -110,7 +110,7 @@ const BLOGS = [
     url: 'https://food.ndtv.com/food-drinks/diabetes-diet-is-rava-or-suji-safe-for-diabetics-4-recipes-thatll-steal-your-heart-2318847?amp=1&akamai-rum=off'
   },
   {
-    image: '/blog-nutrition.jpg',
+    image: '/blog-palak-idli.jpg',
     source: 'NDTV Food',
     tag: 'Blood Sugar Control',
     title: 'Easy Moong Dal Palak Idli to Help Manage Blood Sugar Levels',
@@ -465,7 +465,13 @@ export default function Home() {
                 className="bg-white rounded-3xl overflow-hidden border border-stone-100 hover:shadow-xl hover:border-orange-200 transition-all flex flex-col justify-between group"
               >
                 <div>
-                  <div className="relative aspect-[16/10] overflow-hidden bg-stone-100">
+                  <a
+                    href={b.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block relative aspect-[16/10] overflow-hidden bg-stone-100 cursor-pointer"
+                    title={`Read "${b.title}" on ${b.source}`}
+                  >
                     <img
                       src={b.image}
                       alt={b.title}
@@ -481,14 +487,21 @@ export default function Home() {
                         {b.source}
                       </span>
                     </div>
-                  </div>
+                  </a>
                   <div className="p-6 sm:p-7">
                     <div className="flex items-center justify-between gap-2 mb-2.5">
                       <p className="text-xs font-bold text-orange-600 uppercase tracking-wider">{b.source}</p>
                       <span className="text-[11px] font-medium text-stone-400">{b.date}</span>
                     </div>
-                    <h3 className="text-base sm:text-lg font-bold text-stone-900 mb-3 leading-snug group-hover:text-orange-600 transition-colors">
-                      {b.title}
+                    <h3 className="text-base sm:text-lg font-bold text-stone-900 mb-3 leading-snug">
+                      <a
+                        href={b.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-orange-600 transition-colors cursor-pointer group-hover:text-orange-600"
+                      >
+                        {b.title}
+                      </a>
                     </h3>
                     <p className="text-xs sm:text-sm text-stone-500 leading-relaxed line-clamp-3 mb-4">{b.excerpt}</p>
                   </div>

@@ -79,6 +79,21 @@ export interface MealSlotSection {
   items: PlanFoodItem[];
 }
 
+// Items to save for a slot. A slot that has dietitian instructions but no food is saved as one
+// zero-kcal "instructions" entry so the note still reaches the patient (it was dropped before).
+export function slotItemsForSave(slot: MealSlotSection): (PlanFoodItem & { noteOnly?: boolean })[] {
+  if (slot.items.length > 0) return slot.items;
+  if (!slot.notes || !slot.notes.trim()) return [];
+  return [{
+    id: `note_${slot.id}`,
+    name: `${slot.title} instructions`,
+    portion: 'As directed',
+    quantity: 1,
+    calories: 0, protein: 0, carbs: 0, fat: 0, fibre: 0, sodium: 0, potassium: 0,
+    noteOnly: true
+  }];
+}
+
 export interface ClinicalBadge {
   type: 'danger' | 'warning' | 'success' | 'info';
   text: string;
@@ -116,8 +131,13 @@ export function formatScaledPortion(basePortion: string, qty: number): string {
 
 // Helper: infer quantity ratio when user edits portion text directly (e.g., "3 medium" or "300 g")
 export function inferQuantityFromPortionText(newPortion: string, basePortion: string, currentQty: number): number {
-  const cleanNew = (newPortion || '').trim().toLowerCase();
-  const cleanBase = (basePortion || '').trim().toLowerCase();
+  // Normalise fractions and words so "1/2 bowl", "½ bowl" and "half bowl" scale too
+  const normaliseFractions = (t: string) => t
+    .replace(/(\d+)\s*\/\s*(\d+)/g, (_m, a, b) => (Number(b) ? String(Math.round((Number(a) / Number(b)) * 100) / 100) : _m))
+    .replace(/½/g, '0.5').replace(/¼/g, '0.25').replace(/¾/g, '0.75')
+    .replace(/\bhalf\b/g, '0.5').replace(/\bquarter\b/g, '0.25');
+  const cleanNew = normaliseFractions((newPortion || '').trim().toLowerCase());
+  const cleanBase = normaliseFractions((basePortion || '').trim().toLowerCase());
   if (!cleanNew || !cleanBase) return currentQty;
 
   // 1. Check explicit multiplier like "2x" or "1.5x"
@@ -1168,8 +1188,14 @@ export default function MealPlanGenerator() {
       return 3;
     };
 
+    // Plans saved with separate slot notes: use exactly what the dietitian saved (not the template defaults)
+    if (savedMeals.some(m => m && m.slotNotes !== undefined)) {
+      baseTemplate.forEach(slot => { slot.notes = ''; });
+    }
     savedMeals.forEach((m, idx) => {
       const sIdx = findSlotIdx(m.type || 'Lunch');
+      if (m.slotNotes) baseTemplate[sIdx].notes = m.slotNotes;
+      if (m.noteOnly) return; // instructions-only entry: restore the note, not a food item
       const cal = Math.round(Number(m.calories) || 150);
       const p = Math.round((Number(m.protein) || 6) * 10) / 10;
       const c = Math.round((Number(m.carbs) || 20) * 10) / 10;
@@ -1192,13 +1218,10 @@ export default function MealPlanGenerator() {
         fibre: fib,
         sodium: na,
         potassium: k,
-        notes: m.notes
+        notes: m.itemNotes !== undefined ? (m.itemNotes || undefined) : m.notes
       }, 1);
 
       baseTemplate[sIdx].items.push(studioItem);
-      if (m.slotNotes && !baseTemplate[sIdx].notes) {
-        baseTemplate[sIdx].notes = m.slotNotes;
-      }
     });
 
     return baseTemplate;
@@ -1976,7 +1999,7 @@ export default function MealPlanGenerator() {
         const daySlots = effectiveWeekly[dayName] || meals;
         return {
           dayNumber: idx + 1,
-          meals: daySlots.flatMap(slot => slot.items.map(it => {
+          meals: daySlots.flatMap(slot => slotItemsForSave(slot).map(it => {
             const combinedNotes = [
               slot.notes ? `[${slot.title} Directive]: ${slot.notes}` : '',
               it.notes ? it.notes : '',
@@ -1992,6 +2015,10 @@ export default function MealPlanGenerator() {
               carbs: it.carbs,
               fat: it.fat,
               notes: combinedNotes || `Prescribed ${it.portion} (${it.calories} kcal)`,
+              // Stored separately so reloading the plan doesn't re-append notes on every save
+              slotNotes: slot.notes || '',
+              itemNotes: it.notes || '',
+              ...(it.noteOnly ? { noteOnly: true } : {}),
               ingredients: [it.name],
               recipe: [`Serve ${it.name} (${it.portion}) freshly prepared according to clinical targets.${slot.notes ? ` Note: ${slot.notes}` : ''}`]
             };
@@ -2022,11 +2049,11 @@ export default function MealPlanGenerator() {
       // 2. Sync all 7 days to PatientWeekPlan with full macro & note metadata
       const weekEntries: WeekPlanEntry[] = WEEK_DAYS.flatMap(dayName => {
         const daySlots = effectiveWeekly[dayName] || meals;
-        return daySlots.flatMap(slot => slot.items.map(it => {
+        return daySlots.flatMap(slot => slotItemsForSave(slot).map(it => {
           const itemNoteStr = [
             slot.notes ? slot.notes : '',
             it.notes ? it.notes : '',
-            `Prescribed ${it.portion} • ${it.calories} kcal (P:${it.protein}g C:${it.carbs}g F:${it.fat}g)`
+            it.noteOnly ? '' : `Prescribed ${it.portion} • ${it.calories} kcal (P:${it.protein}g C:${it.carbs}g F:${it.fat}g)`
           ].filter(Boolean).join(' • ');
 
           return {
@@ -2095,7 +2122,7 @@ export default function MealPlanGenerator() {
         const todaySlots = effectiveWeekly[todayDayName] || meals;
 
         const checklistItems: ChecklistMealItem[] = todaySlots.flatMap((slot, sIdx) =>
-          slot.items.map((it, iIdx) => ({
+          slotItemsForSave(slot).map((it, iIdx) => ({
             id: `wp_${todayDayName}_${mapSlotTitleToMealSlot(slot.title)}_${sIdx}_${iIdx}`,
             mealType: mapSlotTitleToMealSlot(slot.title),
             name: it.name,

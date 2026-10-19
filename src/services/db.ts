@@ -560,6 +560,9 @@ export interface Meal {
   prepTime?: string;
   cookTime?: string;
   notes?: string;
+  slotNotes?: string;   // dietitian instructions for the whole meal slot
+  itemNotes?: string;   // note for this food only
+  noteOnly?: boolean;   // true = instructions-only entry for a slot with no food
 }
 
 export interface FoodLogItem {

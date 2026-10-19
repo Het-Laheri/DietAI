@@ -20,7 +20,8 @@ import {
   Clock,
   X,
   ChevronRight,
-  HeartPulse
+  HeartPulse,
+  KeyRound
 } from 'lucide-react';
 import { isPatientSubscribed } from '../services/subscription';
 import { Notification } from '../services/db';
@@ -33,6 +34,7 @@ import Progress from './Patient/Progress';
 import Inbox from './Patient/Inbox';
 import SubscriptionPage from './Patient/SubscriptionPage';
 import PatientProfileModal from '../components/PatientProfileModal';
+import ChangePasswordModal from '../components/ChangePasswordModal';
 import NotificationPermissionBanner from '../components/NotificationPermissionBanner';
 import PhysiotherapistModal from '../components/PhysiotherapistModal';
 import { mobileNotificationService } from '../services/mobileNotificationService';
@@ -67,6 +69,7 @@ export default function PatientDashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifTab, setNotifTab] = useState<'unread' | 'all'>('unread');
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isPhysioModalOpen, setIsPhysioModalOpen] = useState(false);
 
   useEffect(() => {
@@ -228,6 +231,14 @@ export default function PatientDashboard() {
             {profile?.name?.charAt(0) || 'P'}
           </button>
           <button
+            onClick={() => setIsChangePasswordOpen(true)}
+            title="Change Password"
+            aria-label="Change Password"
+            className="p-1 text-stone-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+          >
+            <KeyRound className="w-4 h-4" />
+          </button>
+          <button
             onClick={handleLogout}
             title="Sign Out"
             className="p-1 text-stone-500 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition-colors"
@@ -330,7 +341,7 @@ export default function PatientDashboard() {
             role="button"
             tabIndex={0}
             title="Click to view & edit your health details, weight target, and clinical goals"
-            className="flex items-center gap-3 mb-6 p-2 -mx-2 rounded-xl hover:bg-stone-100/80 transition-all cursor-pointer group text-left"
+            className="flex items-center gap-3 mb-4 p-2 -mx-2 rounded-xl hover:bg-stone-100/80 transition-all cursor-pointer group text-left"
           >
             <div className="relative shrink-0">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold text-lg shadow-md group-hover:scale-105 transition-transform">
@@ -365,9 +376,18 @@ export default function PatientDashboard() {
             </div>
           </div>
 
+          <button
+            type="button"
+            onClick={() => setIsChangePasswordOpen(true)}
+            className="flex items-center gap-3 px-4 py-2.5 mb-1.5 w-full text-left rounded-xl text-xs font-bold text-stone-600 hover:text-orange-700 hover:bg-orange-50 transition-colors"
+          >
+            <KeyRound className="w-4 h-4 text-orange-600" />
+            Change Password
+          </button>
+
           <button 
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 w-full text-left rounded-xl text-sm font-bold text-stone-500 hover:text-pink-600 hover:bg-pink-50 transition-colors"
+            className="flex items-center gap-3 px-4 py-2.5 w-full text-left rounded-xl text-xs font-bold text-stone-500 hover:text-pink-600 hover:bg-pink-50 transition-colors"
           >
             <LogOut className="w-4 h-4" />
             Sign Out
@@ -381,8 +401,18 @@ export default function PatientDashboard() {
           isOpen={isProfileModalOpen}
           onClose={() => setIsProfileModalOpen(false)}
           patientId={profile.uid}
+          onOpenChangePassword={() => {
+            setIsProfileModalOpen(false);
+            setIsChangePasswordOpen(true);
+          }}
         />
       )}
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+      />
 
       {/* Physiotherapist Details & Card Modal */}
       <PhysiotherapistModal

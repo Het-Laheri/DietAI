@@ -1242,9 +1242,7 @@ export default function MealPlanGenerator() {
     const uniqueConds = Array.from(new Set(rawConds));
     const heightM = (p.heightCm || 160) / 100;
     const calcBmi = p.bmi || Math.round(((p.currentWeightKg || 70) / (heightM * heightM)) * 10) / 10;
-    const effectiveLabs: PatientLabBiomarkers = (p.labBiomarkers && Object.keys(p.labBiomarkers).length > 0)
-      ? { ...DEFAULT_SAMPLE_LABS, ...p.labBiomarkers }
-      : { ...DEFAULT_SAMPLE_LABS };
+    const effectiveLabs: PatientLabBiomarkers = p.labBiomarkers ? { ...p.labBiomarkers } : {};
 
     const defaultNotes = p.preferences?.dislikes
       ? `Dislikes: ${p.preferences.dislikes}${p.preferences?.favorites ? ` • Favorites: ${p.preferences.favorites}` : ''}`

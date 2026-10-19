@@ -12,15 +12,26 @@ import {
   TrendingDown, 
   Activity, 
   Apple, 
-  AlertCircle 
+  AlertCircle,
+  KeyRound
 } from 'lucide-react';
-import { PatientProfile, updatePatientProfile, saveProgressRecord, getPatientProfile } from '../services/db';
+import {
+  PatientProfile,
+  PatientLabBiomarkers,
+  updatePatientProfile,
+  saveProgressRecord,
+  getPatientProfile,
+  CLINICAL_BIOMARKER_DEFINITIONS,
+  validateLabBiomarkers,
+  BiomarkerKey
+} from '../services/db';
 
 interface PatientProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   patientId: string;
   onProfileUpdated?: (updated: PatientProfile) => void;
+  onOpenChangePassword?: () => void;
 }
 
 const PRESET_GOALS = [
@@ -60,7 +71,7 @@ const TARGET_PACES = [
   'Weight Maintenance (0.0 kg / week)'
 ];
 
-export default function PatientProfileModal({ isOpen, onClose, patientId, onProfileUpdated }: PatientProfileModalProps) {
+export default function PatientProfileModal({ isOpen, onClose, patientId, onProfileUpdated, onOpenChangePassword }: PatientProfileModalProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -94,6 +105,20 @@ export default function PatientProfileModal({ isOpen, onClose, patientId, onProf
   const [medications, setMedications] = useState('');
   const [notes, setNotes] = useState('');
 
+  // 13 Clinical Biomarkers
+  const [biomarkerInputs, setBiomarkerInputs] = useState<Record<BiomarkerKey, string>>(() => {
+    const init = {} as Record<BiomarkerKey, string>;
+    for (const def of CLINICAL_BIOMARKER_DEFINITIONS) {
+      init[def.key] = '';
+    }
+    return init;
+  });
+  const [unavailableBiomarkers, setUnavailableBiomarkers] = useState<BiomarkerKey[]>([]);
+  const [biomarkerErrors, setBiomarkerErrors] = useState<Partial<Record<BiomarkerKey, string>>>({});
+  const [labTestDate, setLabTestDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [labNotes, setLabNotes] = useState<string>('');
+  const [existingLabHistory, setExistingLabHistory] = useState<PatientLabBiomarkers[]>([]);
+
   // Initial load
   useEffect(() => {
     if (!isOpen || !patientId) return;
@@ -102,6 +127,7 @@ export default function PatientProfileModal({ isOpen, onClose, patientId, onProf
     setLoading(true);
     setSaveSuccess(false);
     setErrorMessage(null);
+    setBiomarkerErrors({});
 
     getPatientProfile(patientId).then(profile => {
       if (!isMounted) return;
@@ -131,6 +157,18 @@ export default function PatientProfileModal({ isOpen, onClose, patientId, onProf
         setAllergies(profile.healthInfo?.allergies || (profile.allergies ? profile.allergies.join(', ') : 'None'));
         setMedications(profile.healthInfo?.medications || '');
         setNotes(profile.healthInfo?.notes || '');
+
+        const labs = profile.labBiomarkers || {};
+        const nextInputs = {} as Record<BiomarkerKey, string>;
+        for (const def of CLINICAL_BIOMARKER_DEFINITIONS) {
+          const val = (labs as any)[def.key];
+          nextInputs[def.key] = typeof val === 'number' && Number.isFinite(val) ? String(val) : '';
+        }
+        setBiomarkerInputs(nextInputs);
+        setUnavailableBiomarkers(Array.isArray(labs.unavailableBiomarkers) ? labs.unavailableBiomarkers : []);
+        setLabTestDate(labs.testDate || new Date().toISOString().split('T')[0]);
+        setLabNotes(labs.notes || '');
+        setExistingLabHistory(Array.isArray(profile.labHistory) ? profile.labHistory : []);
       }
       setLoading(false);
     }).catch(err => {
@@ -179,6 +217,17 @@ export default function PatientProfileModal({ isOpen, onClose, patientId, onProf
     }
   };
 
+  const toggleBiomarkerUnavailable = (key: BiomarkerKey) => {
+    setUnavailableBiomarkers(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+    setBiomarkerErrors(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -186,10 +235,31 @@ export default function PatientProfileModal({ isOpen, onClose, patientId, onProf
       return;
     }
 
+    const labValidation = validateLabBiomarkers(biomarkerInputs, unavailableBiomarkers, {
+      testDate: labTestDate,
+      notes: labNotes
+    });
+    if (!labValidation.valid) {
+      setBiomarkerErrors(labValidation.errors);
+      setErrorMessage(Object.values(labValidation.errors)[0] || 'Please fix the highlighted biomarker values.');
+      return;
+    }
+    setBiomarkerErrors({});
+
     setSaving(true);
     setErrorMessage(null);
 
     const todayStr = new Date().toISOString().split('T')[0];
+    const nextLabs: PatientLabBiomarkers = {
+      ...labValidation.sanitized,
+      testDate: labValidation.sanitized.testDate || todayStr
+    };
+    const nextLabHistory = labValidation.measuredCount > 0
+      ? [
+          ...existingLabHistory.filter(h => h.testDate !== nextLabs.testDate),
+          nextLabs
+        ].sort((a, b) => (a.testDate || '').localeCompare(b.testDate || ''))
+      : existingLabHistory;
 
     const updatedProfileData: Partial<PatientProfile> = {
       name: name.trim(),
@@ -222,12 +292,18 @@ export default function PatientProfileModal({ isOpen, onClose, patientId, onProf
         notes: notes.trim()
       },
       medicalHistory: conditions.trim() ? [conditions.trim()] : ['None / Healthy'],
-      allergies: allergies.trim() ? [allergies.trim()] : ['None']
+      allergies: allergies.trim() ? [allergies.trim()] : ['None'],
+      labBiomarkers: nextLabs,
+      labHistory: nextLabHistory,
+      onboardingCompleted: true
     };
 
     try {
       // 1. Update patient profile
       const ok = await updatePatientProfile(patientId, updatedProfileData);
+      if (!ok) {
+        throw new Error('Could not save profile updates to the database.');
+      }
 
       // 2. If record weigh-in is checked, add to progress records
       if (recordNewWeighIn) {
@@ -680,15 +756,146 @@ export default function PatientProfileModal({ isOpen, onClose, patientId, onProf
                   />
                 </div>
               </div>
+
+              {/* ─── SECTION 5: 13 CLINICAL LAB BIOMARKERS PANEL ───────────────── */}
+              <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-stone-200/80">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-stone-700 flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-orange-600" />
+                      13 Clinical Lab Biomarkers Panel
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+                        13 Parameters
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-stone-500 mt-0.5">
+                      Update your lab report numbers or mark unavailable tests as Skip / N/A.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-[10px] font-bold uppercase text-stone-500">Report Date:</label>
+                    <input
+                      type="date"
+                      value={labTestDate}
+                      onChange={e => setLabTestDate(e.target.value)}
+                      className="px-2.5 py-1 bg-white border border-stone-300 rounded-lg text-xs font-medium text-stone-800"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {CLINICAL_BIOMARKER_DEFINITIONS.map(def => {
+                    const isUnavailable = unavailableBiomarkers.includes(def.key);
+                    const val = biomarkerInputs[def.key] ?? '';
+                    const fieldErr = biomarkerErrors[def.key];
+                    return (
+                      <div
+                        key={def.key}
+                        className={`p-2.5 rounded-lg border transition-all ${
+                          fieldErr
+                            ? 'bg-rose-50/70 border-rose-300'
+                            : isUnavailable
+                            ? 'bg-stone-100/70 border-stone-200 opacity-75'
+                            : 'bg-white border-stone-200'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-1.5 mb-1">
+                          <div>
+                            <label
+                              htmlFor={`profile-bio-${def.key}`}
+                              className="text-xs font-bold text-stone-900 block leading-tight"
+                            >
+                              {def.shortName}{' '}
+                              <span className="text-[10px] font-semibold text-stone-500">({def.unit})</span>
+                            </label>
+                            <span className="text-[10px] text-stone-400 block">
+                              Ref: {def.normalRange}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleBiomarkerUnavailable(def.key)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors shrink-0 ${
+                              isUnavailable
+                                ? 'bg-stone-800 text-white border-stone-800'
+                                : 'bg-stone-50 text-stone-500 border-stone-200 hover:bg-stone-100'
+                            }`}
+                          >
+                            {isUnavailable ? 'N/A' : 'Skip / N/A'}
+                          </button>
+                        </div>
+                        {isUnavailable ? (
+                          <div className="text-[10px] text-stone-500 italic py-1 px-2 bg-stone-50 rounded border border-dashed border-stone-200">
+                            Not available yet
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <input
+                              id={`profile-bio-${def.key}`}
+                              type="number"
+                              step={def.step}
+                              min={def.min}
+                              max={def.max}
+                              value={val}
+                              onChange={e => {
+                                const nextVal = e.target.value;
+                                setBiomarkerInputs(prev => ({ ...prev, [def.key]: nextVal }));
+                                if (biomarkerErrors[def.key]) {
+                                  setBiomarkerErrors(prev => {
+                                    const next = { ...prev };
+                                    delete next[def.key];
+                                    return next;
+                                  });
+                                }
+                              }}
+                              placeholder={def.placeholder}
+                              className="w-full pr-12 pl-2.5 py-1 rounded border border-stone-200 bg-stone-50/60 focus:bg-white focus:border-orange-500 outline-none text-xs font-mono text-stone-900"
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-stone-400 pointer-events-none">
+                              {def.unit}
+                            </span>
+                          </div>
+                        )}
+                        {fieldErr && (
+                          <p className="text-[10px] font-semibold text-rose-600 mt-1">{fieldErr}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                    Lab Report Notes (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={labNotes}
+                    onChange={e => setLabNotes(e.target.value)}
+                    placeholder="e.g. Fasting 12h blood test notes..."
+                    className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded-lg text-xs font-medium text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+              </div>
             </form>
           )}
         </div>
 
         {/* Modal Footer */}
         <div className="px-6 py-4 bg-stone-50 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-1.5 text-[11px] text-stone-500 font-medium">
+          <div className="flex items-center gap-2 text-[11px] text-stone-500 font-medium">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>Changes sync in real-time with your dietician's clinical portal.</span>
+            {onOpenChangePassword && (
+              <button
+                type="button"
+                onClick={onOpenChangePassword}
+                className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-stone-200 hover:bg-stone-100 text-stone-700 font-bold text-[11px] transition-colors"
+              >
+                <KeyRound className="w-3 h-3 text-orange-600" />
+                Change Password
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">

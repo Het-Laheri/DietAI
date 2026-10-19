@@ -23,7 +23,8 @@ import {
   CreditCard,
   Sparkles,
   Clock,
-  HeartPulse
+  HeartPulse,
+  KeyRound
 } from 'lucide-react';
 import { useEffect } from 'react';
 import Overview from './Dietician/Overview';
@@ -36,6 +37,7 @@ import KnowledgeBase from './Dietician/KnowledgeBase';
 import MealPlanGenerator from './Dietician/MealPlanGenerator';
 import NotificationPermissionBanner from '../components/NotificationPermissionBanner';
 import PhysiotherapistModal from '../components/PhysiotherapistModal';
+import ChangePasswordModal from '../components/ChangePasswordModal';
 import { mobileNotificationService } from '../services/mobileNotificationService';
 
 function formatRelativeTime(createdAt: any): string {
@@ -69,6 +71,7 @@ export default function DieticianDashboard() {
   const [notifTab, setNotifTab] = useState<'unread' | 'all'>('unread');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isPhysioModalOpen, setIsPhysioModalOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   // Live real-time listener on queries collection for consultation badge
   useEffect(() => {
@@ -215,6 +218,17 @@ export default function DieticianDashboard() {
               <p className="text-[10px] text-stone-500 font-medium">Licensed Clinical Dietician</p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setIsChangePasswordOpen(true);
+              setMobileMenuOpen(false);
+            }}
+            className="flex items-center gap-2.5 px-3 py-2 w-full text-left rounded-lg text-xs font-bold text-stone-600 hover:text-orange-600 hover:bg-orange-50 transition-colors mb-1"
+          >
+            <KeyRound className="w-4 h-4 text-orange-500" />
+            Change Password
+          </button>
           <button 
             onClick={handleLogout}
             className="flex items-center gap-2.5 px-3 py-2 w-full text-left rounded-lg text-xs font-bold text-stone-500 hover:text-pink-600 hover:bg-pink-50 transition-colors"
@@ -457,6 +471,12 @@ export default function DieticianDashboard() {
       <PhysiotherapistModal
         isOpen={isPhysioModalOpen}
         onClose={() => setIsPhysioModalOpen(false)}
+      />
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
       />
     </div>
   );

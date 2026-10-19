@@ -21,6 +21,7 @@ import knowledgeClearHandler from './api/knowledge/clear.js';
 import aiChatHandler from './api/ai/chat.js';
 import aiMealPlanHandler from './api/ai/meal-plan.js';
 import aiScanFoodHandler from './api/ai/scan-food.js';
+import changePasswordHandler from './api/auth/change-password.js';
 
 // Upstash Redis Initialization
 let redis: Redis | null = null;
@@ -187,6 +188,7 @@ mount(['/api/knowledge/clear'], knowledgeClearHandler);
 mount(['/api/ai/chat'], aiChatHandler);
 mount(['/api/ai/meal-plan'], aiMealPlanHandler);
 mount(['/api/ai/scan-food'], aiScanFoodHandler);
+mount(['/api/auth/change-password'], changePasswordHandler);
 
 // ─── Development-only AI routes (not deployed to Vercel; see UNC-001) ───
   app.post(['/api/ai/estimate-food', '/ai/estimate-food'], requireApiAuth(), aiRateLimitMiddleware, async (req: express.Request, res: express.Response): Promise<any> => {

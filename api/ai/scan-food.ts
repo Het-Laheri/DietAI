@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { guard, parseBody, requireEnv } from '../_lib/security.js';
+import { guard, parseBody, requireEnv, assertSubscribedOrVip, HttpError } from '../_lib/security.js';
 
 const getGeminiKey = () => requireEnv('GEMINI_API_KEY');
 
@@ -264,6 +264,8 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: validation.error || 'Valid image data is required.' });
     }
 
+    await assertSubscribedOrVip(caller);
+
     const patientContext = patientProfile ? `
 Patient Clinical Profile:
 - Name: ${patientProfile.name || 'Patient'}
@@ -405,6 +407,9 @@ Return strictly a valid JSON object matching either format B or C without markdo
     const parsedResult = parseAndValidateFoodScanResponse(jsonText);
     return res.status(200).json(parsedResult);
   } catch (error: any) {
+    if (error instanceof HttpError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error('Error in scan-food serverless handler:', error);
     const msg = error.message || String(error);
     const isRateLimit = error.status === 429 || msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED');

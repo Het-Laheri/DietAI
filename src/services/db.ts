@@ -31,6 +31,24 @@ export interface User {
   role: Role;
   name: string;
   dietaryType?: string;
+  isVip?: boolean;
+  isTestPatient?: boolean;
+  isDemoAccount?: boolean;
+  demoTier?: 'vip' | 'basic';
+  subscription?: {
+    planId: string;
+    planName: string;
+    amountInr: number;
+    durationMonths: number;
+    status: 'active' | 'expired' | 'cancelled';
+    dieticianId: string;
+    paymentId?: string;
+    orderId?: string;
+    startDate: string;
+    endDate: string;
+    updatedAt?: string;
+  } | null;
+  onboardingCompleted?: boolean;
   createdAt: any;
 }
 
@@ -86,6 +104,24 @@ export interface PatientProfile {
   onboardingCompleted?: boolean;
   allergies?: string[];
   labBiomarkers?: PatientLabBiomarkers;
+  labHistory?: PatientLabBiomarkers[];
+  isVip?: boolean;
+  isTestPatient?: boolean;
+  isDemoAccount?: boolean;
+  demoTier?: 'vip' | 'basic';
+  subscription?: {
+    planId: string;
+    planName: string;
+    amountInr: number;
+    durationMonths: number;
+    status: 'active' | 'expired' | 'cancelled';
+    dieticianId: string;
+    paymentId?: string;
+    orderId?: string;
+    startDate: string;
+    endDate: string;
+    updatedAt?: string;
+  } | null;
   status: 'active' | 'inactive';
   needsAttention: boolean;
   adherencePercentage?: number;
@@ -95,6 +131,21 @@ export interface PatientProfile {
 }
 
 // ─── 13 CORE CLINICAL LAB BIOMARKERS PANEL ──────────────────────────────────
+export type BiomarkerKey =
+  | 'hba1c'
+  | 'haemoglobin'
+  | 'cholesterol'
+  | 'triglycerides'
+  | 'hdl'
+  | 'ldl'
+  | 'sgpt'
+  | 'sgot'
+  | 'sodium'
+  | 'potassium'
+  | 'creatinine'
+  | 'bun'
+  | 'uricAcid';
+
 export interface PatientLabBiomarkers {
   testDate?: string;
   hba1c?: number;           // % (Normal < 5.7, Prediabetes 5.7-6.4, Diabetes >= 6.5)
@@ -110,7 +161,268 @@ export interface PatientLabBiomarkers {
   creatinine?: number;      // mg/dL (Normal 0.6-1.2)
   bun?: number;             // mg/dL (Normal 7-20)
   uricAcid?: number;        // mg/dL (Female 2.4-6.0, Male 3.4-7.0)
+  unavailableBiomarkers?: BiomarkerKey[];
+  isSyntheticDemo?: boolean;
   notes?: string;
+}
+
+export interface ClinicalBiomarkerDefinition {
+  key: BiomarkerKey;
+  name: string;
+  shortName: string;
+  category: 'Metabolic & Glycemic' | 'Hematology' | 'Lipid Profile' | 'Liver Function' | 'Electrolytes' | 'Renal & Uric Acid';
+  unit: string;
+  min: number;
+  max: number;
+  step: number;
+  normalRange: string;
+  placeholder: string;
+  description: string;
+}
+
+export const CLINICAL_BIOMARKER_DEFINITIONS: readonly ClinicalBiomarkerDefinition[] = [
+  {
+    key: 'hba1c',
+    name: 'Glycated Haemoglobin (HbA1c)',
+    shortName: 'HbA1c',
+    category: 'Metabolic & Glycemic',
+    unit: '%',
+    min: 3.0,
+    max: 20.0,
+    step: 0.1,
+    normalRange: '< 5.7%',
+    placeholder: 'e.g. 5.4',
+    description: '3-month average blood glucose control'
+  },
+  {
+    key: 'haemoglobin',
+    name: 'Haemoglobin (Hb)',
+    shortName: 'Haemoglobin',
+    category: 'Hematology',
+    unit: 'g/dL',
+    min: 4.0,
+    max: 22.0,
+    step: 0.1,
+    normalRange: '12.0–15.5 (F) / 13.5–17.5 (M) g/dL',
+    placeholder: 'e.g. 13.2',
+    description: 'Oxygen-carrying protein in red blood cells'
+  },
+  {
+    key: 'cholesterol',
+    name: 'Total Cholesterol',
+    shortName: 'Cholesterol',
+    category: 'Lipid Profile',
+    unit: 'mg/dL',
+    min: 50,
+    max: 600,
+    step: 1,
+    normalRange: '< 200 mg/dL',
+    placeholder: 'e.g. 185',
+    description: 'Combined serum cholesterol concentration'
+  },
+  {
+    key: 'triglycerides',
+    name: 'Serum Triglycerides',
+    shortName: 'Triglycerides',
+    category: 'Lipid Profile',
+    unit: 'mg/dL',
+    min: 20,
+    max: 1500,
+    step: 1,
+    normalRange: '< 150 mg/dL',
+    placeholder: 'e.g. 130',
+    description: 'Fasting blood lipid storage & glycemic conversion marker'
+  },
+  {
+    key: 'hdl',
+    name: 'High-Density Lipoprotein (HDL)',
+    shortName: 'HDL ("Good")',
+    category: 'Lipid Profile',
+    unit: 'mg/dL',
+    min: 10,
+    max: 150,
+    step: 1,
+    normalRange: '> 50 (F) / > 40 (M) mg/dL',
+    placeholder: 'e.g. 52',
+    description: 'Cardioprotective lipoprotein cholesterol'
+  },
+  {
+    key: 'ldl',
+    name: 'Low-Density Lipoprotein (LDL)',
+    shortName: 'LDL ("Bad")',
+    category: 'Lipid Profile',
+    unit: 'mg/dL',
+    min: 20,
+    max: 400,
+    step: 1,
+    normalRange: '< 100 mg/dL',
+    placeholder: 'e.g. 95',
+    description: 'Atherogenic lipoprotein cholesterol'
+  },
+  {
+    key: 'sgpt',
+    name: 'Serum Glutamic Pyruvic Transaminase (SGPT / ALT)',
+    shortName: 'SGPT / ALT',
+    category: 'Liver Function',
+    unit: 'U/L',
+    min: 1,
+    max: 1000,
+    step: 1,
+    normalRange: '7 – 56 U/L',
+    placeholder: 'e.g. 28',
+    description: 'Alanine aminotransferase hepatic enzyme'
+  },
+  {
+    key: 'sgot',
+    name: 'Serum Glutamic Oxaloacetic Transaminase (SGOT / AST)',
+    shortName: 'SGOT / AST',
+    category: 'Liver Function',
+    unit: 'U/L',
+    min: 1,
+    max: 1000,
+    step: 1,
+    normalRange: '10 – 40 U/L',
+    placeholder: 'e.g. 24',
+    description: 'Aspartate aminotransferase hepatic & tissue enzyme'
+  },
+  {
+    key: 'sodium',
+    name: 'Serum Sodium (Na)',
+    shortName: 'Sodium (Na)',
+    category: 'Electrolytes',
+    unit: 'mEq/L',
+    min: 100,
+    max: 180,
+    step: 0.5,
+    normalRange: '135 – 145 mEq/L',
+    placeholder: 'e.g. 140',
+    description: 'Extracellular fluid & blood pressure electrolyte'
+  },
+  {
+    key: 'potassium',
+    name: 'Serum Potassium (K)',
+    shortName: 'Potassium (K)',
+    category: 'Electrolytes',
+    unit: 'mEq/L',
+    min: 1.5,
+    max: 9.0,
+    step: 0.1,
+    normalRange: '3.5 – 5.0 mEq/L',
+    placeholder: 'e.g. 4.2',
+    description: 'Intracellular & cardiac conduction electrolyte'
+  },
+  {
+    key: 'creatinine',
+    name: 'Serum Creatinine',
+    shortName: 'Creatinine',
+    category: 'Renal & Uric Acid',
+    unit: 'mg/dL',
+    min: 0.1,
+    max: 15.0,
+    step: 0.01,
+    normalRange: '0.6 – 1.2 mg/dL',
+    placeholder: 'e.g. 0.85',
+    description: 'Glomerular filtration & renal clearance marker'
+  },
+  {
+    key: 'bun',
+    name: 'Blood Urea Nitrogen (BUN)',
+    shortName: 'BUN',
+    category: 'Renal & Uric Acid',
+    unit: 'mg/dL',
+    min: 1,
+    max: 150,
+    step: 0.5,
+    normalRange: '7 – 20 mg/dL',
+    placeholder: 'e.g. 14',
+    description: 'Renal nitrogenous waste & hydration marker'
+  },
+  {
+    key: 'uricAcid',
+    name: 'Serum Uric Acid',
+    shortName: 'Uric Acid',
+    category: 'Renal & Uric Acid',
+    unit: 'mg/dL',
+    min: 0.5,
+    max: 20.0,
+    step: 0.1,
+    normalRange: '2.4–6.0 (F) / 3.4–7.0 (M) mg/dL',
+    placeholder: 'e.g. 5.1',
+    description: 'Purine metabolism & gout risk marker'
+  }
+] as const;
+
+export interface BiomarkerValidationResult {
+  valid: boolean;
+  errors: Partial<Record<BiomarkerKey, string>>;
+  sanitized: PatientLabBiomarkers;
+  measuredCount: number;
+  unavailableCount: number;
+}
+
+/**
+ * Validates and sanitizes raw biomarker inputs.
+ * - Never invents values when not entered.
+ * - Never confuses missing/empty strings with 0.
+ * - Rejects negative, non-numeric, or physiologically impossible values.
+ */
+export function validateLabBiomarkers(
+  rawValues: Record<string, string | number | undefined | null>,
+  unavailableKeys: BiomarkerKey[] = [],
+  meta?: { testDate?: string; notes?: string; isSyntheticDemo?: boolean }
+): BiomarkerValidationResult {
+  const errors: Partial<Record<BiomarkerKey, string>> = {};
+  const sanitized: PatientLabBiomarkers = {};
+  const unavailableSet = new Set<BiomarkerKey>(unavailableKeys);
+  let measuredCount = 0;
+
+  for (const def of CLINICAL_BIOMARKER_DEFINITIONS) {
+    if (unavailableSet.has(def.key)) {
+      continue;
+    }
+    const raw = rawValues[def.key];
+    if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) {
+      // Missing value is NOT zero; mark as unavailable if not entered
+      unavailableSet.add(def.key);
+      continue;
+    }
+    const num = typeof raw === 'number' ? raw : Number(String(raw).trim());
+    if (!Number.isFinite(num)) {
+      errors[def.key] = `Enter a valid numeric value for ${def.shortName} (${def.unit}).`;
+      continue;
+    }
+    if (num <= 0) {
+      errors[def.key] = `${def.shortName} must be greater than 0 ${def.unit}.`;
+      continue;
+    }
+    if (num < def.min || num > def.max) {
+      errors[def.key] = `${def.shortName} must be between ${def.min} and ${def.max} ${def.unit}.`;
+      continue;
+    }
+    (sanitized as any)[def.key] = Number(num.toFixed(2));
+    measuredCount++;
+  }
+
+  if (meta?.testDate && meta.testDate.trim()) {
+    sanitized.testDate = meta.testDate.trim();
+  }
+  if (meta?.notes && meta.notes.trim()) {
+    sanitized.notes = meta.notes.trim();
+  }
+  if (meta?.isSyntheticDemo) {
+    sanitized.isSyntheticDemo = true;
+  }
+  if (unavailableSet.size > 0) {
+    sanitized.unavailableBiomarkers = Array.from(unavailableSet);
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+    sanitized,
+    measuredCount,
+    unavailableCount: unavailableSet.size
+  };
 }
 
 export interface ClinicalBiomarkerItem {
@@ -143,16 +455,18 @@ export const DEFAULT_SAMPLE_LABS: PatientLabBiomarkers = {
   creatinine: 0.88,       // Normal
   bun: 15,                // Normal
   uricAcid: 6.6,          // Borderline High
-  notes: 'Recent fasting metabolic panel: Moderate dyslipidemia and elevated HbA1c (6.8%) consistent with metabolic syndrome and Grade 1 Fatty Liver. Renal markers intact.'
+  isSyntheticDemo: true,
+  notes: 'Synthetic Reference Panel: Moderate dyslipidemia and elevated HbA1c (6.8%) consistent with metabolic syndrome and Grade 1 Fatty Liver. Renal markers intact.'
 };
 
 export function evaluateLabBiomarkers(
   labs?: PatientLabBiomarkers,
-  gender: string = 'Female'
+  gender: string = 'Female',
+  options?: { fallbackToSample?: boolean }
 ): ClinicalBiomarkerItem[] {
-  const effectiveLabs: PatientLabBiomarkers = (labs && Object.keys(labs).length > 0)
-    ? { ...DEFAULT_SAMPLE_LABS, ...labs }
-    : DEFAULT_SAMPLE_LABS;
+  const effectiveLabs: PatientLabBiomarkers = labs
+    ? (options?.fallbackToSample ? { ...DEFAULT_SAMPLE_LABS, ...labs } : labs)
+    : (options?.fallbackToSample ? DEFAULT_SAMPLE_LABS : {});
   const isFemale = (gender || '').toLowerCase() !== 'male';
   const list: ClinicalBiomarkerItem[] = [];
 
@@ -939,6 +1253,8 @@ export interface PatientSurveyData {
   favorites?: string;
   dislikes?: string;
   cuisine?: string;
+  labBiomarkers?: PatientLabBiomarkers;
+  onboardingCompleted?: boolean;
 }
 
 export async function registerPatient(
@@ -956,6 +1272,7 @@ export async function registerPatient(
     email,
     role: 'patient',
     name,
+    onboardingCompleted: true,
     createdAt: serverTimestamp()
   };
   await setDoc(doc(db, 'users', uid), userDoc);
@@ -978,7 +1295,18 @@ export async function registerPatient(
   else if (calculatedBmi < 40) bmiClass = 'Obesity Grade II (35 - 39.9)';
   else bmiClass = 'Morbid Obesity (> 40)';
 
-  const profile: PatientProfile = {
+  const cleanedLabs: PatientLabBiomarkers | undefined = surveyData?.labBiomarkers
+    ? cleanFirestoreData({
+        ...surveyData.labBiomarkers,
+        testDate: surveyData.labBiomarkers.testDate || new Date().toISOString().split('T')[0]
+      })
+    : undefined;
+
+  const hasMeasuredBiomarker = cleanedLabs
+    ? CLINICAL_BIOMARKER_DEFINITIONS.some(d => typeof (cleanedLabs as any)[d.key] === 'number')
+    : false;
+
+  const profile: PatientProfile = cleanFirestoreData({
     id: uid,
     dieticianId: 'default_dietician',
     email,
@@ -991,6 +1319,9 @@ export async function registerPatient(
     heightCm: height,
     currentWeightKg: currentWeight,
     targetWeightKg: targetWeight,
+    waistCm: Number(surveyData?.waistCm) || undefined,
+    initialWaistCm: Number(surveyData?.initialWaistCm || surveyData?.waistCm) || undefined,
+    inchLoss: Number(surveyData?.inchLoss) || 0,
     idealBodyWeightKg: idealBodyWeight,
     bmi: calculatedBmi,
     bmiClassification: surveyData?.bmiClassification || bmiClass,
@@ -1019,11 +1350,24 @@ export async function registerPatient(
       medications: '',
       notes: surveyData?.diagnosisOrProcedure ? `Diagnosis / Procedure: ${surveyData.diagnosisOrProcedure}` : ''
     },
+    labBiomarkers: cleanedLabs || {
+      testDate: new Date().toISOString().split('T')[0],
+      unavailableBiomarkers: CLINICAL_BIOMARKER_DEFINITIONS.map(d => d.key)
+    },
+    labHistory: hasMeasuredBiomarker && cleanedLabs ? [cleanedLabs] : [],
+    onboardingCompleted: true,
     status: 'active',
     needsAttention: false,
     createdAt: serverTimestamp()
-  };
+  });
+
   await setDoc(doc(db, 'patient_profiles', uid), profile);
+
+  // Verify persistence before returning
+  const verifySnap = await getDoc(doc(db, 'patient_profiles', uid));
+  if (!verifySnap.exists()) {
+    throw new Error('Profile persistence check failed: patient profile document was not saved.');
+  }
 
   return userCredential.user;
 }
@@ -1034,18 +1378,6 @@ export async function getUserProfile(uid: string): Promise<User | null> {
 }
 
 export async function getPatientProfile(patientId: string): Promise<PatientProfile | null> {
-  // 1. Try backend API first
-  try {
-    const res = await fetch(getApiUrl(`/api/patient/profile/${encodeURIComponent(patientId)}`));
-    if (res.ok) {
-      const json = await res.json();
-      if (json.profile) return json.profile as PatientProfile;
-    }
-  } catch (apiErr) {
-    // fallback
-  }
-
-  // 2. Direct Firestore fallback
   try {
     const snap = await getDoc(doc(db, 'patient_profiles', patientId));
     return snap.exists() ? snap.data() as PatientProfile : null;
@@ -1057,25 +1389,13 @@ export async function getPatientProfile(patientId: string): Promise<PatientProfi
 
 export async function updatePatientProfile(patientId: string, updates: Partial<PatientProfile>): Promise<boolean> {
   const sanitized = cleanFirestoreData(updates);
+  // Strip privileged fields that Firestore rules prohibit from client-side mutation
+  delete (sanitized as any).subscription;
+  delete (sanitized as any).isVip;
+  delete (sanitized as any).isTestPatient;
+  delete (sanitized as any).role;
+  delete (sanitized as any).dieticianId;
 
-  // 1. Try backend API first (server admin auth)
-  try {
-    const res = await fetch(getApiUrl(`/api/patient/profile/${encodeURIComponent(patientId)}`), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sanitized)
-    });
-    if (res.ok) {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('nutrisnap:profile_updated', { detail: sanitized }));
-      }
-      return true;
-    }
-  } catch (apiErr) {
-    console.warn('API updatePatientProfile note:', apiErr);
-  }
-
-  // 2. Direct Firestore fallback
   try {
     await setDoc(doc(db, 'patient_profiles', patientId), sanitized, { merge: true });
     if (typeof window !== 'undefined') {

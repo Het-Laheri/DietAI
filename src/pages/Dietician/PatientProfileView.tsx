@@ -606,16 +606,26 @@ export default function PatientProfileView() {
     setSavingLabs(true);
     try {
       const patientId = profile.id || id!;
+      const updatedLabs: PatientLabBiomarkers = {
+        ...profile.labBiomarkers,
+        ...labFormValues,
+        testDate: labFormValues.testDate || new Date().toISOString().split('T')[0]
+      };
+      const existingHistory = Array.isArray(profile.labHistory) ? profile.labHistory : [];
+      const nextHistory = [
+        ...existingHistory.filter(h => h.testDate !== updatedLabs.testDate),
+        updatedLabs
+      ].sort((a, b) => (a.testDate || '').localeCompare(b.testDate || ''));
+
       const updatedProfile: PatientProfile = {
         ...profile,
-        labBiomarkers: {
-          ...DEFAULT_SAMPLE_LABS,
-          ...profile.labBiomarkers,
-          ...labFormValues,
-          testDate: labFormValues.testDate || new Date().toISOString().split('T')[0]
-        }
+        labBiomarkers: updatedLabs,
+        labHistory: nextHistory
       };
-      await updatePatientProfile(patientId, updatedProfile);
+      await updatePatientProfile(patientId, {
+        labBiomarkers: updatedLabs,
+        labHistory: nextHistory
+      });
       setProfile(updatedProfile);
       setEditingLabsModal(false);
     } catch (err) {
@@ -626,7 +636,7 @@ export default function PatientProfileView() {
   };
 
   const openLabEditModal = () => {
-    const currentLabs = { ...DEFAULT_SAMPLE_LABS, ...(profile?.labBiomarkers || {}) };
+    const currentLabs = { ...(profile?.labBiomarkers || {}) };
     setLabFormValues({ ...currentLabs });
     setEditingLabsModal(true);
   };
@@ -634,7 +644,7 @@ export default function PatientProfileView() {
   const renderMacroProgressChartWithInterpretation = () => {
     if (!profile) return null;
 
-    const currentLabs = { ...DEFAULT_SAMPLE_LABS, ...(profile.labBiomarkers || {}) };
+    const currentLabs = { ...(profile.labBiomarkers || {}) };
     const condStr = typeof profile.clinicalSummary === 'object' ? profile.clinicalSummary?.conditions : (profile.clinicalSummary || profile.healthInfo?.conditions || '');
     const isDiabetic = (condStr || '').toLowerCase().includes('diabet');
 
@@ -975,9 +985,7 @@ export default function PatientProfileView() {
   const renderBiomarkerProgressChartWithInterpretation = () => {
     if (!profile) return null;
 
-    const currentLabs = (profile.labBiomarkers && Object.keys(profile.labBiomarkers).length > 0)
-      ? { ...DEFAULT_SAMPLE_LABS, ...profile.labBiomarkers }
-      : DEFAULT_SAMPLE_LABS;
+    const currentLabs = profile.labBiomarkers || {};
     const evaluatedBiomarkers = evaluateLabBiomarkers(currentLabs, profile.gender || 'Female');
     const patientConditions = [
       ...(profile.medicalHistory || []),
@@ -1228,9 +1236,7 @@ export default function PatientProfileView() {
 
   const renderBiomarkersPanel = () => {
     if (!profile) return null;
-    const currentLabs = (profile.labBiomarkers && Object.keys(profile.labBiomarkers).length > 0)
-      ? { ...DEFAULT_SAMPLE_LABS, ...profile.labBiomarkers }
-      : DEFAULT_SAMPLE_LABS;
+    const currentLabs = profile.labBiomarkers || {};
     const evaluatedBiomarkers = evaluateLabBiomarkers(currentLabs, profile.gender || 'Female');
     const patientConditions = [
       ...(profile.medicalHistory || []),

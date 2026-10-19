@@ -31,10 +31,17 @@ const DEV_ORIGINS = ['http://localhost:3000', 'http://localhost:5173', 'http://1
 interface TestHooks {
   verifyIdToken?: (token: string) => Promise<{ uid: string; email?: string }>;
   getRole?: (uid: string) => Promise<Role | null>;
+  verifyCurrentPassword?: (email: string, currentPassword: string) => Promise<boolean>;
+  updatePasswordAndRevoke?: (uid: string, newPassword: string) => Promise<void>;
+  recordPasswordUpdate?: (uid: string, iso: string) => Promise<void>;
+  isUserSubscribedOrVip?: (uid: string) => Promise<boolean>;
 }
 let testHooks: TestHooks = {};
 export function __setSecurityTestHooks(hooks: TestHooks) {
   testHooks = hooks;
+}
+export function __getSecurityTestHooks(): TestHooks {
+  return testHooks;
 }
 
 export function requireEnv(name: string): string {
@@ -196,3 +203,41 @@ export function assertCanAccessPatient(caller: Caller, patientId: string | undef
   if (caller.role === 'dietician') return;
   if (caller.uid !== patientId) throw new HttpError(403, 'Not allowed to access another patient');
 }
+
+/** Evaluates whether a Firestore user/profile document has active VIP or subscription entitlement. */
+export function isDataSubscribedOrVip(data: Record<string, any> | undefined | null): boolean {
+  if (!data || typeof data !== 'object') return false;
+  if (data.isVip === true || data.isTestPatient === true) return true;
+  const sub = data.subscription;
+  if (sub && typeof sub === 'object' && sub.status === 'active') {
+    if (!sub.endDate) return true;
+    const endMs = new Date(sub.endDate).getTime();
+    if (!Number.isNaN(endMs) && endMs >= Date.now()) return true;
+  }
+  return false;
+}
+
+/**
+ * Server-side entitlement check for premium/VIP endpoints.
+ * Dieticians are always permitted; patients must have an active subscription or VIP flag in Firestore.
+ */
+export async function assertSubscribedOrVip(caller: Caller): Promise<void> {
+  if (caller.role === 'dietician') return;
+  if (testHooks.isUserSubscribedOrVip) {
+    const allowed = await testHooks.isUserSubscribedOrVip(caller.uid);
+    if (allowed) return;
+    throw new HttpError(403, 'Active VIP subscription required for this feature');
+  }
+  const db = getAdminDb();
+  const [userSnap, profileSnap] = await Promise.all([
+    db.collection('users').doc(caller.uid).get(),
+    db.collection('patient_profiles').doc(caller.uid).get(),
+  ]);
+  const userData = userSnap.exists ? (userSnap.data() as Record<string, any>) : null;
+  const profileData = profileSnap.exists ? (profileSnap.data() as Record<string, any>) : null;
+  if (isDataSubscribedOrVip(userData) || isDataSubscribedOrVip(profileData)) {
+    return;
+  }
+  throw new HttpError(403, 'Active VIP subscription required for this feature');
+}
+

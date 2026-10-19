@@ -16,7 +16,9 @@ import {
   MealPlan,
   PatientWeekPlan,
   ChecklistMealItem,
-  PatientEatingLogEntry
+  PatientEatingLogEntry,
+  CLINICAL_BIOMARKER_DEFINITIONS,
+  evaluateLabBiomarkers
 } from '../../services/db';
 import { db } from '../../services/firebase';
 import { doc, onSnapshot, collection, query, where } from 'firebase/firestore';
@@ -886,6 +888,145 @@ export default function Progress() {
           </div>
         )}
       </div>
+
+      {/* ─── 13 CORE CLINICAL LAB BIOMARKERS PANEL & HISTORICAL PROGRESSION ─── */}
+      {(() => {
+        const currentLabs = patientProfile?.labBiomarkers || {};
+        const evaluated = evaluateLabBiomarkers(currentLabs, patientProfile?.gender || 'Female');
+        const evaluatedMap = new Map(evaluated.map(b => [b.key, b]));
+        const labHistory = Array.isArray(patientProfile?.labHistory) ? patientProfile!.labHistory! : [];
+        const isDemoData = Boolean(currentLabs.isSyntheticDemo || patientProfile?.isDemoAccount);
+
+        return (
+          <div className="bg-white rounded-3xl p-6 border border-stone-200/80 shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-100">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-serif font-black text-stone-900 flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-orange-600" />
+                    13 Clinical Lab Biomarkers Panel
+                  </h2>
+                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+                    {evaluated.length}/13 Measured
+                  </span>
+                  {isDemoData && (
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                      Synthetic Demo Data (Not Genuine Lab Results)
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-stone-500 mt-1">
+                  {currentLabs.testDate
+                    ? `Latest panel date: ${currentLabs.testDate}${currentLabs.notes ? ` • ${currentLabs.notes}` : ''}`
+                    : 'Track your 13 core metabolic, lipid, hepatic, electrolyte, and renal biomarkers over time.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsProfileModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold flex items-center gap-1.5 transition-colors self-start sm:self-auto"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                Update 13 Biomarkers
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {CLINICAL_BIOMARKER_DEFINITIONS.map(def => {
+                const item = evaluatedMap.get(def.key);
+                return (
+                  <div
+                    key={def.key}
+                    className={`p-3.5 rounded-2xl border flex flex-col justify-between ${
+                      item
+                        ? 'bg-stone-50/60 border-stone-200/90'
+                        : 'bg-stone-50/30 border-dashed border-stone-200 opacity-75'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          {def.category}
+                        </span>
+                        {item ? (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${item.badgeColor}`}>
+                            {item.statusLabel}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-stone-100 text-stone-500">
+                            Not Available Yet
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-baseline justify-between gap-2 mt-1">
+                        <div>
+                          <h4 className="text-xs font-bold text-stone-900">{def.shortName}</h4>
+                          <p className="text-[10px] text-stone-400">Ref: {def.normalRange}</p>
+                        </div>
+                        <div className="text-right">
+                          {item ? (
+                            <>
+                              <span className="text-base font-black font-mono text-stone-900">{item.value}</span>
+                              <span className="text-[10px] text-stone-500 ml-1">{def.unit}</span>
+                            </>
+                          ) : (
+                            <span className="text-xs font-mono text-stone-400">—</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {item && (
+                      <p className="text-[11px] text-stone-600 mt-2 pt-2 border-t border-stone-200/60 leading-snug">
+                        {item.dietaryAction}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {labHistory.length > 1 && (
+              <div className="pt-4 border-t border-stone-100 overflow-x-auto">
+                <h4 className="text-xs font-black text-stone-800 mb-3 flex items-center gap-1.5">
+                  <TrendingDown className="w-3.5 h-3.5 text-emerald-600" />
+                  Historical Biomarker Progression ({labHistory.length} Dated Panels)
+                </h4>
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-stone-200 text-stone-400 font-bold">
+                      <th className="pb-2 pr-3">Biomarker</th>
+                      <th className="pb-2 pr-3">Normal Range</th>
+                      {labHistory.map((h, idx) => (
+                        <th key={h.testDate || idx} className="pb-2 pr-3 font-mono">
+                          {h.testDate || `Panel ${idx + 1}`}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {CLINICAL_BIOMARKER_DEFINITIONS.map(def => (
+                      <tr key={def.key} className="hover:bg-stone-50/70">
+                        <td className="py-2 pr-3 font-bold text-stone-900">
+                          {def.shortName} <span className="text-[10px] font-normal text-stone-500">({def.unit})</span>
+                        </td>
+                        <td className="py-2 pr-3 text-[11px] text-stone-500">{def.normalRange}</td>
+                        {labHistory.map((h, idx) => {
+                          const val = (h as any)[def.key];
+                          return (
+                            <td key={h.testDate || idx} className="py-2 pr-3 font-mono font-semibold text-stone-800">
+                              {typeof val === 'number' ? `${val} ${def.unit}` : '—'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ─── RECORD MONTHLY PARAMETERS MODAL ─── */}
       {isAddMonthlyModalOpen && (

@@ -7,7 +7,14 @@ import {
   signInWithEmailLink 
 } from 'firebase/auth';
 import { auth } from '../services/firebase';
-import { registerPatient, getUserProfile, createNotification } from '../services/db';
+import { 
+  registerPatient, 
+  getUserProfile, 
+  createNotification,
+  CLINICAL_BIOMARKER_DEFINITIONS,
+  validateLabBiomarkers,
+  BiomarkerKey
+} from '../services/db';
 import { 
   Heart, 
   Dumbbell, 
@@ -37,6 +44,8 @@ import {
   CheckCircle2,
   Loader2
 } from 'lucide-react';
+
+const ONBOARDING_DRAFT_KEY = 'nutrisnap_onboarding_draft_v1';
 
 const LIFE_STAGES = [
   { id: 'Adult', label: 'Adult', desc: 'Ages 18–60, general wellness & metabolic balance' },
@@ -144,12 +153,23 @@ export default function Login() {
     'Preventing Weight Rebound (Anti-Yo-Yo)'
   ]);
 
-  // Step 4: Clinical Screening & Medical History
+  // Step 4: Clinical Screening, Medical History & 13 Lab Biomarkers
   const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
   const [diagnosisOrProcedure, setDiagnosisOrProcedure] = useState('');
   const [hasAllergies, setHasAllergies] = useState<boolean>(false);
   const [selectedAllergies, setSelectedAllergies] = useState<string[]>([]);
   const [customAllergy, setCustomAllergy] = useState('');
+  const [biomarkerInputs, setBiomarkerInputs] = useState<Record<BiomarkerKey, string>>(() => {
+    const init = {} as Record<BiomarkerKey, string>;
+    for (const def of CLINICAL_BIOMARKER_DEFINITIONS) {
+      init[def.key] = '';
+    }
+    return init;
+  });
+  const [unavailableBiomarkers, setUnavailableBiomarkers] = useState<BiomarkerKey[]>([]);
+  const [biomarkerErrors, setBiomarkerErrors] = useState<Partial<Record<BiomarkerKey, string>>>({});
+  const [labTestDate, setLabTestDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [labNotes, setLabNotes] = useState<string>('');
 
   // Step 5: Dietary Preferences & Lifestyle
   const [dietaryType, setDietaryType] = useState('Vegetarian');
@@ -159,6 +179,112 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // Restore non-sensitive onboarding draft from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const saved = window.sessionStorage.getItem(ONBOARDING_DRAFT_KEY);
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      if (parsed.name) setName(parsed.name);
+      if (parsed.email) setEmail(parsed.email);
+      if (parsed.gender) setGender(parsed.gender);
+      if (parsed.age) setAge(String(parsed.age));
+      if (parsed.lifeStage) setLifeStage(parsed.lifeStage);
+      if (parsed.mobile) setMobile(parsed.mobile);
+      if (typeof parsed.heightCm === 'number') setHeightCm(parsed.heightCm);
+      if (typeof parsed.currentWeightKg === 'number') setCurrentWeightKg(parsed.currentWeightKg);
+      if (typeof parsed.waistInches === 'number') setWaistInches(parsed.waistInches);
+      if (parsed.weightPrimaryGoal) setWeightPrimaryGoal(parsed.weightPrimaryGoal);
+      if (typeof parsed.targetWeightKg === 'number') setTargetWeightKg(parsed.targetWeightKg);
+      if (parsed.weightPace) setWeightPace(parsed.weightPace);
+      if (Array.isArray(parsed.selectedFocusAreas)) setSelectedFocusAreas(parsed.selectedFocusAreas);
+      if (Array.isArray(parsed.selectedConditions)) setSelectedConditions(parsed.selectedConditions);
+      if (parsed.diagnosisOrProcedure) setDiagnosisOrProcedure(parsed.diagnosisOrProcedure);
+      if (typeof parsed.hasAllergies === 'boolean') setHasAllergies(parsed.hasAllergies);
+      if (Array.isArray(parsed.selectedAllergies)) setSelectedAllergies(parsed.selectedAllergies);
+      if (parsed.customAllergy) setCustomAllergy(parsed.customAllergy);
+      if (parsed.biomarkerInputs && typeof parsed.biomarkerInputs === 'object') {
+        setBiomarkerInputs(prev => ({ ...prev, ...parsed.biomarkerInputs }));
+      }
+      if (Array.isArray(parsed.unavailableBiomarkers)) {
+        setUnavailableBiomarkers(parsed.unavailableBiomarkers);
+      }
+      if (parsed.labTestDate) setLabTestDate(parsed.labTestDate);
+      if (parsed.labNotes) setLabNotes(parsed.labNotes);
+      if (parsed.dietaryType) setDietaryType(parsed.dietaryType);
+      if (parsed.occupation) setOccupation(parsed.occupation);
+      if (parsed.activityLevel) setActivityLevel(parsed.activityLevel);
+    } catch {
+      // ignore corrupted draft
+    }
+  }, []);
+
+  // Persist non-sensitive onboarding draft across steps & refresh
+  useEffect(() => {
+    if (!isSignUp) return;
+    try {
+      window.sessionStorage.setItem(
+        ONBOARDING_DRAFT_KEY,
+        JSON.stringify({
+          name,
+          email,
+          gender,
+          age,
+          lifeStage,
+          mobile,
+          heightCm,
+          currentWeightKg,
+          waistInches,
+          weightPrimaryGoal,
+          targetWeightKg,
+          weightPace,
+          selectedFocusAreas,
+          selectedConditions,
+          diagnosisOrProcedure,
+          hasAllergies,
+          selectedAllergies,
+          customAllergy,
+          biomarkerInputs,
+          unavailableBiomarkers,
+          labTestDate,
+          labNotes,
+          dietaryType,
+          occupation,
+          activityLevel
+        })
+      );
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [
+    isSignUp,
+    name,
+    email,
+    gender,
+    age,
+    lifeStage,
+    mobile,
+    heightCm,
+    currentWeightKg,
+    waistInches,
+    weightPrimaryGoal,
+    targetWeightKg,
+    weightPace,
+    selectedFocusAreas,
+    selectedConditions,
+    diagnosisOrProcedure,
+    hasAllergies,
+    selectedAllergies,
+    customAllergy,
+    biomarkerInputs,
+    unavailableBiomarkers,
+    labTestDate,
+    labNotes,
+    dietaryType,
+    occupation,
+    activityLevel
+  ]);
 
   // Dynamic Anthropometric Calculations (from sheet)
   const heightM = heightCm > 0 ? heightCm / 100 : 1.65;
@@ -383,7 +509,42 @@ export default function Login() {
     setSignUpStep(4);
   };
 
+  const toggleBiomarkerUnavailable = (key: BiomarkerKey) => {
+    setUnavailableBiomarkers(prev => {
+      const exists = prev.includes(key);
+      const next = exists ? prev.filter(k => k !== key) : [...prev, key];
+      return next;
+    });
+    setBiomarkerErrors(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const handleMarkAllBiomarkersUnavailable = () => {
+    const allKeys = CLINICAL_BIOMARKER_DEFINITIONS.map(d => d.key);
+    const allMarked = allKeys.every(k => unavailableBiomarkers.includes(k));
+    if (allMarked) {
+      setUnavailableBiomarkers([]);
+    } else {
+      setUnavailableBiomarkers(allKeys);
+      setBiomarkerErrors({});
+    }
+  };
+
   const handleStep4Next = () => {
+    const validation = validateLabBiomarkers(biomarkerInputs, unavailableBiomarkers, {
+      testDate: labTestDate,
+      notes: labNotes
+    });
+    if (!validation.valid) {
+      setBiomarkerErrors(validation.errors);
+      const firstErrorMsg = Object.values(validation.errors)[0];
+      setError(firstErrorMsg || 'Please correct the highlighted biomarker values or mark unavailable fields as N/A.');
+      return;
+    }
+    setBiomarkerErrors({});
     setError('');
     setSignUpStep(5);
   };
@@ -393,6 +554,17 @@ export default function Login() {
     try {
       setLoading(true);
       setError('');
+
+      const validation = validateLabBiomarkers(biomarkerInputs, unavailableBiomarkers, {
+        testDate: labTestDate,
+        notes: labNotes
+      });
+      if (!validation.valid) {
+        setBiomarkerErrors(validation.errors);
+        setSignUpStep(4);
+        setError(Object.values(validation.errors)[0] || 'Please review your clinical biomarker entries.');
+        return;
+      }
 
       const allergySummary = hasAllergies 
         ? (selectedAllergies.length > 0 
@@ -429,14 +601,22 @@ export default function Login() {
         dietaryType,
         goals: [weightPrimaryGoal, ...selectedFocusAreas.slice(0, 2)],
         allergies: allergySummary,
-        conditions: selectedConditions.join(', ') + (diagnosisOrProcedure ? ` | Note: ${diagnosisOrProcedure}` : '')
+        conditions: selectedConditions.join(', ') + (diagnosisOrProcedure ? ` | Note: ${diagnosisOrProcedure}` : ''),
+        labBiomarkers: validation.sanitized,
+        onboardingCompleted: true
       });
+
+      try {
+        window.sessionStorage.removeItem(ONBOARDING_DRAFT_KEY);
+      } catch {
+        // ignore
+      }
 
       await createNotification({
         type: 'NEW_PATIENT',
         patientId: userCred.uid,
         patientName: name,
-        message: `${name} completed intake! Goal: ${weightPrimaryGoal} (BMI: ${liveBmi})`,
+        message: `${name} completed intake! Goal: ${weightPrimaryGoal} (BMI: ${liveBmi}, ${validation.measuredCount}/13 biomarkers entered)`,
         read: false
       }).catch(e => console.error('Failed to notify registration:', e));
 
@@ -1318,6 +1498,161 @@ export default function Login() {
                   />
                 </div>
               )}
+            </div>
+
+            {/* ─── 13 CORE CLINICAL LAB BIOMARKERS PANEL ───────────────────── */}
+            <div className="bg-stone-50/80 p-4 sm:p-5 rounded-2xl border border-stone-200/90 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-stone-200/80">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-orange-600 shrink-0" />
+                    <span className="text-xs uppercase tracking-wider font-extrabold text-stone-800">
+                      13 Clinical Lab Biomarkers Panel
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+                      13 Parameters
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    Enter your recent fasting blood panel values, or mark individual tests as <strong>Skip / N/A</strong> if not available yet.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleMarkAllBiomarkersUnavailable}
+                  className="px-3 py-1.5 rounded-xl text-[11px] font-bold border border-stone-300 bg-white hover:bg-stone-100 text-stone-700 transition-colors shrink-0 self-start sm:self-auto"
+                >
+                  {CLINICAL_BIOMARKER_DEFINITIONS.every(d => unavailableBiomarkers.includes(d.key))
+                    ? 'Enable Lab Value Entry'
+                    : 'No Lab Report Yet (Skip All 13 for Now)'}
+                </button>
+              </div>
+
+              {/* Lab Report Date & Notes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider font-bold text-stone-500 mb-1">
+                    Lab Report Date
+                  </label>
+                  <input
+                    type="date"
+                    value={labTestDate}
+                    onChange={e => setLabTestDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs text-stone-800 outline-none focus:border-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider font-bold text-stone-500 mb-1">
+                    Laboratory / Clinical Notes (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={labNotes}
+                    onChange={e => setLabNotes(e.target.value)}
+                    placeholder="e.g. Fasting 12h panel, Thyrocare / Lal PathLabs"
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs text-stone-800 outline-none focus:border-orange-500"
+                  />
+                </div>
+              </div>
+
+              {/* 13 Biomarker Inputs Grouped by Clinical Category */}
+              {(['Metabolic & Glycemic', 'Hematology', 'Lipid Profile', 'Liver Function', 'Electrolytes', 'Renal & Uric Acid'] as const).map(category => {
+                const items = CLINICAL_BIOMARKER_DEFINITIONS.filter(d => d.category === category);
+                return (
+                  <div key={category} className="space-y-2 pt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+                        {category}
+                      </span>
+                      <span className="text-[10px] text-stone-400">
+                        {items.length} {items.length === 1 ? 'biomarker' : 'biomarkers'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {items.map(def => {
+                        const isUnavailable = unavailableBiomarkers.includes(def.key);
+                        const val = biomarkerInputs[def.key] ?? '';
+                        const fieldErr = biomarkerErrors[def.key];
+                        return (
+                          <div
+                            key={def.key}
+                            className={`p-3 rounded-xl border transition-all ${
+                              fieldErr
+                                ? 'bg-rose-50/70 border-rose-300'
+                                : isUnavailable
+                                ? 'bg-stone-100/70 border-stone-200 opacity-75'
+                                : 'bg-white border-stone-200/90 hover:border-stone-300'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2 mb-1.5">
+                              <div>
+                                <label
+                                  htmlFor={`onboarding-bio-${def.key}`}
+                                  className="text-xs font-bold text-stone-900 block leading-tight"
+                                >
+                                  {def.shortName}{' '}
+                                  <span className="text-[10px] font-semibold text-stone-500">({def.unit})</span>
+                                </label>
+                                <span className="text-[10px] text-stone-400 block">
+                                  Ref: {def.normalRange}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleBiomarkerUnavailable(def.key)}
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-colors shrink-0 ${
+                                  isUnavailable
+                                    ? 'bg-stone-800 text-white border-stone-800'
+                                    : 'bg-stone-50 text-stone-500 border-stone-200 hover:bg-stone-100'
+                                }`}
+                              >
+                                {isUnavailable ? 'Skipped (N/A)' : 'Skip / N/A'}
+                              </button>
+                            </div>
+                            {isUnavailable ? (
+                              <div className="text-[11px] text-stone-500 italic py-1.5 px-2 bg-stone-50 rounded-lg border border-dashed border-stone-200">
+                                Marked as not available yet — can be added later in Profile.
+                              </div>
+                            ) : (
+                              <div className="relative">
+                                <input
+                                  id={`onboarding-bio-${def.key}`}
+                                  type="number"
+                                  step={def.step}
+                                  min={def.min}
+                                  max={def.max}
+                                  value={val}
+                                  onChange={e => {
+                                    const nextVal = e.target.value;
+                                    setBiomarkerInputs(prev => ({ ...prev, [def.key]: nextVal }));
+                                    if (biomarkerErrors[def.key]) {
+                                      setBiomarkerErrors(prev => {
+                                        const next = { ...prev };
+                                        delete next[def.key];
+                                        return next;
+                                      });
+                                    }
+                                  }}
+                                  placeholder={def.placeholder}
+                                  className="w-full pr-14 pl-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50/60 focus:bg-white focus:border-orange-500 outline-none text-xs font-mono text-stone-900"
+                                />
+                                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-stone-400 pointer-events-none">
+                                  {def.unit}
+                                </span>
+                              </div>
+                            )}
+                            {fieldErr && (
+                              <p className="text-[10px] font-semibold text-rose-600 mt-1">
+                                {fieldErr}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="flex gap-3 pt-3 border-t border-stone-100">

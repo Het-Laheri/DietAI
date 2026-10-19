@@ -749,7 +749,7 @@ export default function MessageInbox() {
 
                           {/* Tab: 13 Core Clinical Lab Biomarkers (Discussion Panel) */}
                           {templateTab[q.id!] === 'biomarkers' && (() => {
-                            const patientLabs = patient?.labBiomarkers || DEFAULT_SAMPLE_LABS;
+                            const patientLabs = patient?.labBiomarkers || {};
                             const evaluatedBiomarkers = evaluateLabBiomarkers(patientLabs, patient?.gender || 'Female');
 
                             const handleInsertFullBiomarkerSummary = () => {

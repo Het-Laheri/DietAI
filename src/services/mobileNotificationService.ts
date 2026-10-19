@@ -2,6 +2,8 @@
 // Provides browser permission management, Service Worker registration,
 // device vibration, audio chime, in-app toast alerts, and native pop-up notification dispatching.
 
+import { authFetch } from './apiAuth';
+
 export type NotificationPermissionState = 'default' | 'granted' | 'denied' | 'unsupported';
 
 export interface MobileNotificationPayload {
@@ -12,6 +14,7 @@ export interface MobileNotificationPayload {
   tag?: string;
   type?: string;
   createdAt?: any;
+  diagnostics?: Record<string, any>;
 }
 
 type ToastCallback = (payload: MobileNotificationPayload) => void;
@@ -22,6 +25,8 @@ class MobileNotificationService {
   private seenNotificationIds = new Set<string>();
   private toastListeners = new Set<ToastCallback>();
   private syncChannel: BroadcastChannel | null = null;
+  private lastRole: 'dietician' | 'patient' | null = null;
+  private lastUserId?: string;
 
   constructor() {
     this.initServiceWorker();
@@ -36,11 +41,41 @@ class MobileNotificationService {
         this.syncChannel.onmessage = (event) => {
           if (event.data?.type === 'MARK_SEEN' && event.data.id) {
             this.seenNotificationIds.add(event.data.id);
+          } else if (event.data?.type === 'PUSH_DELIVERED' && event.data.id) {
+            // Service Worker already displayed this Web Push notification; mark seen to prevent duplicate alert
+            this.seenNotificationIds.add(event.data.id);
+            try {
+              const list = Array.from(this.seenNotificationIds).slice(-500);
+              localStorage.setItem('nutrisnap_seen_notifications', JSON.stringify(list));
+              if (event.data.diagnostics) {
+                const rawDiag = localStorage.getItem('nutrisnap_push_diagnostics');
+                const diagList = rawDiag ? JSON.parse(rawDiag) : [];
+                diagList.unshift({
+                  id: event.data.id,
+                  title: event.data.title,
+                  ...event.data.diagnostics,
+                });
+                localStorage.setItem(
+                  'nutrisnap_push_diagnostics',
+                  JSON.stringify(diagList.slice(0, 30))
+                );
+              }
+            } catch {
+              // ignore storage errors
+            }
           }
         };
       } catch (e) {
         console.warn('BroadcastChannel note:', e);
       }
+    }
+
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type === 'PUSH_SUBSCRIPTION_CHANGED' && this.lastRole) {
+          this.subscribeToPushNotifications(this.lastRole, this.lastUserId);
+        }
+      });
     }
   }
 
@@ -310,48 +345,73 @@ class MobileNotificationService {
       return false;
     }
 
+    this.lastRole = role;
+    this.lastUserId = userId;
+
     try {
       // 1. Ensure Service Worker is registered
       await this.initServiceWorker();
       const readyReg = await navigator.serviceWorker.ready;
 
-      // 2. Fetch VAPID Public Key from backend or fallback
+      // 2. Fetch active VAPID Public Key from backend (no stale hardcoded key fallback)
       let vapidPublicKey = '';
       try {
         const res = await fetch('/api/notifications/vapid-key');
         if (res.ok) {
           const data = await res.json();
-          vapidPublicKey = data.publicKey;
+          if (typeof data.publicKey === 'string') {
+            vapidPublicKey = data.publicKey.trim();
+          }
         }
       } catch {}
 
       if (!vapidPublicKey) {
-        vapidPublicKey = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY || 'BF0eHsETu6MTVR7eiyVk65qAqC8WEww3yH1wn5dh-836PtGxUk368pDq3udFCDZxxTyF1Hk9HE7dOkOz8q1zBTI';
+        vapidPublicKey = String((import.meta as any).env?.VITE_VAPID_PUBLIC_KEY || '').trim();
+      }
+      if (!vapidPublicKey) {
+        console.warn('[WebPush] No server VAPID public key available.');
+        return false;
       }
 
-      // 3. Check existing subscription or subscribe
+      const appServerKey = urlBase64ToUint8Array(vapidPublicKey);
+
+      // 3. Check existing subscription; if it was signed with a stale VAPID key, unsubscribe and re-subscribe
       let subscription = await readyReg.pushManager.getSubscription();
+      if (subscription && subscription.options?.applicationServerKey) {
+        const existingKey = new Uint8Array(subscription.options.applicationServerKey);
+        if (!uint8ArraysEqual(existingKey, appServerKey)) {
+          try {
+            await subscription.unsubscribe();
+          } catch {}
+          subscription = null;
+        }
+      }
+
       if (!subscription) {
-        const appServerKey = urlBase64ToUint8Array(vapidPublicKey);
         subscription = await readyReg.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: appServerKey
+          applicationServerKey: appServerKey,
         });
       }
 
-      // 4. Send subscription to server
+      // 4. Send authenticated subscription to server (also provisions daily meal reminders for patients)
       if (subscription) {
         const subJson = subscription.toJSON();
-        await fetch('/api/notifications/subscribe', {
+        const res = await authFetch('/api/notifications/subscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             subscription: subJson,
             role,
-            userId
-          })
+            userId,
+            timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+          }),
         });
-        console.log('[WebPush] Device subscribed to Push API:', role, userId || 'all');
+        if (!res.ok) {
+          console.warn('[WebPush] /api/notifications/subscribe returned HTTP', res.status);
+          return false;
+        }
+        console.log('[WebPush] Device subscribed to Push API:', role, userId || 'self');
         return true;
       }
     } catch (err) {
@@ -359,6 +419,48 @@ class MobileNotificationService {
     }
     return false;
   }
+
+  /**
+   * Authorized test-push helper: dispatches an immediate Web Push (`delaySeconds = 0`)
+   * or schedules a due reminder (`delaySeconds > 0`) so tab-closed background delivery can be verified.
+   */
+  public async sendTestPush(options?: {
+    delaySeconds?: number;
+    title?: string;
+    message?: string;
+    link?: string;
+  }): Promise<any> {
+    const res = await authFetch('/api/notifications/test-push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        delaySeconds: options?.delaySeconds ?? 0,
+        title: options?.title,
+        message: options?.message,
+        link: options?.link,
+      }),
+    });
+    return res.json();
+  }
+
+  /**
+   * Triggers the backend reminder processor (`/api/notifications/process-reminders`) on demand.
+   */
+  public async triggerDueRemindersCheck(): Promise<any> {
+    const res = await authFetch('/api/notifications/process-reminders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return res.json();
+  }
+}
+
+function uint8ArraysEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {

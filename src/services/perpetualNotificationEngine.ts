@@ -12,6 +12,7 @@ import {
   clearAllReadNotifications,
   Notification 
 } from './db';
+import { authFetch } from './apiAuth';
 import { mobileNotificationService } from './mobileNotificationService';
 
 type NotificationListener = (notifications: Notification[]) => void;
@@ -79,15 +80,13 @@ class PerpetualNotificationEngine {
 
     if (!this.isRunning || roleChanged) {
       this.isRunning = true;
+      this.hasBootstrapped = false;
       this.initEngine();
     }
 
     return () => {
       if (listener) {
         this.listeners.delete(listener);
-      }
-      if (this.listeners.size === 0) {
-        // Keep running in background to ensure alerts are never missed
       }
     };
   }
@@ -118,14 +117,13 @@ class PerpetualNotificationEngine {
       console.warn('Firestore subscription err:', e);
     }
 
-    // 2. Perpetual interval polling loop
-    // Runs every 4 seconds when tab is active, every 12 seconds when backgrounded
+    // 2. Perpetual interval polling loop (for live in-app bell badge updates while tab is open)
     const runLoop = () => {
       if (!this.isRunning) return;
       this.pollNow();
     };
 
-    this.pollIntervalId = setInterval(runLoop, 4500);
+    this.pollIntervalId = setInterval(runLoop, 15000);
 
     // Initial immediate poll
     this.pollNow();
@@ -147,13 +145,12 @@ class PerpetualNotificationEngine {
       const notifs = await getNotifications(this.role, this.userId);
       this.handleIncomingNotifications(notifs);
 
-      // 2. Try HTTP poll endpoint for extra cross-device reliability
+      // 2. Try authenticated HTTP poll endpoint for extra cross-device reliability
       try {
-        const res = await fetch('/api/queries/poll', { method: 'GET' });
+        const res = await authFetch('/api/queries/poll', { method: 'GET' });
         if (res.ok) {
           const data = await res.json();
           if (data?.queries || data?.notes) {
-            // Signal local event to trigger fresh compute if any changes
             window.dispatchEvent(new CustomEvent('nutrisnap:query_change'));
           }
         }
@@ -166,12 +163,13 @@ class PerpetualNotificationEngine {
   }
 
   /**
-   * Process fresh list of notifications and trigger perpetual alerts
+   * Process fresh list of notifications without re-triggering historical reminders on app startup.
+   * Background reminders are delivered on schedule via Web Push (`public/sw.js`) while the tab is closed.
    */
   private handleIncomingNotifications(notifs: Notification[]) {
     this.currentNotifications = notifs;
 
-    // Broadcast updated list to all subscribers
+    // Broadcast updated list to all subscribers (populates the in-app notification bell & drawer)
     this.listeners.forEach(listener => {
       try {
         listener(notifs);
@@ -181,24 +179,34 @@ class PerpetualNotificationEngine {
     });
 
     const unread = notifs.filter(n => !n.read);
+    const nowMs = Date.now();
 
     if (!this.hasBootstrapped) {
-      // First boot: alert for any unseen unread notifications (up to 3 most recent to avoid chime flood)
-      const unseenUnread = unread.filter(n => n.id && !mobileNotificationService.isSeen(n.id));
-      unseenUnread.slice(0, 3).forEach(n => {
-        this.triggerAlert(n);
-      });
-      // Mark older ones as seen so they don't repeatedly chime on subsequent polls
-      unseenUnread.slice(3).forEach(n => {
-        if (n.id) mobileNotificationService.markSeen(n.id);
-      });
+      // First boot upon opening/reopening the app:
+      // Mark pre-existing historical notifications (or notifications already dispatched via Web Push)
+      // as seen so reopening the website does NOT fire a delayed startup popup burst.
+      for (const n of unread) {
+        if (!n.id) continue;
+        const createdMs = this.parseTimestamp(n.createdAt);
+        const isFreshLiveEvent = createdMs > 0 && nowMs - createdMs < 20_000;
+        const alreadyPushed = Boolean((n as any).pushDispatched);
+
+        if (isFreshLiveEvent && !alreadyPushed && !mobileNotificationService.isSeen(n.id)) {
+          this.triggerAlert(n);
+        } else {
+          mobileNotificationService.markSeen(n.id);
+        }
+      }
       this.hasBootstrapped = true;
     } else {
-      // Perpetual mode: ANY new unread notification triggers immediately!
+      // Live session mode: alert only for genuinely new notifications that weren't already displayed by SW Push
       for (const n of unread) {
-        if (n.id && !mobileNotificationService.isSeen(n.id)) {
-          this.triggerAlert(n);
+        if (!n.id || mobileNotificationService.isSeen(n.id)) continue;
+        if ((n as any).pushDispatched) {
+          mobileNotificationService.markSeen(n.id);
+          continue;
         }
+        this.triggerAlert(n);
       }
     }
   }

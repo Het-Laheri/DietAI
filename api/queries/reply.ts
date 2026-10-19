@@ -1,5 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { guard, getAdminDb, parseBody, sendError, HttpError } from '../_lib/security.js';
+import { dispatchWebPushToRecipient } from '../_lib/webPush.js';
 
 const ALLOWED_STATUSES = new Set(['pending', 'viewed', 'answered']);
 
@@ -39,16 +40,32 @@ export default async function handler(req: any, res: any) {
     const targetPatientId = snap.get('patientId');
     if (reply && targetPatientId) {
       try {
-        await db.collection('notifications').add({
+        const notifId = `notif_reply_${queryId}_${Date.now()}`;
+        const title = 'Dietician Answered Your Query 🩺';
+        const message = `Your dietician replied: "${String(reply).slice(0, 80)}${String(reply).length > 80 ? '...' : ''}"`;
+        const pushSummary = await dispatchWebPushToRecipient({
+          id: notifId,
+          title,
+          message,
+          link: '/patient/inbox',
+          tag: notifId,
+          type: 'QUERY_ANSWERED',
+          recipientRole: 'patient',
+          recipientId: String(targetPatientId),
+        });
+
+        await db.collection('notifications').doc(notifId).set({
           recipientRole: 'patient',
           recipientId: targetPatientId,
           patientId: targetPatientId,
           patientName: snap.get('patientName') || '',
           type: 'QUERY_ANSWERED',
-          title: 'Dietician Answered Your Query 🩺',
-          message: `Your dietician replied: "${String(reply).slice(0, 80)}${String(reply).length > 80 ? '...' : ''}"`,
+          title,
+          message,
           link: '/patient/inbox',
           read: false,
+          pushDispatched: pushSummary.sentCount > 0,
+          diagnostics: pushSummary.diagnostics,
           createdAt: FieldValue.serverTimestamp(),
         });
       } catch {

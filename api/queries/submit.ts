@@ -1,5 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { guard, getAdminDb, parseBody, sendError, HttpError } from '../_lib/security.js';
+import { dispatchWebPushToRecipient } from '../_lib/webPush.js';
 
 const MAX_QUESTION_LENGTH = 4000;
 
@@ -32,15 +33,30 @@ export default async function handler(req: any, res: any) {
     });
 
     try {
-      await db.collection('notifications').add({
+      const notifId = `notif_query_${docRef.id}`;
+      const title = 'New Patient Consultation Query 💬';
+      const message = `${finalPatientName} asked: "${text.slice(0, 90)}"`;
+      const pushSummary = await dispatchWebPushToRecipient({
+        id: notifId,
+        title,
+        message,
+        link: '/dietician/inbox',
+        tag: notifId,
+        type: 'QUERY_SUBMITTED',
+        recipientRole: 'dietician',
+      });
+
+      await db.collection('notifications').doc(notifId).set({
         recipientRole: 'dietician',
         type: 'QUERY_SUBMITTED',
-        title: 'New Patient Consultation Query 💬',
+        title,
         patientId: finalPatientId,
         patientName: finalPatientName,
-        message: `${finalPatientName} asked: "${text.slice(0, 90)}"`,
+        message,
         link: '/dietician/inbox',
         read: false,
+        pushDispatched: pushSummary.sentCount > 0,
+        diagnostics: pushSummary.diagnostics,
         createdAt: FieldValue.serverTimestamp(),
       });
     } catch (notifErr) {

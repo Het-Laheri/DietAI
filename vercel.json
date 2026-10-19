@@ -59,8 +59,38 @@
       "destination": "/api/payment/verify-payment"
     },
     {
+      "source": "/api/auth/change-password",
+      "destination": "/api/auth/change-password"
+    },
+    {
+      "source": "/api/notifications/vapid-key",
+      "destination": "/api/notifications/vapid-key"
+    },
+    {
+      "source": "/api/notifications/subscribe",
+      "destination": "/api/notifications/subscribe"
+    },
+    {
+      "source": "/api/notifications/reminders",
+      "destination": "/api/notifications/reminders"
+    },
+    {
+      "source": "/api/notifications/process-reminders",
+      "destination": "/api/notifications/process-reminders"
+    },
+    {
+      "source": "/api/notifications/test-push",
+      "destination": "/api/notifications/test-push"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/notifications/process-reminders",
+      "schedule": "0 3 * * *"
     }
   ],
   "headers": [

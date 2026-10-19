@@ -14,25 +14,49 @@ function isOwnApiRequest(input: RequestInfo | URL): boolean {
   }
 }
 
+async function getCurrentIdTokenWithHydrationWait(timeoutMs = 3000): Promise<string | null> {
+  try {
+    if (!auth.currentUser && typeof (auth as any).authStateReady === 'function') {
+      await Promise.race([
+        (auth as any).authStateReady(),
+        new Promise((r) => setTimeout(r, timeoutMs)),
+      ]);
+    }
+    if (!auth.currentUser) return null;
+    return await auth.currentUser.getIdToken();
+  } catch {
+    return null;
+  }
+}
+
+export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const token = await getCurrentIdTokenWithHydrationWait();
+  const headers = new Headers(
+    init?.headers || (typeof Request !== 'undefined' && input instanceof Request ? input.headers : undefined)
+  );
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return fetch(input, { ...init, headers });
+}
+
 export function installApiAuth() {
   if (installed || typeof window === 'undefined' || typeof window.fetch !== 'function') return;
   installed = true;
   const originalFetch = window.fetch.bind(window);
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (!isOwnApiRequest(input) || !auth.currentUser) {
+    if (!isOwnApiRequest(input)) {
       return originalFetch(input, init);
     }
-    let token: string | null = null;
-    try {
-      token = await auth.currentUser.getIdToken();
-    } catch {
-      token = null;
-    }
-    if (!token) return originalFetch(input, init);
-
     const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
-    if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
+    if (!headers.has('Authorization')) {
+      const token = await getCurrentIdTokenWithHydrationWait();
+      if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+    }
     return originalFetch(input, { ...init, headers });
   };
 }
+

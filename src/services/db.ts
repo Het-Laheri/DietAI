@@ -2147,19 +2147,19 @@ export async function createNotification(data: Notification) {
     await setDoc(doc(db, 'notifications', notifId), cleanDoc);
   } catch {}
 
-  // 4. Dispatch Web Push notification to devices via backend (works even when tab/browser is closed!)
+  // 4. Dispatch Web Push notification to devices via authenticated backend (works even when tab/browser is closed!)
   try {
     if (typeof window !== 'undefined') {
-      fetch('/api/notifications/send-push', {
+      fetch('/api/notifications/test-push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          role: notifObj.recipientRole,
+          id: notifObj.id,
+          recipientRole: notifObj.recipientRole,
           recipientId: notifObj.recipientId || notifObj.patientId,
           title: notifObj.title || 'NutriSnap Health Alert',
           message: notifObj.message,
           link: notifObj.link,
-          tag: notifObj.id,
           type: notifObj.type
         })
       }).catch(() => {});

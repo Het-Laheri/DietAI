@@ -22,6 +22,12 @@ import aiChatHandler from './api/ai/chat.js';
 import aiMealPlanHandler from './api/ai/meal-plan.js';
 import aiScanFoodHandler from './api/ai/scan-food.js';
 import changePasswordHandler from './api/auth/change-password.js';
+import notificationsVapidKeyHandler from './api/notifications/vapid-key.js';
+import notificationsSubscribeHandler from './api/notifications/subscribe.js';
+import notificationsRemindersHandler from './api/notifications/reminders.js';
+import notificationsProcessRemindersHandler from './api/notifications/process-reminders.js';
+import notificationsTestPushHandler from './api/notifications/test-push.js';
+import { processDueReminders } from './api/_lib/webPush.js';
 
 // Upstash Redis Initialization
 let redis: Redis | null = null;
@@ -189,6 +195,11 @@ mount(['/api/ai/chat'], aiChatHandler);
 mount(['/api/ai/meal-plan'], aiMealPlanHandler);
 mount(['/api/ai/scan-food'], aiScanFoodHandler);
 mount(['/api/auth/change-password'], changePasswordHandler);
+mount(['/api/notifications/vapid-key'], notificationsVapidKeyHandler);
+mount(['/api/notifications/subscribe'], notificationsSubscribeHandler);
+mount(['/api/notifications/reminders'], notificationsRemindersHandler);
+mount(['/api/notifications/process-reminders'], notificationsProcessRemindersHandler);
+mount(['/api/notifications/test-push'], notificationsTestPushHandler);
 
 // ─── Development-only AI routes (not deployed to Vercel; see UNC-001) ───
   app.post(['/api/ai/estimate-food', '/ai/estimate-food'], requireApiAuth(), aiRateLimitMiddleware, async (req: express.Request, res: express.Response): Promise<any> => {
@@ -359,6 +370,21 @@ async function startServer() {
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`Server running on port ${PORT}`);
     });
+
+    // Persistent backend scheduler worker: processes due reminders every 15s independently of browser tabs
+    const schedulerInterval = setInterval(async () => {
+      try {
+        const result = await processDueReminders();
+        if (result.processedCount > 0) {
+          console.log(
+            `[ReminderScheduler] Processed ${result.processedCount} due reminder(s): sent=${result.sentCount}, retry=${result.retryScheduledCount}, noSub=${result.noActiveSubCount}, failed=${result.failedCount}`
+          );
+        }
+      } catch (err) {
+        console.warn('[ReminderScheduler] Tick warning:', err);
+      }
+    }, 15_000);
+    schedulerInterval.unref?.();
   }
 }
 

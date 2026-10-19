@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { Notification } from '../services/db';
+import { authFetch } from '../services/apiAuth';
 import { perpetualNotificationEngine } from '../services/perpetualNotificationEngine';
 import { mobileNotificationService } from '../services/mobileNotificationService';
 
@@ -40,6 +41,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     // Auto-register device for Web Push notifications if permission is granted
     if (mobileNotificationService.getPermission() === 'granted') {
       mobileNotificationService.subscribeToPushNotifications(role, userId).catch(() => {});
+    } else if (role === 'patient') {
+      // Provision backend daily meal reminders even before push permission is toggled
+      authFetch('/api/notifications/reminders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ensure-daily-meal-reminders',
+          timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+        }),
+      }).catch(() => {});
     }
 
     const unsubscribe = perpetualNotificationEngine.start(role, userId, (updatedNotifs) => {

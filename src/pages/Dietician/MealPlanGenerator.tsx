@@ -1001,7 +1001,7 @@ export default function MealPlanGenerator() {
   const [recipeTab, setRecipeTab] = useState<'search' | 'filter' | 'smart'>('search');
   const [recipeSearch, setRecipeSearch] = useState('');
   const [selectedCategoryTag, setSelectedCategoryTag] = useState<string>('All');
-  const [recipeDisplayLimit, setRecipeDisplayLimit] = useState<number>(30);
+  const [recipeDisplayLimit, setRecipeDisplayLimit] = useState<number>(100);
 
   // 7-Day Weekly Meals State (keyed by WeekDay) + Current Day `meals`
   const [weeklyMeals, setWeeklyMeals] = useState<Record<WeekDay, MealSlotSection[]>>(() => {
@@ -1382,81 +1382,143 @@ export default function MealPlanGenerator() {
     }
   };
 
-  // Recipe catalog combined from PLATE_FOODS (457), DEFAULT_CLINICAL_RECIPES (200) and MASTER_FOODS (73)
+  // Classify any dish into the 5 core food group categories:
+  // 'Cereal' | 'Milk & Milk Products' | 'Vegetables' | 'Non-Veg' | 'Dal & Pulses'
+  const classifyDishCategories = (
+    dishName: string,
+    dietaryType?: string,
+    clinicalFocus?: string,
+    ingredients?: string[]
+  ): ('Cereal' | 'Milk & Milk Products' | 'Vegetables' | 'Non-Veg' | 'Dal & Pulses')[] => {
+    const name = (dishName || '').toLowerCase();
+    const ingText = Array.isArray(ingredients) ? ingredients.join(' ').toLowerCase() : '';
+    const combined = `${name} ${ingText}`;
+    const dt = (dietaryType || '').toLowerCase();
+    const focus = (clinicalFocus || '').toLowerCase();
+
+    // 1. Non-Veg (meat, poultry, fish, seafood, egg)
+    const isNonVeg =
+      dt === 'non-vegetarian' ||
+      dt === 'eggetarian' ||
+      /\b(chicken|mutton|fish|prawn|prawns|shrimp|crab|pomfret|rohu|surmai|bangda|hilsa|rawas|salmon|tuna|sardine|mackerel|meat|keema|kebab|kabab|murgh|gosht|nihari|haleem|paya|kombdi|kolambi|tisrya|bombil|egg|eggs|anda|omelette|omelet)\b/i.test(combined);
+
+    if (isNonVeg) {
+      return ['Non-Veg'];
+    }
+
+    const groups: ('Cereal' | 'Milk & Milk Products' | 'Vegetables' | 'Non-Veg' | 'Dal & Pulses')[] = [];
+
+    // 2. Milk & Milk Products (milk, curd, raita, paneer, buttermilk/chaas, lassi, kadhi, cheese, kheer, etc.)
+    const isPlantMilkOrNutButter = /\b(almond\s*milk|coconut\s*milk|soy\s*milk|soya\s*milk|oat\s*milk|peanut\s*butter)\b/i.test(name);
+    const hasDairy =
+      focus === 'milk & milk products' ||
+      (!isPlantMilkOrNutButter &&
+        /\b(milk|curd|dahi|yogurt|yoghurt|raita|paneer|chaas|chhaas|buttermilk|lassi|shrikhand|kadhi|kheer|rabdi|rabri|rasmalai|sandesh|rasgulla|chenna|chhena|khoa|khoya|mava|cheese|basundi|payasam|phirni|mishti\s*doi|solkadhi|mor\s*kuzhambu|doodh|malai|kulfi|ghee|makhan)\b/i.test(name));
+    if (hasDairy) {
+      groups.push('Milk & Milk Products');
+    }
+
+    // 3. Dal & Pulses (lentils, pulses, legumes, sprouts, chana, rajma, chole, moong, sambar, rasam, besan, soya/tofu)
+    const hasDalPulses =
+      /\b(dal|daal|dhal|moong|mung|masoor|toor|tuvar|arhar|urad|chana|channa|chole|chhole|rajma|lobia|rongi|matki|moth|kulthi|horse\s*gram|sprout|sprouts|usal|misal|sambar|sambhar|rasam|amti|varan|pithla|zunka|besan|gatte|kadala|sundal|ghugni|kootu|parippu|pappu|lentil|lentils|legume|pulse|pulses|soyabean|soya|tofu|edamame|hummus|falafel|dalma|dhansak|sattu|adai|pesarattu|medu\s*vada|dal\s*vada)\b/i.test(name);
+    if (hasDalPulses) {
+      groups.push('Dal & Pulses');
+    }
+
+    // 4. Cereal (wheat, rice, millets, oats, roti, phulka, paratha, bhakri, poha, upma, idli, dosa, daliya, bread, etc.)
+    const hasCereal =
+      focus === 'cereals & grains' ||
+      /\b(roti|phulka|chapati|chappati|paratha|parantha|thepla|bhakri|thalipeeth|kulcha|naan|bhatura|bhature|puri|poori|kachori|luchi|baati|bati|litti|rice|bhaat|bhat|pulao|pulav|biryani|khichdi|khichuri|bisi\s*bele|pongal|pulihora|chitranna|poha|pohe|aval|upma|uppittu|sheera|kesari|idli|dosa|uttapam|uthappam|appe|appam|paniyaram|paddu|puttu|idiyappam|pathiri|dhokla|khandvi|handvo|muthiya|khaman|locho|oats|oatmeal|daliya|dalia|lapsi|porridge|ragi|nachni|mudde|ambali|jowar|jolada|bajra|kambu|millet|kangni|foxtail|kodo|kutki|barnyard|sama|moraiyo|bhagar|sabudana|sago|quinoa|amaranth|rajgira|kuttu|buckwheat|wheat|atta|maida|suji|sooji|rava|semolina|vermicelli|seviyan|sevai|noodle|noodles|hakka|chowmein|pasta|macaroni|spaghetti|bread|toast|sandwich|burger|pav|bun|pizza|wrap|roll|frankie|khakhra|makhana|foxnut|murmura|kurmura|bhel|papdi|samosa|vada\s*pav|dabeli|corn|makki|popcorn|pancake|cheela|chilla|chila|akki\s*roti|rumali)\b/i.test(name);
+    if (hasCereal) {
+      groups.push('Cereal');
+    }
+
+    // 5. Vegetables (all vegetable subzis, bhajis, shaaks, poriyals, thorans, salads, soups, gourds, leafy greens)
+    if (groups.length === 0) {
+      groups.push('Vegetables');
+    }
+
+    return groups;
+  };
+
+  // Recipe catalog combined from PLATE_FOODS (457), DEFAULT_CLINICAL_RECIPES (200) and MASTER_FOODS (73),
+  // deduplicated by dish name and sorted in strict alphabetical order (A–Z)
   const recipeDatabase = useMemo(() => {
-    const list = [
-      ...PLATE_FOODS.map(pf => ({
-        id: `pf_${pf.id}`,
-        name: pf.dish,
-        portion: pf.serving,
-        calories: Math.round(pf.cal),
-        protein: pf.protein,
-        carbs: pf.carb,
-        fat: pf.fat,
-        fibre: pf.fibre,
-        sodium: pf.sodium,
-        potassium: pf.potassium,
-        region: pf.region,
-        tags: [
-          pf.carb > 25 ? 'Cereal / Grains' : 'Vegetable',
-          pf.protein >= 6 ? 'Protein Rich' : null,
-          pf.fibre >= 3 ? 'Fibre Rich' : null,
-          pf.potassium < 200 ? 'Low Potassium' : 'Potassium Rich',
-          /dal|moong|chana|rajma|sprout|lentil/i.test(pf.dish) ? 'Pulses / Dal' : null,
-          /milk|curd|paneer|chaas|buttermilk|yogurt/i.test(pf.dish) ? 'Milk & Milk Products' : null
-        ].filter(Boolean) as string[]
-      })),
-      ...DEFAULT_CLINICAL_RECIPES.map(cr => ({
-        id: cr.id || `cr_${cr.name}`,
-        name: cr.name,
-        portion: cr.portionSize || '1 serving',
-        calories: Math.round(cr.calories),
-        protein: cr.protein,
-        carbs: cr.carbs,
-        fat: cr.fat,
-        fibre: cr.fiber || 3.5,
-        sodium: cr.sodium || 80,
-        potassium: cr.potassium || 220,
-        region: 'Clinical Exchange',
-        tags: [
-          cr.carbs > 25 ? 'Cereal / Grains' : 'Vegetable',
-          cr.protein >= 8 ? 'Protein Rich' : null,
-          (cr.fiber || 0) >= 4 ? 'Fibre Rich' : null,
-          /dal|moong|chana|rajma|sprout|lentil/i.test(cr.name) ? 'Pulses / Dal' : null,
-          /milk|curd|paneer|chaas|buttermilk|yogurt/i.test(cr.name) ? 'Milk & Milk Products' : null
-        ].filter(Boolean) as string[]
-      }))
-   ,
-      ...MASTER_FOODS.map(mf => ({
-        id: mf.id || `mf_${mf.name}`,
-        name: mf.name,
-        portion: mf.portionSize || '1 serving',
-        calories: Math.round(mf.calories),
-        protein: mf.protein,
-        carbs: mf.carbs,
-        fat: mf.fat,
-        fibre: mf.fiber || 0,
-        sodium: mf.sodium || 0,
-        potassium: mf.potassium || 0,
-        region: mf.clinicalFocus || 'Master Food List',
-        tags: [
-          mf.carbs > 25 ? 'Cereal / Grains' : 'Vegetable',
-          mf.protein >= 6 ? 'Protein Rich' : null,
-          (mf.fiber || 0) >= 3 ? 'Fibre Rich' : null,
-          (mf.potassium || 0) < 200 ? 'Low Potassium' : 'Potassium Rich',
-          /dal|moong|chana|rajma|sprout|lentil/i.test(mf.name) ? 'Pulses / Dal' : null,
-          /milk|curd|paneer|chaas|buttermilk|yogurt|lassi/i.test(mf.name) ? 'Milk & Milk Products' : null
-        ].filter(Boolean) as string[]
-      }))
+    const rawList = [
+      ...PLATE_FOODS.map(pf => {
+        const categories = classifyDishCategories(pf.dish, pf.dietaryType, undefined, undefined);
+        return {
+          id: `pf_${pf.id}`,
+          name: pf.dish.trim(),
+          portion: pf.serving,
+          calories: Math.round(pf.cal),
+          protein: pf.protein,
+          carbs: pf.carb,
+          fat: pf.fat,
+          fibre: pf.fibre,
+          sodium: pf.sodium,
+          potassium: pf.potassium,
+          region: pf.region,
+          categories,
+          tags: categories as string[]
+        };
+      }),
+      ...DEFAULT_CLINICAL_RECIPES.map(cr => {
+        const categories = classifyDishCategories(cr.name, cr.dietaryType, cr.clinicalFocus, cr.ingredients);
+        return {
+          id: cr.id || `cr_${cr.name}`,
+          name: cr.name.trim(),
+          portion: cr.portionSize || '1 serving',
+          calories: Math.round(cr.calories),
+          protein: cr.protein,
+          carbs: cr.carbs,
+          fat: cr.fat,
+          fibre: cr.fiber || 3.5,
+          sodium: cr.sodium || 80,
+          potassium: cr.potassium || 220,
+          region: 'Clinical Exchange',
+          categories,
+          tags: categories as string[]
+        };
+      }),
+      ...MASTER_FOODS.map(mf => {
+        const categories = classifyDishCategories(mf.name, mf.dietaryType, mf.clinicalFocus, mf.ingredients);
+        return {
+          id: mf.id || `mf_${mf.name}`,
+          name: mf.name.trim(),
+          portion: mf.portionSize || '1 serving',
+          calories: Math.round(mf.calories),
+          protein: mf.protein,
+          carbs: mf.carbs,
+          fat: mf.fat,
+          fibre: mf.fiber || 0,
+          sodium: mf.sodium || 0,
+          potassium: mf.potassium || 0,
+          region: mf.clinicalFocus || 'Master Food List',
+          categories,
+          tags: categories as string[]
+        };
+      })
     ];
-    return list;
+
+    // Deduplicate by lowercase dish name and sort A-Z
+    const seen = new Set<string>();
+    const uniqueList = rawList.filter(item => {
+      const key = item.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    uniqueList.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    return uniqueList;
   }, []);
 
-  // Filtered recipe list for Right Panel with Clinical & Biomarker Awareness
+  // Filtered recipe list for Right Panel (sorted A-Z)
   const filteredRecipes = useMemo(() => {
     let list = recipeDatabase;
 
-    if (recipeTab === 'smart') {
+    if (recipeTab === 'smart' && selectedCategoryTag !== 'Non-Veg') {
       list = list.filter(r => {
         const badges = evaluateFoodItemForPatient(r, meals.find(m => m.id === targetSlotId)?.title || 'any', clientProfile);
         return !badges.some(b => b.type === 'danger');
@@ -1464,10 +1526,20 @@ export default function MealPlanGenerator() {
     }
 
     if (selectedCategoryTag !== 'All') {
-      if (selectedCategoryTag === 'Diabetic Safe') {
+      if (
+        selectedCategoryTag === 'Cereal' ||
+        selectedCategoryTag === 'Milk & Milk Products' ||
+        selectedCategoryTag === 'Vegetables' ||
+        selectedCategoryTag === 'Non-Veg' ||
+        selectedCategoryTag === 'Dal & Pulses'
+      ) {
+        list = list.filter(r => r.categories.includes(selectedCategoryTag as any));
+      } else if (selectedCategoryTag === 'Diabetic Safe') {
         list = list.filter(r => r.carbs <= 25 && (r.fibre || 0) >= 2.5);
       } else if (selectedCategoryTag === 'Low Sodium') {
         list = list.filter(r => (r.sodium || 0) <= 100);
+      } else if (selectedCategoryTag === 'Low Potassium') {
+        list = list.filter(r => (r.potassium || 0) <= 180);
       } else if (selectedCategoryTag === 'Low Fat') {
         list = list.filter(r => r.fat <= 5);
       } else if (selectedCategoryTag === 'High Fibre') {
@@ -1480,50 +1552,59 @@ export default function MealPlanGenerator() {
       } else if (selectedCategoryTag === 'Dairy Free') {
         const dairyWords = ['milk', 'paneer', 'curd', 'yogurt', 'cheese', 'buttermilk', 'butter', 'ghee', 'chaas', 'lassi'];
         list = list.filter(r => !dairyWords.some(w => r.name.toLowerCase().includes(w)));
-      } else {
-        list = list.filter(r =>
-          r.tags.some(t => t.toLowerCase().includes(selectedCategoryTag.toLowerCase())) ||
-          r.region.toLowerCase().includes(selectedCategoryTag.toLowerCase())
-        );
       }
     }
 
     if (recipeSearch.trim()) {
-      const q = recipeSearch.toLowerCase();
-      list = list.filter(r => r.name.toLowerCase().includes(q) || r.region.toLowerCase().includes(q));
+      const q = recipeSearch.trim().toLowerCase();
+      list = list
+        .filter(r => r.name.toLowerCase().includes(q))
+        .sort((a, b) => {
+          const aStarts = a.name.toLowerCase().startsWith(q) ? 0 : 1;
+          const bStarts = b.name.toLowerCase().startsWith(q) ? 0 : 1;
+          if (aStarts !== bStarts) return aStarts - bStarts;
+          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+        });
     }
 
     return list;
   }, [recipeDatabase, selectedCategoryTag, recipeSearch, recipeTab, clientProfile, meals, targetSlotId]);
 
-  // Filtered recipe list inside Add/Swap Modal
+  // Filtered recipe list inside Add/Swap Modal (sorted A-Z)
   const modalFilteredRecipes = useMemo(() => {
     let list = recipeDatabase;
     const slotTitle = activeModal?.slotTitle || 'Lunch';
 
-    if (modalFilter === 'Safe for Patient') {
-      list = list.filter(r => {
-        const b = evaluateFoodItemForPatient(r, slotTitle, clientProfile);
-        return !b.some(x => x.type === 'danger' || x.type === 'warning');
-      });
-    } else if (modalFilter === 'Diabetic Low-GI') {
-      list = list.filter(r => r.carbs <= 25 && (r.fibre || 0) >= 2.5);
-    } else if (modalFilter === 'Low Sodium') {
-      list = list.filter(r => (r.sodium || 0) <= 100);
-    } else if (modalFilter === 'High Protein') {
-      list = list.filter(r => r.protein >= 7);
-    } else if (modalFilter === 'High Fibre') {
-      list = list.filter(r => (r.fibre || 0) >= 3.5);
-    } else if (modalFilter === 'Low Potassium') {
-      list = list.filter(r => (r.potassium || 0) <= 180);
+    if (modalFilter !== 'All') {
+      if (
+        modalFilter === 'Cereal' ||
+        modalFilter === 'Milk & Milk Products' ||
+        modalFilter === 'Vegetables' ||
+        modalFilter === 'Non-Veg' ||
+        modalFilter === 'Dal & Pulses'
+      ) {
+        list = list.filter(r => r.categories.includes(modalFilter as any));
+      } else if (modalFilter === 'Safe for Patient') {
+        list = list.filter(r => {
+          const b = evaluateFoodItemForPatient(r, slotTitle, clientProfile);
+          return !b.some(x => x.type === 'danger' || x.type === 'warning');
+        });
+      }
     }
 
     if (modalSearch.trim()) {
-      const q = modalSearch.toLowerCase();
-      list = list.filter(r => r.name.toLowerCase().includes(q) || r.region.toLowerCase().includes(q));
+      const q = modalSearch.trim().toLowerCase();
+      list = list
+        .filter(r => r.name.toLowerCase().includes(q))
+        .sort((a, b) => {
+          const aStarts = a.name.toLowerCase().startsWith(q) ? 0 : 1;
+          const bStarts = b.name.toLowerCase().startsWith(q) ? 0 : 1;
+          if (aStarts !== bStarts) return aStarts - bStarts;
+          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+        });
     }
 
-    return list.slice(0, 60);
+    return list.slice(0, 120);
   }, [recipeDatabase, modalFilter, modalSearch, activeModal, clientProfile]);
 
   // Daily Totals Calculation for Active Day
@@ -3278,22 +3359,28 @@ export default function MealPlanGenerator() {
                                   </div>
                                 </div>
 
-                                {/* Labeled Macros strip: Cal, P, C, F, Fib */}
+                                {/* Labeled Macros & Electrolytes strip: Cal, C, P, F, Fib, Na, K */}
                                 <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 text-[11px] text-stone-600 font-mono bg-white/80 px-2.5 py-1 rounded-lg border border-stone-200/80">
                                   <span className="font-black text-stone-900" title="Calories">
                                     {item.calories} <span className="text-[9px] font-sans font-bold text-stone-500">kcal</span>
                                   </span>
-                                  <span className="text-sky-800 font-semibold" title="Protein (g)">
-                                    <span className="text-[9px] font-sans font-bold text-sky-600/80 mr-0.5">P</span>{item.protein}g
-                                  </span>
                                   <span className="text-emerald-800 font-semibold" title="Carbohydrates (g)">
                                     <span className="text-[9px] font-sans font-bold text-emerald-600/80 mr-0.5">C</span>{item.carbs}g
+                                  </span>
+                                  <span className="text-sky-800 font-semibold" title="Protein (g)">
+                                    <span className="text-[9px] font-sans font-bold text-sky-600/80 mr-0.5">P</span>{item.protein}g
                                   </span>
                                   <span className="text-amber-800 font-semibold" title="Fat (g)">
                                     <span className="text-[9px] font-sans font-bold text-amber-600/80 mr-0.5">F</span>{item.fat}g
                                   </span>
                                   <span className="text-teal-800" title="Dietary Fibre (g)">
                                     <span className="text-[9px] font-sans font-bold text-teal-600/80 mr-0.5">Fib</span>{item.fibre}g
+                                  </span>
+                                  <span className="text-rose-800 font-semibold" title="Sodium (mg)">
+                                    <span className="text-[9px] font-sans font-bold text-rose-600/80 mr-0.5">Na</span>{item.sodium}mg
+                                  </span>
+                                  <span className="text-purple-800 font-semibold" title="Potassium (mg)">
+                                    <span className="text-[9px] font-sans font-bold text-purple-600/80 mr-0.5">K</span>{item.potassium}mg
                                   </span>
                                 </div>
                               </div>
@@ -3642,9 +3729,14 @@ export default function MealPlanGenerator() {
         {/* COLUMN 3 (RIGHT, 3 COLS): RECIPE DATABASE LIBRARY */}
         {/* ======================================================== */}
         <div className="lg:col-span-3 bg-white rounded-2xl border border-stone-200 p-4 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-serif font-bold text-stone-900 text-sm">Recipe Database</h3>
-            <span className="text-[10px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md font-bold">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <h3 className="font-serif font-bold text-stone-900 text-sm">Recipe Database</h3>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 border border-stone-200" title="Sorted in strict alphabetical order (A–Z)">
+                A–Z ({filteredRecipes.length})
+              </span>
+            </div>
+            <span className="text-[10px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md font-bold truncate">
               Target: {meals.find(m => m.id === targetSlotId)?.title}
             </span>
           </div>
@@ -3690,16 +3782,26 @@ export default function MealPlanGenerator() {
               type="text"
               value={recipeSearch}
               onChange={e => setRecipeSearch(e.target.value)}
-              placeholder="Search recipe (e.g., poha, dal, paneer)..."
-              className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              placeholder="Search recipe A–Z (e.g., poha, dal, paneer)..."
+              className="w-full pl-9 pr-8 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
+            {recipeSearch && (
+              <button
+                type="button"
+                onClick={() => setRecipeSearch('')}
+                title="Clear search"
+                className="w-5 h-5 rounded-full bg-stone-200 hover:bg-stone-300 text-stone-600 flex items-center justify-center absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </div>
 
           {/* Category / Condition Filter Chips */}
           <div className="flex flex-wrap gap-1.5 text-[11px]">
             {(recipeTab === 'filter'
               ? ['All', 'Diabetic Safe', 'Low Sodium', 'Low Fat', 'High Fibre', 'High Protein', 'Gluten Free', 'Dairy Free']
-              : ['All', 'Cereal / Grains', 'Pulses / Dal', 'Protein Rich', 'Milk & Milk Products', 'Vegetable', 'Fibre Rich', 'Low Potassium']
+              : ['All', 'Cereal', 'Milk & Milk Products', 'Vegetables', 'Non-Veg', 'Dal & Pulses']
             ).map(cat => (
               <button
                 key={cat}
@@ -3736,7 +3838,7 @@ export default function MealPlanGenerator() {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <h5 className="font-bold text-xs text-stone-900 leading-tight">{rec.name}</h5>
+                      <h5 className="font-bold text-xs text-stone-900 leading-tight break-words">{rec.name}</h5>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {rec.tags.slice(0, 2).map((tag, tidx) => (
                           <span
@@ -3773,16 +3875,30 @@ export default function MealPlanGenerator() {
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-between text-[11px] text-stone-500 pt-1 border-t border-stone-200/60">
-                    <span className="font-medium">{rec.portion}</span>
-                    <div className="flex items-center gap-1.5 font-semibold text-stone-700">
-                      <strong className="text-stone-900">{rec.calories} kcal</strong>
-                      <span>•</span>
-                      <span>P {rec.protein}g</span>
-                      <span>•</span>
-                      <span>C {rec.carbs}g</span>
-                      <span>•</span>
-                      <span>F {rec.fat}g</span>
+                  <div className="pt-1.5 border-t border-stone-200/60 space-y-1 text-[11px]">
+                    <div className="flex items-center justify-between text-stone-600">
+                      <span className="font-medium text-stone-500">{rec.portion}</span>
+                      <strong className="text-stone-900 font-bold">{rec.calories} kcal</strong>
+                    </div>
+                    <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-[10.5px] font-mono bg-white/80 px-2 py-1 rounded-lg border border-stone-200/70">
+                      <span className="text-emerald-800 font-semibold" title="Carbohydrates (g)">
+                        <span className="text-[9px] font-sans font-bold text-emerald-600/80 mr-0.5">C</span>{rec.carbs}g
+                      </span>
+                      <span className="text-sky-800 font-semibold" title="Protein (g)">
+                        <span className="text-[9px] font-sans font-bold text-sky-600/80 mr-0.5">P</span>{rec.protein}g
+                      </span>
+                      <span className="text-amber-800 font-semibold" title="Fat (g)">
+                        <span className="text-[9px] font-sans font-bold text-amber-600/80 mr-0.5">F</span>{rec.fat}g
+                      </span>
+                      <span className="text-teal-800 font-semibold" title="Dietary Fibre (g)">
+                        <span className="text-[9px] font-sans font-bold text-teal-600/80 mr-0.5">Fib</span>{rec.fibre}g
+                      </span>
+                      <span className="text-rose-800 font-semibold" title="Sodium (mg)">
+                        <span className="text-[9px] font-sans font-bold text-rose-600/80 mr-0.5">Na</span>{rec.sodium}mg
+                      </span>
+                      <span className="text-purple-800 font-semibold" title="Potassium (mg)">
+                        <span className="text-[9px] font-sans font-bold text-purple-600/80 mr-0.5">K</span>{rec.potassium}mg
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -4020,14 +4136,24 @@ export default function MealPlanGenerator() {
                     type="text"
                     value={modalSearch}
                     onChange={e => setModalSearch(e.target.value)}
-                    placeholder="Search 657+ Indian & clinical foods (e.g., cheela, dal, roti, paneer, idli, salad)..."
-                    className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="Search A–Z across Indian & clinical foods (e.g., cheela, dal, roti, paneer, idli, salad)..."
+                    className="w-full pl-9 pr-8 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     autoFocus
                   />
+                  {modalSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setModalSearch('')}
+                      title="Clear search"
+                      className="w-5 h-5 rounded-full bg-stone-200 hover:bg-stone-300 text-stone-600 flex items-center justify-center absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 text-[11px]">
-                  {['All', 'Safe for Patient', 'Diabetic Low-GI', 'Low Sodium', 'High Protein', 'High Fibre', 'Low Potassium'].map(f => (
+                  {['All', 'Cereal', 'Milk & Milk Products', 'Vegetables', 'Non-Veg', 'Dal & Pulses', 'Safe for Patient'].map(f => (
                     <button
                       key={f}
                       type="button"
@@ -4090,7 +4216,7 @@ export default function MealPlanGenerator() {
                             )}
                           </div>
                           <div className="text-[11px] text-stone-600 font-medium">
-                            <strong className="text-stone-900">{scaledCal} kcal</strong> • Protein: {scaledP}g • Carbs: {scaledC}g • Fat: {scaledF}g • Fibre: {Math.round((rec.fibre || 0) * modalQuantity * 10) / 10}g • Na: {Math.round((rec.sodium || 0) * modalQuantity)}mg
+                            <strong className="text-stone-900">{scaledCal} kcal</strong> • Carbs: {scaledC}g • Protein: {scaledP}g • Fat: {scaledF}g • Fibre: {Math.round((rec.fibre || 0) * modalQuantity * 10) / 10}g • Na: {Math.round((rec.sodium || 0) * modalQuantity)}mg • K: {Math.round((rec.potassium || 0) * modalQuantity)}mg
                           </div>
                         </div>
 

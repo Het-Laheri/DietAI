@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import { applyCors, guard } from '../_lib/security.js';
-import { processDueReminders } from '../_lib/webPush.js';
+import { applyCors, guard } from '../security.js';
+import { processDueReminders } from '../webPush.js';
 
 function isAuthorizedCronRequest(req: any): boolean {
   const cronSecret = process.env.CRON_SECRET?.trim();

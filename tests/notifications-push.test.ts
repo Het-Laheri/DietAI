@@ -13,11 +13,11 @@ import {
   __resetWebPushMemoryForTests,
   __getMemorySubscriptionsForTests,
 } from '../api/_lib/webPush.js';
-import vapidKeyHandler from '../api/notifications/vapid-key.js';
-import subscribeHandler from '../api/notifications/subscribe.js';
-import remindersHandler from '../api/notifications/reminders.js';
-import processRemindersHandler from '../api/notifications/process-reminders.js';
-import testPushHandler from '../api/notifications/test-push.js';
+import vapidKeyHandler from '../api/_lib/notifications/vapid-key.js';
+import subscribeHandler from '../api/_lib/notifications/subscribe.js';
+import remindersHandler from '../api/_lib/notifications/reminders.js';
+import processRemindersHandler from '../api/_lib/notifications/process-reminders.js';
+import testPushHandler from '../api/_lib/notifications/test-push.js';
 
 function createFakeBrowserSubscription(endpoint = 'https://fcm.googleapis.com/fcm/send/fake-sub-1') {
   const uaEcdh = crypto.createECDH('prime256v1');

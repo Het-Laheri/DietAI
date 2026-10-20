@@ -22,11 +22,11 @@ import aiChatHandler from './api/ai/chat.js';
 import aiMealPlanHandler from './api/ai/meal-plan.js';
 import aiScanFoodHandler from './api/ai/scan-food.js';
 import changePasswordHandler from './api/auth/change-password.js';
-import notificationsVapidKeyHandler from './api/notifications/vapid-key.js';
-import notificationsSubscribeHandler from './api/notifications/subscribe.js';
-import notificationsRemindersHandler from './api/notifications/reminders.js';
-import notificationsProcessRemindersHandler from './api/notifications/process-reminders.js';
-import notificationsTestPushHandler from './api/notifications/test-push.js';
+import notificationsVapidKeyHandler from './api/_lib/notifications/vapid-key.js';
+import notificationsSubscribeHandler from './api/_lib/notifications/subscribe.js';
+import notificationsRemindersHandler from './api/_lib/notifications/reminders.js';
+import notificationsProcessRemindersHandler from './api/_lib/notifications/process-reminders.js';
+import notificationsTestPushHandler from './api/_lib/notifications/test-push.js';
 import { processDueReminders } from './api/_lib/webPush.js';
 
 // Upstash Redis Initialization
@@ -180,7 +180,7 @@ async function generateAIResponse(params: {
   throw lastError || new Error('All Gemini text models failed to generate response');
 }
 
-// ─── Routes shared with production (same handlers as the Vercel functions) ───
+// â”€â”€â”€ Routes shared with production (same handlers as the Vercel functions) â”€â”€â”€
 type Handler = (req: any, res: any) => any;
 const mount = (paths: string[], handler: Handler) => app.all(paths, (req, res) => handler(req, res));
 mount(['/api/create-order', '/api/payment/create-order'], createOrderHandler);
@@ -201,7 +201,7 @@ mount(['/api/notifications/reminders'], notificationsRemindersHandler);
 mount(['/api/notifications/process-reminders'], notificationsProcessRemindersHandler);
 mount(['/api/notifications/test-push'], notificationsTestPushHandler);
 
-// ─── Development-only AI routes (not deployed to Vercel; see UNC-001) ───
+// â”€â”€â”€ Development-only AI routes (not deployed to Vercel; see UNC-001) â”€â”€â”€
   app.post(['/api/ai/estimate-food', '/ai/estimate-food'], requireApiAuth(), aiRateLimitMiddleware, async (req: express.Request, res: express.Response): Promise<any> => {
     try {
       const { foodItem, portionSize, foodDesc } = req.body;
@@ -319,7 +319,7 @@ Active Plan Targets: ${activePlan ? JSON.stringify(activePlan.targets) : 'No act
         console.warn('Could not load patient context for AI coach:', ctxErr);
       }
 
-      const systemPrompt = `You are NutriSnap AI Coach — a clinical nutrition assistant working under a licensed dietician.
+      const systemPrompt = `You are NutriSnap AI Coach â€” a clinical nutrition assistant working under a licensed dietician.
 Your response will be reviewed and potentially edited by the lead dietician before being shown to the patient.
 Provide helpful, accurate, empathetic advice in 2-4 sentences.
 Do NOT prescribe medication or make medical diagnoses.

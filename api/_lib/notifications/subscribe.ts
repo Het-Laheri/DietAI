@@ -1,9 +1,9 @@
-import { guard, parseBody } from '../_lib/security.js';
+import { guard, parseBody } from '../security.js';
 import {
   savePushSubscription,
   removePushSubscription,
   ensureDailyMealRemindersForPatient,
-} from '../_lib/webPush.js';
+} from '../webPush.js';
 
 export default async function handler(req: any, res: any) {
   const caller = await guard(req, res, {

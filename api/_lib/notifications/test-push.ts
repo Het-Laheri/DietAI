@@ -1,5 +1,5 @@
-import { guard, parseBody, type Role } from '../_lib/security.js';
-import { dispatchWebPushToRecipient, scheduleReminder } from '../_lib/webPush.js';
+import { guard, parseBody, type Role } from '../security.js';
+import { dispatchWebPushToRecipient, scheduleReminder } from '../webPush.js';
 
 export default async function handler(req: any, res: any) {
   const caller = await guard(req, res, {

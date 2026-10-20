@@ -1,5 +1,5 @@
-import { applyCors } from '../_lib/security.js';
-import { getOrCreateVapidKeys } from '../_lib/webPush.js';
+import { applyCors } from '../security.js';
+import { getOrCreateVapidKeys } from '../webPush.js';
 
 export default async function handler(req: any, res: any) {
   if (applyCors(req, res, ['GET'])) return;

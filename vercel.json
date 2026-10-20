@@ -64,23 +64,23 @@
     },
     {
       "source": "/api/notifications/vapid-key",
-      "destination": "/api/notifications/vapid-key"
+      "destination": "/api/queries/poll?notifAction=vapid-key"
     },
     {
       "source": "/api/notifications/subscribe",
-      "destination": "/api/notifications/subscribe"
+      "destination": "/api/queries/poll?notifAction=subscribe"
     },
     {
       "source": "/api/notifications/reminders",
-      "destination": "/api/notifications/reminders"
+      "destination": "/api/queries/poll?notifAction=reminders"
     },
     {
       "source": "/api/notifications/process-reminders",
-      "destination": "/api/notifications/process-reminders"
+      "destination": "/api/queries/poll?notifAction=process-reminders"
     },
     {
       "source": "/api/notifications/test-push",
-      "destination": "/api/notifications/test-push"
+      "destination": "/api/queries/poll?notifAction=test-push"
     },
     {
       "source": "/((?!api/).*)",
@@ -89,7 +89,7 @@
   ],
   "crons": [
     {
-      "path": "/api/notifications/process-reminders",
+      "path": "/api/queries/poll?notifAction=process-reminders",
       "schedule": "0 3 * * *"
     }
   ],

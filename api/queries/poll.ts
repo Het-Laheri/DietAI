@@ -8,11 +8,31 @@ import testPushHandler from '../_lib/notifications/test-push.js';
 
 const MAX_DOCS = 300;
 
+function resolveNotifAction(req: any): string | null {
+  if (typeof req?.query?.notifAction === 'string' && req.query.notifAction) {
+    return req.query.notifAction;
+  }
+  const rawUrl = typeof req?.url === 'string' ? req.url : '';
+  if (rawUrl) {
+    try {
+      const parsed = new URL(rawUrl, 'http://localhost');
+      const fromParam = parsed.searchParams.get('notifAction');
+      if (fromParam) return fromParam;
+      if (parsed.pathname.endsWith('/vapid-key')) return 'vapid-key';
+      if (parsed.pathname.endsWith('/subscribe')) return 'subscribe';
+      if (parsed.pathname.endsWith('/reminders')) return 'reminders';
+      if (parsed.pathname.endsWith('/process-reminders')) return 'process-reminders';
+      if (parsed.pathname.endsWith('/test-push')) return 'test-push';
+    } catch {}
+  }
+  return null;
+}
+
 // GET /api/queries/poll (and rewritten /api/notifications/* endpoints on Vercel Hobby)
 // Change-signal endpoint used by the notification engine.
 // Requires a Firebase ID token. Dieticians receive all items; patients only their own.
 export default async function handler(req: any, res: any) {
-  const notifAction = req?.query?.notifAction;
+  const notifAction = resolveNotifAction(req);
   if (notifAction === 'vapid-key') return vapidKeyHandler(req, res);
   if (notifAction === 'subscribe') return subscribeHandler(req, res);
   if (notifAction === 'reminders') return remindersHandler(req, res);

@@ -1102,7 +1102,7 @@ export default function PatientOverview() {
                   Clinical Partner
                 </span>
                 <span className="text-xs font-bold text-stone-500">
-                  Thane West & Goregaon East, Mumbai
+                  Physiotherapy & Rehabilitation
                 </span>
               </div>
               <h3 className="font-serif font-black text-stone-900 text-base sm:text-lg group-hover:text-sky-700 transition-colors">

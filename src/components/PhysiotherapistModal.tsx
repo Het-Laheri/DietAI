@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Phone, 
-  MapPin, 
   ExternalLink, 
   Copy, 
   Check, 
@@ -11,11 +10,8 @@ import {
   Sparkles, 
   ShieldCheck, 
   Award, 
-  Navigation,
   Image as ImageIcon,
-  CreditCard,
-  Building2,
-  CalendarCheck
+  CreditCard
 } from 'lucide-react';
 
 interface PhysiotherapistModalProps {
@@ -50,12 +46,6 @@ export default function PhysiotherapistModal({ isOpen, onClose }: Physiotherapis
       setCopiedField(null);
     }, 2000);
   };
-
-  const thaneAddress = "Shop# 7, A4 Anamay, Kanchanpushp Complex, Opp. Suraj Water Park, Kavesar, Thane West, Thane - 400607";
-  const thaneMapUrl = "https://www.google.com/maps/search/?api=1&query=Kanchanpushp+Complex+Opp+Suraj+Water+Park+Kavesar+Thane+West+400607";
-
-  const goregaonAddress = "Shop# 20, Sant Mukta C.H.S., Perubaug, Jay Prakash Nagar, Goregaon East, Mumbai - 400063";
-  const goregaonMapUrl = "https://www.google.com/maps/search/?api=1&query=Sant+Mukta+CHS+Perubaug+Jay+Prakash+Nagar+Goregaon+East+Mumbai+400063";
 
   const phoneNumber = "+91-9967-919-828";
   const rawPhone = "+919967919828";
@@ -235,98 +225,6 @@ export default function PhysiotherapistModal({ isOpen, onClose }: Physiotherapis
                     </>
                   )}
                 </button>
-              </div>
-
-              {/* Clinic Addresses */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-sky-600" />
-                  <h4 className="text-xs uppercase tracking-wider font-extrabold text-stone-500">
-                    Clinic Centers (Mumbai & Thane)
-                  </h4>
-                </div>
-
-                {/* Thane Center */}
-                <div className="bg-stone-50/90 rounded-2xl p-4 border border-stone-200/80 hover:border-sky-300 transition-colors">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5">
-                        <MapPin className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-stone-900">Thane West Center</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">
-                            Opp. Suraj Water Park
-                          </span>
-                        </div>
-                        <p className="text-xs text-stone-600 font-medium mt-1 leading-relaxed">
-                          {thaneAddress}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => copyToClipboard(thaneAddress, 'thane')}
-                        className="p-1.5 text-stone-500 hover:text-sky-700 hover:bg-stone-200/70 rounded-lg transition-colors cursor-pointer"
-                        title="Copy Thane Address"
-                      >
-                        {copiedField === 'thane' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                      <a
-                        href={thaneMapUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1.5 text-sky-600 hover:text-sky-800 hover:bg-sky-50 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-bold cursor-pointer"
-                      >
-                        <Navigation className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Directions</span>
-                      </a>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Goregaon East Center */}
-                <div className="bg-stone-50/90 rounded-2xl p-4 border border-stone-200/80 hover:border-sky-300 transition-colors">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center shrink-0 mt-0.5">
-                        <MapPin className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-stone-900">Goregaon East Center</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">
-                            Mumbai
-                          </span>
-                        </div>
-                        <p className="text-xs text-stone-600 font-medium mt-1 leading-relaxed">
-                          {goregaonAddress}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => copyToClipboard(goregaonAddress, 'goregaon')}
-                        className="p-1.5 text-stone-500 hover:text-teal-700 hover:bg-stone-200/70 rounded-lg transition-colors cursor-pointer"
-                        title="Copy Goregaon Address"
-                      >
-                        {copiedField === 'goregaon' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                      <a
-                        href={goregaonMapUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1.5 text-teal-600 hover:text-teal-800 hover:bg-teal-50 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-bold cursor-pointer"
-                      >
-                        <Navigation className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Directions</span>
-                      </a>
-                    </div>
-                  </div>
-                </div>
               </div>
 
               {/* Clinical Scope & Benefits */}

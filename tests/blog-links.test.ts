@@ -5,7 +5,7 @@ import path from 'node:path';
 
 test('BLOGS configuration and clickable links in Home.tsx', () => {
   const homePath = path.resolve(process.cwd(), 'src/pages/Home.tsx');
-  const homeContent = fs.readFileSync(homePath, 'utf-8');
+  const homeContent = fs.readFileSync(homePath, 'utf-8').replace(/\r\n/g, '\n');
 
   // 1. Verify Home.tsx renders clickable links for the blog title and thumbnail
   assert.ok(
